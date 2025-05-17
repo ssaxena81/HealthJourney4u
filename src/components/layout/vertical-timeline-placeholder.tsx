@@ -9,6 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 export function VerticalTimelinePlaceholder() {
   // TODO: Implement actual data fetching and rendering for doctor visits.
   // TODO: Implement resizable dialog for visit notes.
+  const numberOfItems = 20; // Increased from 8 to make scrolling more likely
 
   return (
     <Card className="h-full shadow-none border-0 rounded-none flex flex-col">
@@ -23,21 +24,21 @@ export function VerticalTimelinePlaceholder() {
             <div className="absolute left-6 top-4 bottom-4 w-0.5 bg-border -z-10"></div>
             
             {/* Placeholder dots - these would be dynamically generated */}
-            {Array.from({ length: 8 }).map((_, index) => (
+            {Array.from({ length: numberOfItems }).map((_, index) => (
               <div key={index} className="flex items-center space-x-3 relative pl-12 group">
                 <div 
                     className="absolute left-6 top-1/2 -translate-y-1/2 h-3 w-3 bg-primary rounded-full border-2 border-card cursor-pointer group-hover:scale-125 transition-transform"
-                    title={`Visit: 2023-0${index + 1}-15`}
-                    onClick={() => alert(`Show notes for visit on 2023-0${index + 1}-15 (placeholder)`)}
+                    title={`Visit: 2023-0${index % 12 + 1}-15`} // Adjusted date for more variety
+                    onClick={() => alert(`Show notes for visit on 2023-0${index % 12 + 1}-15 (placeholder)`)}
                  />
                 <div className="text-sm">
-                  <p className="font-medium">Dr. Placeholder</p>
-                  <p className="text-xs text-muted-foreground">2023-0{index + 1}-15</p>
+                  <p className="font-medium">Dr. Placeholder {index + 1}</p>
+                  <p className="text-xs text-muted-foreground">2023-0{index % 12 + 1}-15</p>
                 </div>
               </div>
             ))}
              <p className="text-center text-xs text-muted-foreground pt-4">
-              {Array(8).length > 0 ? "Scroll for more" : "No visits found."}
+              {numberOfItems > 0 ? "Scroll for more" : "No visits found."}
             </p>
           </div>
         </ScrollArea>
