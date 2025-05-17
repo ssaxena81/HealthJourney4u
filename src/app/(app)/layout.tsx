@@ -3,8 +3,8 @@
 
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useAuth } from '@/hooks/useAuth'; // We'll create this hook
-import AppLayoutClient from '@/components/layout/app-layout-client'; // Renamed AppLayout to avoid conflict
+import { useAuth } from '@/hooks/useAuth';
+import AppLayoutClient from '@/components/layout/app-layout-client';
 import { Toaster } from "@/components/ui/toaster";
 import { SidebarProvider } from "@/components/ui/sidebar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -13,9 +13,9 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import type { UserProfile } from '@/types';
-import { updateUserTermsAcceptance } from '@/app/actions/auth'; // Assuming this action exists
+import { updateUserTermsAcceptance } from '@/app/actions/auth';
+import { Loader2 } from 'lucide-react';
 
-// Mock T&C content
 const LATEST_TERMS_AND_CONDITIONS = `
 Version 2.0 - Effective Date: ${new Date().toLocaleDateString()}
 
@@ -68,68 +68,84 @@ export default function AuthenticatedAppLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const { user, loading, userProfile, setUserProfile } = useAuth(); // Assume userProfile is part of useAuth now
+  const { user, loading: authLoading, userProfile, setUserProfile, loading: profileLoading } = useAuth();
   const router = useRouter();
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsScrolledToEnd, setTermsScrolledToEnd] = useState(false);
   const [termsAcceptedCheckbox, setTermsAcceptedCheckbox] = useState(false);
-  const [isCheckingAuth, setIsCheckingAuth] = useState(true);
+  
+  const isLoading = authLoading || profileLoading;
 
   useEffect(() => {
-    if (!loading) {
+    if (!isLoading) {
       if (!user) {
         router.replace('/login');
-      } else if (userProfile) {
+      } else if (userProfile) { // Profile is loaded
         // Check for password expiry
         const lastPasswordChange = new Date(userProfile.lastPasswordChangeDate);
         const now = new Date();
         const daysSinceLastChange = (now.getTime() - lastPasswordChange.getTime()) / (1000 * 3600 * 24);
         
         if (daysSinceLastChange >= 90) {
-          router.replace('/reset-password-required'); // A dedicated page for this
-          return; // Stop further checks
+          router.replace('/reset-password-required');
+          return; 
         }
 
         // Check for T&C acceptance
-        if (!userProfile.acceptedLatestTerms) {
+        // Assuming '2.0' is the latest version. This should ideally come from a config.
+        if (!userProfile.acceptedLatestTerms || userProfile.termsVersionAccepted !== '2.0') {
           setShowTermsModal(true);
-          setIsCheckingAuth(false); // Stop checking auth, show modal
           return;
         }
-        setIsCheckingAuth(false); // All checks passed
-      } else {
-        // User is authenticated but profile might still be loading or missing
-        // useAuth should handle fetching profile
-        setIsCheckingAuth(false); // Or keep it true until profile loads
+        // All checks passed, user can see content
+      } else if (!userProfile && !profileLoading && user) {
+        // User is authenticated, profile loading finished, but profile is null
+        // This might mean the profile document doesn't exist in Firestore yet.
+        // For new users, they are redirected to /profile from signup-flow.tsx.
+        // If an existing user somehow loses their profile doc, this is an edge case.
+        // Consider redirecting to /profile or showing an error.
+        // For now, if they reach here and profile is null, it's an issue.
+        // However, the T&C check above might catch this if acceptedLatestTerms defaults to false.
+        // Let's assume T&C check handles the initial state for new profiles.
+        // If `acceptedLatestTerms` is not present (e.g. truly new profile not yet in DB), it will be false.
+         if (!userProfile?.acceptedLatestTerms || userProfile?.termsVersionAccepted !== '2.0') {
+            setShowTermsModal(true);
+            return;
+        }
       }
     }
-  }, [user, loading, userProfile, router]);
+  }, [user, isLoading, userProfile, profileLoading, router]);
 
   const handleScrollTerms = (event: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
-    if (scrollHeight - scrollTop === clientHeight) {
+    if (scrollHeight - scrollTop <= clientHeight + 1) { // Added +1 for small pixel differences
       setTermsScrolledToEnd(true);
     }
   };
 
   const handleAcceptTerms = async () => {
-    if (user && termsAcceptedCheckbox) {
-      const result = await updateUserTermsAcceptance(user.uid, true, '2.0'); // Assume '2.0' is current version
-      if (result.success && setUserProfile) {
+    if (user && userProfile && termsAcceptedCheckbox && setUserProfile) {
+      const result = await updateUserTermsAcceptance(user.uid, true, '2.0');
+      if (result.success) {
          setUserProfile(prev => prev ? ({...prev, acceptedLatestTerms: true, termsVersionAccepted: '2.0'}) : null);
+         setShowTermsModal(false);
+         // No need to push, useEffect will re-evaluate and allow content rendering.
+      } else {
+        // Handle error - maybe show a toast
+        console.error("Failed to update terms acceptance:", result.error);
       }
-      setShowTermsModal(false);
-      // Potentially redirect to dashboard or let the useEffect re-evaluate
-      router.push('/'); // Or wherever the main dashboard is
     }
   };
 
-  if (loading || isCheckingAuth) {
+  if (isLoading) {
     return (
       <html lang="en">
-        <body>
+        <body className="bg-background">
           <div className="flex min-h-screen items-center justify-center">
-            <p>Loading application...</p> {/* Or a proper spinner */}
+            <div className="flex flex-col items-center space-y-2">
+                <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                <p className="text-muted-foreground">Loading application...</p>
+            </div>
           </div>
           <Toaster />
         </body>
@@ -137,12 +153,37 @@ export default function AuthenticatedAppLayout({
     );
   }
   
+  // If user is null after loading, useEffect should have redirected to /login.
+  // This is a fallback or for the brief moment before redirect.
+  if (!user) {
+     return (
+        <html lang="en">
+            <body className="bg-background">
+                <div className="flex min-h-screen items-center justify-center">
+                    <div className="flex flex-col items-center space-y-2">
+                        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                        <p className="text-muted-foreground">Redirecting to login...</p>
+                    </div>
+                </div>
+                <Toaster/>
+            </body>
+        </html>
+    );
+  }
+
   if (showTermsModal) {
     return (
       <html lang="en">
-        <body>
-        <Dialog open={showTermsModal} onOpenChange={(open) => { if (!open) setShowTermsModal(false); }}>
-          <DialogContent className="max-w-2xl">
+        <body className="bg-background">
+        <Dialog open={showTermsModal} onOpenChange={(open) => { 
+            // Prevent closing via overlay click or escape key if not scrolled and accepted
+            if (!open && (!termsScrolledToEnd || !termsAcceptedCheckbox)) {
+                setShowTermsModal(true); 
+            } else if (!open) {
+                setShowTermsModal(false);
+            }
+        }}>
+          <DialogContent className="max-w-2xl" onInteractOutside={(e) => e.preventDefault()} onEscapeKeyDown={(e) => e.preventDefault()}>
             <DialogHeader>
               <DialogTitle>Terms and Conditions</DialogTitle>
               <DialogDescription>
@@ -158,6 +199,7 @@ export default function AuthenticatedAppLayout({
                 disabled={!termsScrolledToEnd}
                 checked={termsAcceptedCheckbox}
                 onCheckedChange={(checked) => setTermsAcceptedCheckbox(!!checked)}
+                aria-label="I have read the terms and conditions and agree with them."
               />
               <Label htmlFor="terms-accept" className={!termsScrolledToEnd ? "text-muted-foreground" : ""}>
                 I have read the terms and conditions and agree with them.
@@ -178,23 +220,40 @@ export default function AuthenticatedAppLayout({
     );
   }
 
-
-  if (!user) {
-     // This case should be handled by the redirect in useEffect, but as a fallback:
+  // If user is authenticated, password not expired, T&C accepted (or modal not shown yet), render the app
+  // This check is crucial: if userProfile is still null here, it means something is wrong or still loading
+  // The isLoading check at the top should handle cases where userProfile is still fetching.
+  // If it gets here and userProfile is null but auth/profile loading is done, it means profile truly doesn't exist.
+  // New users are directed to /profile from signup. Existing users *should* have a profile.
+  if (!userProfile && !isLoading) { // Additional check if profile is crucial before rendering children
+    // This state implies user is logged in, but no profile document.
+    // This could be a brief state if profile creation is slightly delayed post-signup.
+    // Or, it could be an error state for an existing user if their profile doc is missing.
+    // For a new user, they are normally redirected from signup to /profile page.
+    // If an existing user logs in and has no profile, this is an issue.
+    // The T&C modal logic *might* implicitly handle this for new users if `acceptedLatestTerms` is missing.
+    // For safety, showing a loading or error state, or redirecting to /profile might be needed.
+    // For now, let's assume the T&C flow or a direct redirect to /profile on signup covers new users.
+    // If userProfile is required for children, then showing loading is appropriate.
     return (
-        <html lang="en">
-            <body>
-                <div className="flex min-h-screen items-center justify-center"><p>Redirecting to login...</p></div>
+         <html lang="en">
+            <body className="bg-background">
+                <div className="flex min-h-screen items-center justify-center">
+                    <div className="flex flex-col items-center space-y-2">
+                        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                        <p className="text-muted-foreground">Finalizing session...</p>
+                    </div>
+                </div>
                 <Toaster/>
             </body>
         </html>
     );
   }
 
-  // User is authenticated, password not expired, T&C accepted
+
   return (
     <html lang="en">
-      <body>
+      <body className="bg-background text-foreground">
         <SidebarProvider defaultOpen={true}>
           <AppLayoutClient>
             {children}

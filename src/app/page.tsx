@@ -1,106 +1,43 @@
 
 'use client';
-// This will be the main dashboard page after login.
-// It will be wrapped by AuthenticatedAppLayout.
 
-import React from 'react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { DatePickerWithRange } from '@/components/ui/date-range-picker'; // Assuming this exists or will be created
-import { Button } from '@/components/ui/button';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/hooks/useAuth';
+import { Loader2 } from 'lucide-react'; // For a loading indicator
 
-// Placeholder for SpiderGraph/RadarChart
-const SpiderGraphPlaceholder = () => (
-  <div className="w-full h-96 bg-muted rounded-lg flex items-center justify-center shadow-inner">
-    <p className="text-muted-foreground">Spider Graph / Radar Chart Area</p>
-  </div>
-);
+export default function RootPage() {
+  const { user, loading: authLoading, userProfile, loading: profileLoading } = useAuth();
+  const router = useRouter();
 
-// Placeholder for Horizontal Timeline
-const HorizontalTimelinePlaceholder = () => (
-  <Card className="mt-6 shadow-sm">
-    <CardHeader>
-      <CardTitle className="text-lg">Blood Work Timeline</CardTitle>
-      <CardDescription>Scroll horizontally to view blood test history.</CardDescription>
-    </CardHeader>
-    <CardContent className="flex items-center space-x-4 p-4 overflow-x-auto">
-      <div className="h-20 w-full bg-muted/50 rounded flex items-center justify-between px-4 whitespace-nowrap">
-        <span className="text-sm text-muted-foreground">Earliest Test ...</span>
-        {/* Placeholder dots */}
-        <div className="flex space-x-8">
-          <div className="h-3 w-3 bg-primary rounded-full" title="Test: YYYY-MM-DD"></div>
-          <div className="h-3 w-3 bg-primary rounded-full" title="Test: YYYY-MM-DD"></div>
-          <div className="h-3 w-3 bg-primary rounded-full" title="Test: YYYY-MM-DD"></div>
-          <div className="h-3 w-3 bg-primary rounded-full" title="Test: YYYY-MM-DD"></div>
-        </div>
-        <span className="text-sm text-muted-foreground">... Latest Test</span>
-      </div>
-      <Button variant="outline" size="sm">Refresh</Button>
-    </CardContent>
-  </Card>
-);
+  const isLoading = authLoading || profileLoading;
 
-// Placeholder for Vertical Timeline
-const VerticalTimelinePlaceholder = () => (
-  <Card className="h-full shadow-sm">
-    <CardHeader>
-      <CardTitle className="text-lg">Doctor Visits Timeline</CardTitle>
-      <CardDescription>Scroll vertically to view visit history.</CardDescription>
-    </CardHeader>
-    <CardContent className="relative p-4 h-[calc(100%-100px)] overflow-y-auto">
-      <div className="w-full h-full bg-muted/50 rounded flex flex-col items-center justify-between py-4">
-         <span className="text-sm text-muted-foreground">Latest Visit ...</span>
-        {/* Placeholder dots */}
-        <div className="flex flex-col space-y-8 items-center">
-          <div className="h-3 w-3 bg-primary rounded-full" title="Visit: YYYY-MM-DD"></div>
-          <div className="h-3 w-3 bg-primary rounded-full" title="Visit: YYYY-MM-DD"></div>
-          <div className="h-3 w-3 bg-primary rounded-full" title="Visit: YYYY-MM-DD"></div>
-          <div className="h-3 w-3 bg-primary rounded-full" title="Visit: YYYY-MM-DD"></div>
-        </div>
-        <span className="text-sm text-muted-foreground">... Earliest Visit</span>
-      </div>
-       <Button variant="outline" size="sm" className="absolute bottom-4 right-4">Refresh</Button>
-    </CardContent>
-  </Card>
-);
-
-
-export default function DashboardPage() {
-  const [dateRange, setDateRange] = React.useState<{ from: Date | undefined; to: Date | undefined }>({
-    from: new Date(),
-    to: new Date(),
-  });
-
-  // TODO: Fetch data for spider graph based on dateRange
+  useEffect(() => {
+    if (!isLoading) {
+      if (user && userProfile) {
+        // User is logged in and profile is loaded.
+        // AuthenticatedAppLayout (for /dashboard) will handle T&C/password expiry checks.
+        router.replace('/dashboard');
+      } else if (user && !userProfile && !profileLoading) {
+        // User is authenticated but profile hasn't loaded or is missing,
+        // this case might indicate needing to go to profile setup if that's not handled by AuthenticatedAppLayout.
+        // For now, AuthenticatedAppLayout handles missing profile by showing T&C or loading.
+        // If profile setup is mandatory first, redirect to /profile.
+        // However, our (app)/layout.tsx already has robust checks.
+        router.replace('/dashboard'); // Let the (app) layout handle its logic
+      } else if (!user && !authLoading) {
+        // User is not logged in and auth state is confirmed.
+        router.replace('/login');
+      }
+    }
+  }, [user, userProfile, isLoading, authLoading, profileLoading, router]);
 
   return (
-    <div className="flex flex-col h-full">
-      <Card className="mb-6 shadow">
-        <CardHeader>
-          <CardTitle className="text-2xl md:text-3xl">My Health Dashboard</CardTitle>
-          <CardDescription>Overview of your health metrics.</CardDescription>
-        </CardHeader>
-        <CardContent>
-            <div className="mb-6">
-              <p className="text-sm text-muted-foreground mb-2">Select Date Range for Graph:</p>
-              <DatePickerWithRange
-                value={{ from: dateRange.from, to: dateRange.to }}
-                onValueChange={setDateRange}
-                className="max-w-sm"
-              />
-              {/* TODO: Add validation for date range (end >= from) */}
-            </div>
-            <SpiderGraphPlaceholder />
-        </CardContent>
-      </Card>
-
-      <div className="flex-grow overflow-hidden"> {/* This will contain the bottom horizontal timeline */}
-         <HorizontalTimelinePlaceholder />
+    <div className="flex min-h-screen items-center justify-center bg-background">
+      <div className="flex flex-col items-center space-y-2">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="text-muted-foreground">Loading Health Timeline...</p>
       </div>
-      {/* Vertical timeline will be part of AppLayout's right sidebar area - or needs specific placement */}
     </div>
   );
 }
-
-// The VerticalTimelinePlaceholder would typically be part of the AppLayoutClient structure,
-// e.g. as a right sidebar if always visible, or placed differently.
-// For now, this page.tsx focuses on the main content area.
