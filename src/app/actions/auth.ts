@@ -4,15 +4,17 @@
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  sendPasswordResetEmail as firebaseSendPasswordResetEmail,
+  // sendPasswordResetEmail as firebaseSendPasswordResetEmail, // Not used for custom code flow
   updatePassword as firebaseUpdatePassword,
   type AuthError,
 } from 'firebase/auth';
-import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp'; // Import db
+import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
 import { z } from 'zod';
 import type { UserProfile, SubscriptionTier } from '@/types';
 import { passwordSchema } from '@/types';
-import { doc, setDoc } from 'firebase/firestore'; // For Firestore operations
+import { doc, setDoc, getDoc } from 'firebase/firestore'; // Import getDoc
+import { differenceInYears } from 'date-fns';
+
 
 // --- Sign Up Schemas ---
 const CheckEmailInputSchema = z.object({
@@ -81,29 +83,27 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     // Create user profile in Firestore
     const initialProfile: UserProfile = {
       id: userCredential.user.uid,
-      email: userCredential.user.email!, // email will exist as it's used for signup
+      email: userCredential.user.email!,
       subscriptionTier: validatedValues.subscriptionTier,
-      lastPasswordChangeDate: new Date().toISOString(), // Set to current date on signup
-      acceptedLatestTerms: false, // User needs to accept T&C post-signup
-      termsVersionAccepted: undefined, // No version accepted yet
+      lastPasswordChangeDate: new Date().toISOString(),
+      acceptedLatestTerms: false,
+      isAgeCertified: false, // Initialize as false, user certifies in demographics
       // Initialize other profile fields as empty/default
       firstName: undefined,
       middleInitial: undefined,
       lastName: undefined,
       dateOfBirth: undefined,
       cellPhone: undefined,
-      mfaMethod: undefined, // User will set this up in profile
-      paymentDetails: undefined, // To be handled by payment integration
+      mfaMethod: undefined,
+      termsVersionAccepted: undefined,
+      paymentDetails: undefined,
       connectedFitnessApps: [],
       connectedDiagnosticsServices: [],
       connectedInsuranceProviders: [],
     };
 
-    // Save to Firestore
     if (!db || typeof doc !== 'function' || typeof setDoc !== 'function') { 
         console.error("Firestore (db, doc, or setDoc) is not initialized correctly for profile creation.");
-        // Optionally, you might want to delete the Firebase Auth user here if profile creation fails
-        // await userCredential.user.delete(); // Requires careful error handling and re-authentication if user session expired
         return { success: false, error: "Profile creation failed: Database service unavailable." };
     }
     
@@ -111,10 +111,6 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       await setDoc(doc(db, "users", userCredential.user.uid), initialProfile);
     } catch (firestoreError: any) {
       console.error("Error creating user profile in Firestore:", firestoreError);
-      // Critical decision: If profile creation fails, should the auth user be deleted?
-      // This prevents orphaned auth accounts but makes the signup non-atomic if deletion also fails.
-      // Consider a cleanup mechanism (e.g., Firebase Function) if this becomes a recurring issue.
-      // For now, just return an error. Deleting the user is risky if their session expired.
       return { success: false, error: `Account created but profile setup failed: ${firestoreError.message}. Please contact support.` };
     }
     
@@ -124,7 +120,6 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     if (error instanceof z.ZodError) {
       return { success: false, error: 'Invalid input data.', details: error };
     }
-    // Handle Firebase Auth errors (e.g., email-already-in-use)
     return { success: false, error: (error as AuthError).message || 'Sign up failed.', errorCode: (error as AuthError).code };
   }
 }
@@ -144,7 +139,7 @@ interface LoginResult {
   requiresMfa?: boolean;
   passwordExpired?: boolean;
   termsNotAccepted?: boolean;
-  userProfile?: UserProfile; // Return full profile on login
+  userProfile?: UserProfile;
 }
 
 export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promise<LoginResult> {
@@ -162,45 +157,22 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     );
     const userId = userCredential.user.uid;
 
-    // TODO: Implement actual MFA check
-    // For now, assume MFA is not strictly enforced by this action, but profile might indicate preference
-    // if (!validatedValues.mfaCode) {
-    //   // Check userProfile.mfaMethod if MFA is required
-    // } else {
-    //   // TODO: Verify MFA code if provided.
-    // }
-
     // --- Fetch user profile from Firestore ---
-    if (!db || typeof doc !== 'function') { // Basic check
+    if (!db || typeof doc !== 'function' || typeof getDoc !== 'function') {
         console.error("Firestore is not initialized correctly for profile fetching.");
         return { success: false, error: "Login failed: Could not retrieve user profile." };
     }
-    // const userProfileDocRef = doc(db, "users", userId);
-    // const userProfileSnap = await getDoc(userProfileDocRef); // Make sure to import getDoc
+    const userProfileDocRef = doc(db, "users", userId);
+    const userProfileSnap = await getDoc(userProfileDocRef);
 
-    // if (!userProfileSnap.exists()) {
-    //   // This case should ideally not happen if signup always creates a profile.
-    //   // Could be an old user or an error during signup.
-    //   console.error(`User profile not found for UID: ${userId}.`);
-    //   return { success: false, error: "User profile not found. Please complete sign up or contact support." };
-    // }
-    // const userProfile = userProfileSnap.data() as UserProfile;
-     const userProfile: UserProfile = { // This is MOCK data until getDoc is used
-      id: userId,
-      email: validatedValues.email,
-      subscriptionTier: 'free',
-      lastPasswordChangeDate: new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString(), 
-      acceptedLatestTerms: false, 
-      termsVersionAccepted: '1.0', 
-      connectedFitnessApps: [],
-      connectedDiagnosticsServices: [],
-      connectedInsuranceProviders: [],
-      firstName: "Mock",
-      lastName: "User",
-      dateOfBirth: new Date(1990,0,1).toISOString(),
-    };
-    // --- End Placeholder for profile fetch ---
-
+    if (!userProfileSnap.exists()) {
+      console.error(`User profile not found for UID: ${userId}. This might happen if signup was interrupted.`);
+      // Forcing a basic profile creation here might be an option, or guiding user to complete profile.
+      // For now, error out or return a specific state.
+      return { success: false, error: "User profile not found. Please contact support or try signing up again." };
+    }
+    const userProfile = userProfileSnap.data() as UserProfile;
+    // --- End Profile fetch ---
 
     // Check password expiry
     const lastPasswordChange = new Date(userProfile.lastPasswordChangeDate);
@@ -259,7 +231,6 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
     ForgotPasswordEmailSchema.parse(values);
     // TODO: Implement custom 8-digit code sending (e.g., via Firebase Functions + SendGrid/Twilio)
     // For now, simulate success.
-    // console.log(`Simulating sending 8-digit code to ${validatedValues.email}`);
     return { success: true, message: "If your email is registered, an 8-digit code has been sent." };
   } catch (error: any) {
     if (error instanceof z.ZodError) {
@@ -273,7 +244,6 @@ export async function verifyPasswordResetCode(values: z.infer<typeof VerifyReset
   try {
     const validatedValues = VerifyResetCodeSchema.parse(values);
     // TODO: Implement custom 8-digit code verification against temporarily stored code.
-    // console.log(`Simulating verification of code ${validatedValues.code} for ${validatedValues.email}`);
     if (validatedValues.code === "12345678") { // Placeholder
         return { success: true };
     } else {
@@ -294,7 +264,6 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
 
     if (currentUser && currentUser.email === validatedValues.email) {
       await firebaseUpdatePassword(currentUser, validatedValues.newPassword);
-      // Update lastPasswordChangeDate in Firestore
       if (db && typeof doc === 'function' && typeof setDoc === 'function') {
         await setDoc(doc(db, "users", currentUser.uid), { lastPasswordChangeDate: new Date().toISOString() }, { merge: true });
       } else {
@@ -308,12 +277,19 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
 
     if (!currentUser) {
       console.warn("resetPassword action called for forgot password flow without oobCode or temporary auth.");
-      return { success: false, error: "Password reset for unauthenticated users requires further setup." };
+      // This part of the flow (forgot password without being logged in) needs a different approach,
+      // typically involving Firebase's sendPasswordResetEmail and handling the oobCode.
+      // The current action is primarily for logged-in users forced to reset or changing their own password.
+      // For true "forgot password" via email link, Firebase has a built-in flow.
+      // If using custom 8-digit code, a temporary token should be issued after code verification
+      // that this function can then use to authorize the password change.
+      return { success: false, error: "Password reset for unauthenticated users requires a verification token (oobCode or custom)." };
     }
 
-    return { success: false, error: "Could not reset password. User context mismatch." };
+    return { success: false, error: "Could not reset password. User context mismatch or invalid flow." };
 
-  } catch (error: any) {
+  } catch (error: any)
+{
     if (error instanceof z.ZodError) {
       return { success: false, error: 'Invalid input.'};
     }
@@ -322,45 +298,78 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
 }
 
 // --- Update Profile Actions ---
+const serverCalculateAge = (birthDateString: string): number => {
+  const birthDate = new Date(birthDateString);
+  if (isNaN(birthDate.getTime())) return 0; // Invalid date string
+  return differenceInYears(new Date(), birthDate);
+};
 
-const DemographicsSchema = z.object({
+const DemographicsSchemaServer = z.object({
   firstName: z.string().min(3, "First name must be at least 3 characters.").max(50).regex(/^[a-zA-Z\s'-]+$/, "First name can only contain letters.").trim(),
   middleInitial: z.string().max(1, "Middle initial can be at most 1 character.").trim().optional(),
   lastName: z.string().min(3, "Last name must be at least 3 characters.").max(50).regex(/^[a-zA-Z\s'-]+$/, "Last name can only contain letters.").trim(),
-  dateOfBirth: z.string().refine((val) => !isNaN(Date.parse(val)), { message: "Invalid date of birth" }),
+  dateOfBirth: z.string().refine((val) => !isNaN(Date.parse(val)), { message: "Invalid date of birth" })
+                  .refine((val) => serverCalculateAge(val) >= 18, { message: "User must be 18 or older." }),
   email: z.string().email(), 
   cellPhone: z.string().regex(/^$|^\d{3}-\d{3}-\d{4}$/, "Invalid phone format (e.g., 999-999-9999)").optional(),
+  isAgeCertified: z.boolean().optional(), // isAgeCertified is derived from ageCertification in client form
 }).refine(data => data.email || data.cellPhone, { 
     message: "Either email or cell phone must be provided.",
     path: ["cellPhone"], 
+}).refine(data => {
+    // If user is 18+, certification must be true.
+    // This assumes dateOfBirth string is valid due to prior refine.
+    if (serverCalculateAge(data.dateOfBirth) >= 18) {
+        return data.isAgeCertified === true;
+    }
+    // If user is under 18 (though prior refine should catch this), this check doesn't apply,
+    // but the age check itself will fail.
+    return true;
+}, {
+    message: "Age certification is required for users 18 or older.",
+    path: ["isAgeCertified"],
 });
 
 
-export async function updateDemographics(userId: string, values: z.infer<typeof DemographicsSchema>): Promise<{success: boolean, error?: string, data?: Partial<UserProfile>, details?: any}> {
+export async function updateDemographics(userId: string, values: z.infer<typeof DemographicsSchemaServer>): Promise<{success: boolean, error?: string, data?: Partial<UserProfile>, details?: any}> {
     try {
-        const validatedValues = DemographicsSchema.parse(values);
-        // TODO: Update user profile in Firestore for userId with validatedValues
-        // console.log("Updating demographics for user:", userId, validatedValues);
-        // Example: await setDoc(doc(db, "users", userId), validatedValues, { merge: true });
-        return { success: true, data: validatedValues }; // Return parsed values for optimistic update
+        const validatedValues = DemographicsSchemaServer.parse(values);
+        
+        if (!db || typeof doc !== 'function' || typeof setDoc !== 'function') {
+            console.error("Firestore (db, doc, or setDoc) is not initialized correctly for profile update.");
+            return { success: false, error: "Profile update failed: Database service unavailable." };
+        }
+
+        // Prepare data for Firestore, ensuring correct types (e.g., dateOfBirth is already string)
+        const profileUpdateData: Partial<UserProfile> = {
+            firstName: validatedValues.firstName,
+            middleInitial: validatedValues.middleInitial,
+            lastName: validatedValues.lastName,
+            dateOfBirth: validatedValues.dateOfBirth, // Already ISO string from client
+            cellPhone: validatedValues.cellPhone,
+            isAgeCertified: validatedValues.isAgeCertified,
+            // email is not typically updated here as it's tied to auth
+        };
+        
+        await setDoc(doc(db, "users", userId), profileUpdateData, { merge: true });
+        return { success: true, data: profileUpdateData };
     } catch (error: any) {
         if (error instanceof z.ZodError) {
           return { success: false, error: 'Invalid input.', details: error.flatten() };
         }
+        console.error("Error updating demographics in Firestore:", error);
         return { success: false, error: "Failed to update profile." };
     }
 }
 
 export async function updateUserTermsAcceptance(userId: string, accepted: boolean, version: string): Promise<{success: boolean, error?: string}> {
     try {
-        // Update user profile in Firestore
-        if (db && typeof doc === 'function' && typeof setDoc === 'function') {
-            await setDoc(doc(db, "users", userId), { acceptedLatestTerms: accepted, termsVersionAccepted: version }, { merge: true });
-            return { success: true };
-        } else {
+        if (!db || typeof doc !== 'function' || typeof setDoc !== 'function') {
             console.error("Firestore not available to update terms acceptance.");
             return { success: false, error: "Database service unavailable."};
         }
+        await setDoc(doc(db, "users", userId), { acceptedLatestTerms: accepted, termsVersionAccepted: version }, { merge: true });
+        return { success: true };
     } catch (error: any) {
         console.error("Error updating terms acceptance in Firestore:", error);
         return { success: false, error: "Failed to update terms acceptance."};

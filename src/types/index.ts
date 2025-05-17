@@ -134,6 +134,7 @@ export interface UserProfile {
   email: string; // Login ID, should match Auth email
   cellPhone?: string;
   mfaMethod?: 'email' | 'sms'; // For sending codes
+  isAgeCertified?: boolean; // User certifies they are 18 or older
 
   lastPasswordChangeDate: string; // ISO 8601
   acceptedLatestTerms: boolean;
@@ -146,7 +147,6 @@ export interface UserProfile {
   connectedFitnessApps: Array<{
     id: string; // e.g., 'fitbit', 'strava'
     name: string; // e.g., 'Fitbit'
-    // OAuth tokens or connection details would be stored securely, likely not directly in this profile doc for client access
     connectedAt: string; // ISO 8601
   }>;
 
