@@ -42,18 +42,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     // }
     // --- MOCK PROFILE ---
     if (firebaseUser) {
-        setUserProfile({
+        // Simulate fetching a more complete profile based on stored info or defaults
+        // This mock profile should align with the UserProfile structure
+        const mockProfileData: UserProfile = {
             id: firebaseUser.uid,
-            email: firebaseUser.email || 'mock@example.com',
-            subscriptionTier: 'free',
+            email: firebaseUser.email || 'mock@example.com', // Ensure email is present
+            subscriptionTier: 'free', // Default tier
             lastPasswordChangeDate: new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString(), // 100 days ago
-            acceptedLatestTerms: false,
-            firstName: "Mock",
-            lastName: "User",
-            connectedFitnessApps: [],
-            connectedDiagnosticsServices: [],
-            connectedInsuranceProviders: [],
-        });
+            acceptedLatestTerms: false, // Default, will trigger T&C modal
+            firstName: "Mock", // Default
+            lastName: "User", // Default
+            dateOfBirth: new Date(1990, 0, 1).toISOString(), // Default
+            cellPhone: undefined, // Default
+            mfaMethod: undefined, // Default
+            termsVersionAccepted: undefined, // Default
+            paymentDetails: undefined, // Default
+            connectedFitnessApps: [], // Default
+            connectedDiagnosticsServices: [], // Default
+            connectedInsuranceProviders: [], // Default
+        };
+        setUserProfile(mockProfileData);
     } else {
         setUserProfile(null);
     }
@@ -63,11 +71,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const checkAuthState = useCallback(async () => {
     setLoading(true);
-    const currentUser = firebaseAuth.currentUser;
-    if (currentUser) {
-      setUser(currentUser);
-      await fetchUserProfile(currentUser);
+    // Ensure firebaseAuth is valid before accessing currentUser
+    if (firebaseAuth && typeof firebaseAuth.onAuthStateChanged === 'function') {
+      const currentUser = firebaseAuth.currentUser;
+      if (currentUser) {
+        setUser(currentUser);
+        await fetchUserProfile(currentUser);
+      } else {
+        setUser(null);
+        setUserProfile(null);
+      }
     } else {
+      // Firebase Auth not properly initialized
       setUser(null);
       setUserProfile(null);
     }
@@ -76,24 +91,40 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
-      setLoading(true);
-      if (firebaseUser) {
-        setUser(firebaseUser);
-        await fetchUserProfile(firebaseUser);
-      } else {
-        setUser(null);
-        setUserProfile(null);
-      }
+    // Ensure firebaseAuth is a valid Auth instance and has onAuthStateChanged
+    if (firebaseAuth && typeof firebaseAuth.onAuthStateChanged === 'function') {
+      const unsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
+        setLoading(true);
+        if (firebaseUser) {
+          setUser(firebaseUser);
+          await fetchUserProfile(firebaseUser);
+        } else {
+          setUser(null);
+          setUserProfile(null);
+        }
+        setLoading(false);
+      });
+      return () => unsubscribe();
+    } else {
+      // Firebase Auth is not properly initialized.
+      console.warn(
+        'Firebase Auth is not initialized correctly. Cannot subscribe to auth state changes. Please check your Firebase configuration in .env.local. Auth features will not work.'
+      );
       setLoading(false);
-    });
-
-    return () => unsubscribe();
+      setUser(null);
+      setUserProfile(null);
+      // No unsubscribe needed as no subscription was made
+      return () => {};
+    }
   }, [fetchUserProfile]);
 
   const logout = async () => {
     setLoading(true);
-    await signOut(firebaseAuth);
+    if (firebaseAuth && typeof firebaseAuth.signOut === 'function') {
+      await signOut(firebaseAuth);
+    } else {
+      console.warn('Firebase Auth is not initialized. Cannot sign out.');
+    }
     setUser(null);
     setUserProfile(null);
     setLoading(false);
