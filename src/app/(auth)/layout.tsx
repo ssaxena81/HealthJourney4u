@@ -20,8 +20,7 @@ export default function AuthLayout({
       <body className={`font-sans antialiased bg-background text-foreground`}>
         <div
           className="fixed inset-0 z-[-1] bg-cover bg-center"
-          style={{ backgroundImage: "url('https://placehold.co/1920x1080.png')" }}
-          data-ai-hint="health collage"
+          style={{ backgroundImage: "url('/images/your-actual-login-background.jpg')" }} /* YOU WILL NEED TO CHANGE THIS PATH */
           aria-hidden="true"
         >
           <div className="absolute inset-0 bg-background/70 backdrop-blur-sm"></div> {/* Overlay for readability */}
