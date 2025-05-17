@@ -1,10 +1,18 @@
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+/*
+  The explicit font-family rule below is removed because Tailwind's `font-sans` utility class,
+  applied to the body in layout.tsx, will now correctly set the font using
+  the GeistSans.variable configured in tailwind.config.ts.
+*/
+/*
 body {
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
 }
+*/
 
 @layer base {
   :root {

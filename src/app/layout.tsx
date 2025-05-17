@@ -6,15 +6,8 @@ import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
 import { SidebarProvider } from "@/components/ui/sidebar";
 
-const geistSans = GeistSans({
-  variable: '--font-geist-sans',
-  subsets: ['latin'],
-});
-
-const geistMono = GeistMono({
-  variable: '--font-geist-mono',
-  subsets: ['latin'],
-});
+// GeistSans and GeistMono are objects providing .variable and .className
+// We don't call them as functions.
 
 export const metadata: Metadata = {
   title: 'Health Timeline',
@@ -27,8 +20,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}>
+    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+      <body className={`font-sans antialiased bg-background text-foreground`}>
         <SidebarProvider defaultOpen={true}>
           {children}
           <Toaster />
