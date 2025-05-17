@@ -1,3 +1,4 @@
+
 'use client';
 
 import type { HealthEntry, LipidPanelData } from '@/types';
@@ -48,7 +49,14 @@ const renderValue = (entry: HealthEntry) => {
       return (
         <div className="text-sm space-y-1">
           {entry.diagnosisDate && <p>Diagnosis Date: <span className="font-medium">{format(parseISO(entry.diagnosisDate), 'PP')}</span></p>}
-          {entry.status && <p>Status: <Badge variant={entry.status === 'active' ? 'destructive' : 'secondary'} className="capitalize">{entry.status}</Badge></p>}
+          {entry.status && (
+            <div className="flex items-baseline">
+              <span className="text-muted-foreground">Status:</span>
+              <Badge variant={entry.status === 'active' ? 'destructive' : 'secondary'} className="capitalize ml-1.5">
+                {entry.status}
+              </Badge>
+            </div>
+          )}
         </div>
       );
     default:
