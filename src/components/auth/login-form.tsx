@@ -10,14 +10,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { loginUser, passwordSchema } from '@/app/actions/auth';
+import { loginUser } from '@/app/actions/auth'; // passwordSchema removed from here
+import { passwordSchema } from '@/types'; // Import from types
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
 const loginFormSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
   password: z.string().min(1, {message: "Password is required."}), // Full complexity check on server during login
-  mfaCode: z.string().optional(),
+  mfaCode: z.string().length(8, { message: "MFA code must be 8 digits."}).optional().or(z.literal('')), // Optional, allow empty string
 });
 
 type LoginFormValues = z.infer<typeof loginFormSchema>;
@@ -25,7 +26,7 @@ type LoginFormValues = z.infer<typeof loginFormSchema>;
 export default function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
-  const { checkAuthState } = useAuth(); // To refresh auth state
+  const { checkAuthState, setUserProfile: setAuthUserProfile } = useAuth(); 
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -50,27 +51,20 @@ export default function LoginForm() {
           title: 'Login Successful!',
           description: 'Welcome back.',
         });
-        await checkAuthState(); // Update auth context
-
-        // The AuthenticatedAppLayout will handle redirects for T&C and password expiry.
-        // If userProfile is needed immediately on client after login (e.g. for direct routing),
-        // loginUser action should return it, and useAuth hook should store it.
-        if (result.passwordExpired) {
-            router.push('/reset-password-required');
-        } else if (result.termsNotAccepted) {
-            // This will be handled by AuthenticatedAppLayout, but could be a direct push too.
-            // For now, let AuthenticatedAppLayout handle it.
-            router.push('/'); // Main page, layout will intercept
-        } else {
-            router.push('/'); // Redirect to dashboard
+        if (result.userProfile && setAuthUserProfile) {
+          setAuthUserProfile(result.userProfile); // Update auth context with full profile
         }
+        await checkAuthState(); // Refresh auth state if needed
+
+        // AppLayout will handle redirects based on profile state
+        router.push('/dashboard'); // Go to dashboard, AppLayout handles checks
 
       } else {
         if (result.requiresMfa) {
           setRequiresMfa(true);
-          setError("MFA code required. Please check your device."); // Or result.error
+          setError(result.error || "MFA code required. Please check your device.");
         } else {
-          setRequiresMfa(false); // Reset MFA state if a different error occurred
+          setRequiresMfa(false); 
           setError(result.error || 'An unknown error occurred.');
           toast({
             title: 'Login Failed',
@@ -103,7 +97,7 @@ export default function LoginForm() {
               autoComplete="email"
             />
             {form.formState.errors.email && (
-              <p className="text-sm text-destructive">{form.formState.errors.email.message}</p>
+              <p className="text-sm text-destructive mt-1">{form.formState.errors.email.message}</p>
             )}
           </div>
 
@@ -125,12 +119,13 @@ export default function LoginForm() {
                 className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent"
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={isPending}
+                aria-label={showPassword ? "Hide password" : "Show password"}
               >
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
             {form.formState.errors.password && (
-              <p className="text-sm text-destructive">{form.formState.errors.password.message}</p>
+              <p className="text-sm text-destructive mt-1">{form.formState.errors.password.message}</p>
             )}
           </div>
         </>
@@ -146,9 +141,10 @@ export default function LoginForm() {
             {...form.register('mfaCode')}
             disabled={isPending}
             maxLength={8}
+            autoComplete="one-time-code"
           />
           {form.formState.errors.mfaCode && (
-            <p className="text-sm text-destructive">{form.formState.errors.mfaCode.message}</p>
+            <p className="text-sm text-destructive mt-1">{form.formState.errors.mfaCode.message}</p>
           )}
            <p className="text-xs text-muted-foreground">
             Check your registered email or phone for the MFA code.

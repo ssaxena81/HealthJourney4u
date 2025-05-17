@@ -11,12 +11,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { checkEmailAvailability, signUpUser, passwordSchema } from '@/app/actions/auth';
+import { checkEmailAvailability, signUpUser } from '@/app/actions/auth'; // passwordSchema removed
+import { passwordSchema } from '@/types'; // Import from types
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { SubscriptionTier } from '@/types';
 import { subscriptionTiers } from '@/types';
-import ComparePlansDialog from '@/components/ui/compare-plans-dialog'; // Create this component
+import ComparePlansDialog from '@/components/ui/compare-plans-dialog'; 
 
 const step1Schema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -65,6 +66,7 @@ export default function SignUpFlow() {
       } else {
         setError(result.error || 'This email is already registered or invalid.');
         step1Form.setError('email', { type: 'manual', message: result.error || 'This email is already registered or invalid.' });
+        toast({ title: 'Email Check Failed', description: result.error || 'This email is already registered or invalid.', variant: 'destructive' });
       }
     });
   };
@@ -86,7 +88,7 @@ export default function SignUpFlow() {
         });
         // Firebase handles login automatically after signup with createUserWithEmailAndPassword
         // Redirect to profile setup page
-        router.push('/profile');
+        router.push('/profile'); // New users go to profile first
       } else {
         setError(result.error || 'An unknown error occurred.');
         toast({
@@ -94,11 +96,11 @@ export default function SignUpFlow() {
           description: result.error || 'Please try again.',
           variant: 'destructive',
         });
-        if (result.details?.fieldErrors.password) {
-            step2Form.setError('password', { type: 'manual', message: result.details.fieldErrors.password.join(', ') });
+        if (result.details?.fieldErrors?.password) { // Check for fieldErrors existence
+            step2Form.setError('password', { type: 'manual', message: (result.details.fieldErrors.password as string[]).join(', ') });
         }
-        if (result.details?.fieldErrors.confirmPassword) {
-            step2Form.setError('confirmPassword', { type: 'manual', message: result.details.fieldErrors.confirmPassword.join(', ') });
+        if (result.details?.fieldErrors?.confirmPassword) {
+            step2Form.setError('confirmPassword', { type: 'manual', message: (result.details.fieldErrors.confirmPassword as string[]).join(', ') });
         }
       }
     });
@@ -122,9 +124,10 @@ export default function SignUpFlow() {
               placeholder="you@example.com"
               {...step1Form.register('email')}
               disabled={isPending}
+              autoComplete="email"
             />
             {step1Form.formState.errors.email && (
-              <p className="text-sm text-destructive">{step1Form.formState.errors.email.message}</p>
+              <p className="text-sm text-destructive mt-1">{step1Form.formState.errors.email.message}</p>
             )}
           </div>
           <Button type="submit" className="w-full" disabled={isPending}>
@@ -137,7 +140,7 @@ export default function SignUpFlow() {
         <form onSubmit={step2Form.handleSubmit(handleStep2Submit)} className="space-y-6">
           <div>
             <p className="text-sm text-muted-foreground">Creating account for: <strong>{email}</strong></p>
-            <Button variant="link" size="sm" className="p-0 h-auto" onClick={() => {setCurrentStep(1); setError(null);}}>Change email</Button>
+            <Button variant="link" size="sm" className="p-0 h-auto" onClick={() => {setCurrentStep(1); setError(null); step1Form.setValue('email', email);}}>Change email</Button>
           </div>
           
           <div className="space-y-2">
@@ -149,13 +152,14 @@ export default function SignUpFlow() {
                 placeholder="••••••••"
                 {...step2Form.register('password')}
                 disabled={isPending}
+                autoComplete="new-password"
               />
-              <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent" onClick={() => setShowPassword(!showPassword)} disabled={isPending}>
+              <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent" onClick={() => setShowPassword(!showPassword)} disabled={isPending} aria-label={showPassword ? "Hide password" : "Show password"}>
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
             {step2Form.formState.errors.password && (
-              <p className="text-sm text-destructive">{step2Form.formState.errors.password.message}</p>
+              <p className="text-sm text-destructive mt-1">{step2Form.formState.errors.password.message}</p>
             )}
           </div>
 
@@ -168,15 +172,19 @@ export default function SignUpFlow() {
                 placeholder="••••••••"
                 {...step2Form.register('confirmPassword')}
                 disabled={isPending}
+                autoComplete="new-password"
               />
-              <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent" onClick={() => setShowConfirmPassword(!showConfirmPassword)} disabled={isPending}>
+              <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent" onClick={() => setShowConfirmPassword(!showConfirmPassword)} disabled={isPending} aria-label={showConfirmPassword ? "Hide confirm password" : "Show confirm password"}>
                 {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
             {step2Form.formState.errors.confirmPassword && (
-              <p className="text-sm text-destructive">{step2Form.formState.errors.confirmPassword.message}</p>
+              <p className="text-sm text-destructive mt-1">{step2Form.formState.errors.confirmPassword.message}</p>
             )}
           </div>
+          <p className="text-xs text-muted-foreground">
+            Password must be at least 8 characters, include one uppercase letter, one number, and one special character.
+          </p>
 
           <div className="space-y-2">
             <div className="flex justify-between items-center">
@@ -202,7 +210,7 @@ export default function SignUpFlow() {
               )}
             />
             {step2Form.formState.errors.subscriptionTier && (
-              <p className="text-sm text-destructive">{step2Form.formState.errors.subscriptionTier.message}</p>
+              <p className="text-sm text-destructive mt-1">{step2Form.formState.errors.subscriptionTier.message}</p>
             )}
           </div>
 

@@ -9,19 +9,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { passwordSchema, resetPassword } from '@/app/actions/auth'; // Using resetPassword action as it handles new password logic
+import { resetPassword } from '@/app/actions/auth'; // passwordSchema removed
+import { passwordSchema } from '@/types'; // Import from types
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth'; // To get current user's email
 
-// This form assumes the user is already logged in and wants to change their password.
-// Firebase requires current password to change password, or uses admin SDK.
-// For simplicity, we'll simulate the flow. True Firebase password change needs current password.
-// OR, if this is part of a forced reset, the `resetPassword` action could be used if it's adapted.
-// Let's make this a simple "New Password" form, assuming identity is confirmed.
 
 const changePasswordFormSchema = z.object({
-  // currentPassword: passwordSchema, // Ideally, you'd ask for this
+  // Firebase's updatePassword requires the user to be recently signed in.
+  // If reauthentication is needed, Firebase throws an error which should be handled.
+  // currentPassword: passwordSchema, // Not directly used with firebaseUpdatePassword unless re-auth flow is implemented
   newPassword: passwordSchema,
   confirmNewPassword: passwordSchema,
 }).refine((data) => data.newPassword === data.confirmNewPassword, {
@@ -33,7 +31,7 @@ type ChangePasswordFormValues = z.infer<typeof changePasswordFormSchema>;
 
 export default function ChangePasswordForm() {
   const { toast } = useToast();
-  const { user } = useAuth();
+  const { user, setUserProfile } = useAuth(); // Get current user's email and setUserProfile
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -51,15 +49,15 @@ export default function ChangePasswordForm() {
     setError(null);
     if (!user?.email) {
         setError("User session not found. Please log in again.");
+        toast({ title: "Error", description: "User session not found. Please log in again.", variant: "destructive" });
         return;
     }
     startTransition(async () => {
-      // The `resetPassword` action is being used here. It needs to be robust enough
-      // to handle password changes for an already authenticated user.
-      // Firebase's `updatePassword(currentUser, newPassword)` is the direct way.
-      // This action might need an `isChange: true` flag or similar.
+      // The `resetPassword` action internally calls `firebaseUpdatePassword` which requires a logged-in user.
+      // If Firebase requires re-authentication (e.g., "auth/requires-recent-login"),
+      // the server action should ideally return a specific error code to handle that on the client.
       const result = await resetPassword({
-        email: user.email, // Pass current user's email
+        email: user.email, 
         newPassword: values.newPassword,
         confirmNewPassword: values.confirmNewPassword,
       });
@@ -69,8 +67,14 @@ export default function ChangePasswordForm() {
           title: 'Password Changed Successfully!',
           description: result.message || 'Your password has been updated.',
         });
+        // Update lastPasswordChangeDate in local UserProfile state
+        if (setUserProfile) {
+            setUserProfile(prev => prev ? ({...prev, lastPasswordChangeDate: new Date().toISOString()}) : null);
+        }
         form.reset();
       } else {
+        // TODO: Handle specific Firebase errors like 'auth/requires-recent-login'
+        // by prompting user to re-authenticate.
         setError(result.error || 'An unknown error occurred.');
         toast({
           title: 'Password Change Failed',
@@ -95,15 +99,6 @@ export default function ChangePasswordForm() {
             </div>
           )}
           
-          {/* 
-          // Ideally, include current password field:
-          <div className="space-y-2">
-            <Label htmlFor="currentPassword">Current Password</Label>
-            <Input id="currentPassword" type="password" {...form.register('currentPassword')} />
-            {form.formState.errors.currentPassword && <p className="text-sm text-destructive">{form.formState.errors.currentPassword.message}</p>}
-          </div>
-          */}
-
           <div className="space-y-2">
             <Label htmlFor="newPasswordProfile">New Password</Label>
              <div className="relative">
@@ -113,13 +108,14 @@ export default function ChangePasswordForm() {
                 placeholder="••••••••"
                 {...form.register('newPassword')}
                 disabled={isPending}
+                autoComplete="new-password"
                 />
-                <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent" onClick={() => setShowNewPassword(!showNewPassword)} disabled={isPending}>
+                <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent" onClick={() => setShowNewPassword(!showNewPassword)} disabled={isPending} aria-label={showNewPassword ? "Hide new password" : "Show new password"}>
                 {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
             </div>
             {form.formState.errors.newPassword && (
-              <p className="text-sm text-destructive">{form.formState.errors.newPassword.message}</p>
+              <p className="text-sm text-destructive mt-1">{form.formState.errors.newPassword.message}</p>
             )}
           </div>
 
@@ -132,13 +128,14 @@ export default function ChangePasswordForm() {
                 placeholder="••••••••"
                 {...form.register('confirmNewPassword')}
                 disabled={isPending}
+                autoComplete="new-password"
                 />
-                <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent" onClick={() => setShowConfirmPassword(!showConfirmPassword)} disabled={isPending}>
+                <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent" onClick={() => setShowConfirmPassword(!showConfirmPassword)} disabled={isPending} aria-label={showConfirmPassword ? "Hide confirm new password" : "Show confirm new password"}>
                 {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </Button>
             </div>
             {form.formState.errors.confirmNewPassword && (
-              <p className="text-sm text-destructive">{form.formState.errors.confirmNewPassword.message}</p>
+              <p className="text-sm text-destructive mt-1">{form.formState.errors.confirmNewPassword.message}</p>
             )}
           </div>
           <p className="text-xs text-muted-foreground">

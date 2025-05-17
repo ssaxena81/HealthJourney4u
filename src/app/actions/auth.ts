@@ -11,14 +11,8 @@ import {
 import { auth as firebaseAuth } from '@/lib/firebase/clientApp';
 import { z } from 'zod';
 import type { UserProfile, SubscriptionTier } from '@/types';
+import { passwordSchema } from '@/types'; // Import from types
 // TODO: Import firestore and functions to save/update user profile data (e.g. in a 'users' collection)
-
-// --- Password Policy ---
-export const passwordSchema = z.string()
-  .min(8, { message: "Password must be at least 8 characters long." })
-  .regex(/[A-Z]/, { message: "Password must contain at least one uppercase letter." })
-  .regex(/[0-9]/, { message: "Password must contain at least one number." })
-  .regex(/[^A-Za-z0-9]/, { message: "Password must contain at least one special character." });
 
 // --- Sign Up Schemas ---
 const CheckEmailInputSchema = z.object({
@@ -189,7 +183,8 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     }
 
     // Check T&C acceptance
-    if (!userProfile.acceptedLatestTerms) {
+    // Assuming '2.0' is the latest T&C version string. This should come from a config.
+    if (!userProfile.acceptedLatestTerms || userProfile.termsVersionAccepted !== '2.0') {
       return { success: true, userId, termsNotAccepted: true, userProfile }; // Logged in, but needs T&C redirect
     }
     
@@ -308,6 +303,10 @@ export async function resetPassword(values: z.infer<typeof ResetPasswordSchema>)
     if (!currentUser) {
         // This path for "forgot password" flow is problematic without oobCode.
         // For "forced password reset" where user IS logged in, this is okay.
+        // TODO: Properly handle the oobCode flow for actual password reset links from Firebase.
+        // For now, this action primarily supports logged-in password changes.
+        // If an oobCode is passed (e.g. from URL query params), it should be handled here using `confirmPasswordReset`.
+        console.warn("resetPassword action called without a logged-in user and no oobCode handling. This is for forced reset or change password.");
         return { success: false, error: "User not authenticated. This action is for logged-in users changing their password or after oobCode verification." };
     }
     
@@ -327,19 +326,19 @@ export async function resetPassword(values: z.infer<typeof ResetPasswordSchema>)
 
 // --- Update Profile Action (Simplified) ---
 const DemographicsSchema = z.object({
-  firstName: z.string().min(3).max(50).regex(/^[a-zA-Z]+$/, "First name can only contain letters."),
-  middleInitial: z.string().max(1).optional(),
-  lastName: z.string().min(3).max(50).regex(/^[a-zA-Z]+$/, "Last name can only contain letters."),
+  firstName: z.string().min(3).max(50).regex(/^[a-zA-Z\s'-]+$/, "First name can only contain letters.").trim(),
+  middleInitial: z.string().max(1).optional().trim(),
+  lastName: z.string().min(3).max(50).regex(/^[a-zA-Z\s'-]+$/, "Last name can only contain letters.").trim(),
   dateOfBirth: z.string().refine((val) => !isNaN(Date.parse(val)), { message: "Invalid date of birth" }),
-  cellPhone: z.string().regex(/^\d{3}-\d{3}-\d{4}$/, "Invalid phone format (999-999-9999)").optional(),
+  cellPhone: z.string().regex(/^$|^\d{3}-\d{3}-\d{4}$/, "Invalid phone format (e.g., 999-999-9999)").optional(),
   email: z.string().email(), // Readonly, for reference
-}).refine(data => data.email || data.cellPhone, { // Ensure at least one contact method for MFA
+}).refine(data => data.email || data.cellPhone, { 
     message: "Either email or cell phone must be provided.",
-    path: ["cellPhone"], // Or a general error
+    path: ["cellPhone"], 
 });
 
 
-export async function updateDemographics(userId: string, values: z.infer<typeof DemographicsSchema>): Promise<{success: boolean, error?: string, data?: UserProfile}> {
+export async function updateDemographics(userId: string, values: z.infer<typeof DemographicsSchema>): Promise<{success: boolean, error?: string, data?: UserProfile, details?: any}> {
     try {
         const validatedValues = DemographicsSchema.parse(values);
         // TODO: Update user profile in Firestore for userId with validatedValues
@@ -349,7 +348,7 @@ export async function updateDemographics(userId: string, values: z.infer<typeof 
         return { success: true };
     } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return { success: false, error: 'Invalid input.', details: error.flatten() as any };
+          return { success: false, error: 'Invalid input.', details: error.flatten() };
         }
         return { success: false, error: "Failed to update profile." };
     }

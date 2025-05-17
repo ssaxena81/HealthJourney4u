@@ -1,4 +1,14 @@
 
+import { z } from 'zod';
+
+// --- Password Policy ---
+export const passwordSchema = z.string()
+  .min(8, { message: "Password must be at least 8 characters long." })
+  .regex(/[A-Z]/, { message: "Password must contain at least one uppercase letter." })
+  .regex(/[0-9]/, { message: "Password must contain at least one number." })
+  .regex(/[^A-Za-z0-9]/, { message: "Password must contain at least one special character." });
+
+
 export type HealthMetricCategory = 'vital' | 'lab' | 'activity' | 'event' | 'medication' | 'condition';
 
 export type HealthMetricType =
@@ -174,6 +184,9 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Insurance Provider Connections", free: "1", silver: "2", gold: "3", platinum: "All" },
   { feature: "Advanced Data Analysis", free: false, silver: true, gold: true, platinum: true },
   { feature: "Detailed Reports", free: "Basic", silver: "Standard", gold: "Advanced", platinum: "Premium" },
+  { feature: "Password Expiry (90 days)", free: true, silver: true, gold: true, platinum: true },
+  { feature: "Terms & Conditions Acceptance", free: true, silver: true, gold: true, platinum: true },
+  { feature: "Multi-Factor Authentication", free: true, silver: true, gold: true, platinum: true },
 ];
 
 // For admin-managed dropdowns (mocked for now)
