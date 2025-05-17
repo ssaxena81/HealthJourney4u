@@ -11,7 +11,7 @@ import {
 import { auth as firebaseAuth } from '@/lib/firebase/clientApp';
 import { z } from 'zod';
 import type { UserProfile, SubscriptionTier } from '@/types';
-import { passwordSchema } from '@/types'; // Import from types
+import { passwordSchema } from '@/types';
 // TODO: Import firestore and functions to save/update user profile data (e.g. in a 'users' collection)
 
 // --- Sign Up Schemas ---
@@ -34,7 +34,7 @@ interface SignUpResult {
   userId?: string;
   error?: string;
   errorCode?: string;
-  details?: z.ZodError<any>;
+  details?: z.ZodError<any>; // Changed to any to match existing code
 }
 
 export async function checkEmailAvailability(values: z.infer<typeof CheckEmailInputSchema>): Promise<{ available: boolean; error?: string }> {
@@ -79,23 +79,33 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     );
 
     // TODO: Create user profile in Firestore
-    const initialProfile: Partial<UserProfile> = {
+    const initialProfile: UserProfile = { // Made this a full UserProfile to satisfy type
       id: userCredential.user.uid,
       email: userCredential.user.email!,
       subscriptionTier: validatedValues.subscriptionTier,
       lastPasswordChangeDate: new Date().toISOString(),
       acceptedLatestTerms: false, // User needs to accept T&C post-signup
+      termsVersionAccepted: undefined, // Initialize
       // Initialize other profile fields as empty/default
       connectedFitnessApps: [],
       connectedDiagnosticsServices: [],
       connectedInsuranceProviders: [],
+      // Add other fields from UserProfile with default/undefined values
+      firstName: undefined,
+      middleInitial: undefined,
+      lastName: undefined,
+      dateOfBirth: undefined,
+      cellPhone: undefined,
+      mfaMethod: undefined,
+      paymentDetails: undefined,
+
     };
     // await db.collection('users').doc(userCredential.user.uid).set(initialProfile); // Example Firestore save
 
     return { success: true, userId: userCredential.user.uid };
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      return { success: false, error: 'Invalid input.', details: error as any };
+      return { success: false, error: 'Invalid input.', details: error as any }; // Changed to any
     }
     return { success: false, error: (error as AuthError).message || 'Sign up failed.', errorCode: (error as AuthError).code };
   }
@@ -114,10 +124,9 @@ interface LoginResult {
   error?: string;
   errorCode?: string;
   requiresMfa?: boolean;
-  // TODO: Add flags for T&C and password expiry
   passwordExpired?: boolean;
   termsNotAccepted?: boolean;
-  userProfile?: UserProfile; // Send profile to client for checks
+  userProfile?: UserProfile;
 }
 
 export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promise<LoginResult> {
@@ -128,7 +137,6 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       return { success: false, error: "Authentication service is not available." };
     }
     
-    // Step 1: Basic email/password authentication
     const userCredential = await signInWithEmailAndPassword(
       firebaseAuth,
       validatedValues.email,
@@ -137,39 +145,38 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     const userId = userCredential.user.uid;
 
     // TODO: Implement actual MFA check
-    // For now, let's assume MFA is required and user needs to enter code
-    // This part of logic would be more complex in real app, involving checking user's MFA settings
     if (!validatedValues.mfaCode) {
-      // This is a simplified stub for MFA. In a real app, you'd check if MFA is enabled for the user.
-      // If so, you'd send a code here (or earlier) and return requiresMfa: true.
-      // Then, client would re-submit with the code.
-      // For this iteration, we'll simulate this: if no code, ask for it.
-      // This means login will initially "fail" to prompt for MFA if needed.
-      // This is a placeholder for real MFA logic
-      // return { success: false, requiresMfa: true, error: "MFA code required." };
+      // This is a placeholder. A real app would check if user has MFA enabled.
+      // For now, let's assume it is required for some users (e.g. based on profile settings)
+      // const userRequiresMfa = true; // This would come from user's profile
+      // if (userRequiresMfa) {
+      //   return { success: false, requiresMfa: true, error: "MFA code required." };
+      // }
     } else {
       // TODO: Verify MFA code if provided.
-      // If mfaCode is provided, verify it. This logic is highly dependent on chosen MFA method.
       // const isValidMfa = await verifyMfaCode(userId, validatedValues.mfaCode);
       // if (!isValidMfa) return { success: false, error: "Invalid MFA code." };
     }
 
-    // TODO: Fetch user profile from Firestore
+    // --- Placeholder for userProfile fetch ---
+    // TODO: Fetch real user profile from Firestore
     // const userProfileDoc = await db.collection('users').doc(userId).get();
     // if (!userProfileDoc.exists) return { success: false, error: "User profile not found." };
     // const userProfile = userProfileDoc.data() as UserProfile;
-    
-    // --- Placeholder for userProfile fetch ---
     const userProfile: UserProfile = { // This is MOCK data
       id: userId,
       email: validatedValues.email,
       subscriptionTier: 'free',
-      lastPasswordChangeDate: new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString(), // 100 days ago
-      acceptedLatestTerms: false,
+      lastPasswordChangeDate: new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString(), // Simulate 100 days ago
+      acceptedLatestTerms: false, // Simulate not accepted
+      termsVersionAccepted: '1.0', // Simulate old version accepted
       // other fields...
       connectedFitnessApps: [],
       connectedDiagnosticsServices: [],
       connectedInsuranceProviders: [],
+      firstName: "Mock",
+      lastName: "User",
+      dateOfBirth: new Date(1990,0,1).toISOString(),
     };
     // --- End Placeholder ---
 
@@ -179,20 +186,19 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     const now = new Date();
     const daysSinceLastChange = (now.getTime() - lastPasswordChange.getTime()) / (1000 * 3600 * 24);
     if (daysSinceLastChange >= 90) {
-      return { success: true, userId, passwordExpired: true, userProfile }; // Logged in, but needs immediate redirect
+      return { success: true, userId, passwordExpired: true, userProfile };
     }
 
-    // Check T&C acceptance
-    // Assuming '2.0' is the latest T&C version string. This should come from a config.
+    // Check T&C acceptance (assuming '2.0' is the latest)
     if (!userProfile.acceptedLatestTerms || userProfile.termsVersionAccepted !== '2.0') {
-      return { success: true, userId, termsNotAccepted: true, userProfile }; // Logged in, but needs T&C redirect
+      return { success: true, userId, termsNotAccepted: true, userProfile };
     }
     
     return { success: true, userId, userProfile };
 
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      return { success: false, error: 'Invalid input.', details: error as any };
+      return { success: false, error: 'Invalid input.' }; // Removed details to match simpler type
     }
     return { success: false, error: (error as AuthError).message || 'Login failed.', errorCode: (error as AuthError).code };
   }
@@ -205,14 +211,16 @@ const ForgotPasswordEmailSchema = z.object({
 });
 
 const VerifyResetCodeSchema = z.object({
-  email: z.string().email(), // Or a temporary token associated with the code
+  email: z.string().email(),
   code: z.string().length(8, { message: "Code must be 8 digits." }),
 });
 
-const ResetPasswordSchema = z.object({
-  email: z.string().email(), // Or a temporary token
+// Schema for the final step of resetting password (after code verification)
+const FinalResetPasswordSchema = z.object({
+  email: z.string().email(), // Email of the user resetting password
   newPassword: passwordSchema,
   confirmNewPassword: passwordSchema,
+  // oobCode: z.string().optional(), // For Firebase's own reset links, if we integrate that
 }).refine(data => data.newPassword === data.confirmNewPassword, {
   message: "Passwords don't match.",
   path: ['confirmNewPassword'],
@@ -229,27 +237,17 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
   try {
     const validatedValues = ForgotPasswordEmailSchema.parse(values);
     // TODO: Implement custom 8-digit code sending (e.g., via Firebase Functions + SendGrid/Twilio)
-    // Firebase's default `sendPasswordResetEmail` sends a link, not an 8-digit code for user to type.
-    // For now, we'll use the standard Firebase method and the UI will need to adapt or this needs a custom backend.
-    // This is a placeholder for the 8-digit code sending.
-    // To stick to user's 8-digit code request, this needs custom implementation.
-    // For now, let's pretend we sent a code and proceed.
+    // For now, simulate success.
+    console.log(`Simulating sending 8-digit code to ${validatedValues.email}`);
     // In a real scenario:
     // 1. Generate 8-digit code.
     // 2. Store it temporarily (e.g., Firestore with TTL) associated with the email/userId.
-    // 3. Send it via email/SMS.
-    console.log(`Simulating sending 8-digit code to ${validatedValues.email}`);
+    // 3. Send it via email/SMS using the user's preferred MFA method if available, or email.
     return { success: true, message: "If your email is registered, an 8-digit code has been sent." };
-
-    // If using standard Firebase reset link:
-    // await firebaseSendPasswordResetEmail(firebaseAuth, validatedValues.email);
-    // return { success: true, message: "Password reset email sent. Please check your inbox." };
-
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return { success: false, error: 'Invalid input.'};
     }
-    // Don't reveal if email exists or not for security, unless intended.
     return { success: true, message: "If your email is registered, an 8-digit code has been sent." }; // Generic message
   }
 }
@@ -262,7 +260,7 @@ export async function verifyPasswordResetCode(values: z.infer<typeof VerifyReset
     if (validatedValues.code === "12345678") { // Placeholder for actual verification
         return { success: true };
     } else {
-        return { success: false, error: "Invalid verification code."};
+        return { success: false, error: "Invalid or expired verification code."};
     }
   } catch (error: any) {
      if (error instanceof z.ZodError) {
@@ -272,50 +270,46 @@ export async function verifyPasswordResetCode(values: z.infer<typeof VerifyReset
   }
 }
 
-export async function resetPassword(values: z.infer<typeof ResetPasswordSchema>): Promise<ForgotPasswordResult> {
+// This action is for resetting password when user IS LOGGED IN (e.g. forced reset, or change password in profile)
+// OR for the final step of "forgot password" if identity is confirmed via oobCode or custom code.
+export async function resetPassword(values: z.infer<typeof FinalResetPasswordSchema>): Promise<ForgotPasswordResult> {
   try {
-    const validatedValues = ResetPasswordSchema.parse(values);
+    const validatedValues = FinalResetPasswordSchema.parse(values);
     const currentUser = firebaseAuth.currentUser;
 
-    // This action should ideally be performed when the user is authenticated via the reset code/token.
-    // Firebase's standard flow provides a token (oobCode) in the reset link.
-    // If using custom 8-digit code, you need a way to re-authenticate or prove identity here
-    // before changing password for security. This is complex.
-    // Forcing a re-login before this step, or having a temporary auth token from code verification step is needed.
-    
-    // Assuming the user's identity is confirmed (e.g. by a temporary token from the code verification step)
-    // For simplicity, if using Firebase client SDK for password reset AFTER `applyActionCode` (from link),
-    // or if user is somehow re-authenticated temporarily.
-    // This is a MAJOR simplification. A secure custom flow is much more involved.
-    // One way with custom code: user enters code, you verify it, issue a short-lived custom token,
-    // user uses that token to call this resetPassword function.
-
-    // If relying on Firebase context (e.g. user clicked link and is on reset page served by your app with oobCode)
-    // you'd use confirmPasswordReset with the oobCode.
-
-    // Since we're simulating a custom flow and don't have oobCode from Firebase link:
-    // This part is tricky without the oobCode or a re-authentication mechanism.
-    // Firebase's `updatePassword` requires the user to be currently signed in.
-    // If the user is not signed in (which they wouldn't be in a typical forgot password flow before this point),
-    // this will fail. This highlights the complexity of deviating from Firebase standard reset link.
-
-    // Let's assume for this action, the user IS signed in (e.g. forced password reset flow)
-    if (!currentUser) {
-        // This path for "forgot password" flow is problematic without oobCode.
-        // For "forced password reset" where user IS logged in, this is okay.
-        // TODO: Properly handle the oobCode flow for actual password reset links from Firebase.
-        // For now, this action primarily supports logged-in password changes.
-        // If an oobCode is passed (e.g. from URL query params), it should be handled here using `confirmPasswordReset`.
-        console.warn("resetPassword action called without a logged-in user and no oobCode handling. This is for forced reset or change password.");
-        return { success: false, error: "User not authenticated. This action is for logged-in users changing their password or after oobCode verification." };
+    // Scenario 1: User is logged in (e.g., forced reset or changing password from profile)
+    if (currentUser && currentUser.email === validatedValues.email) {
+      await firebaseUpdatePassword(currentUser, validatedValues.newPassword);
+      // TODO: Update lastPasswordChangeDate in Firestore for currentUser.uid
+      // await db.collection('users').doc(currentUser.uid).update({ lastPasswordChangeDate: new Date().toISOString() });
+      return { success: true, message: "Password has been reset successfully." };
     }
     
-    await firebaseUpdatePassword(currentUser, validatedValues.newPassword);
+    // Scenario 2: User is NOT logged in, but has an oobCode from Firebase email link (not implemented fully yet)
+    // if (validatedValues.oobCode) {
+    //   await firebaseAuth.confirmPasswordReset(validatedValues.oobCode, validatedValues.newPassword);
+    //   // Here, we don't have a currentUser to update Firestore directly.
+    //   // The user needs to log in again. `lastPasswordChangeDate` might be updated on next login,
+    //   // or by a backend trigger if using Firebase Functions.
+    //   return { success: true, message: "Password reset. You can now log in." };
+    // }
 
-    // TODO: Update lastPasswordChangeDate in Firestore for currentUser.uid
-    // await db.collection('users').doc(currentUser.uid).update({ lastPasswordChangeDate: new Date().toISOString() });
+    // Scenario 3: Custom "forgot password" flow where user is not logged in, and we used a custom 8-digit code.
+    // This is the most complex scenario security-wise without Firebase's oobCode.
+    // Firebase's client-side `updatePassword` requires user to be signed in.
+    // To do this securely without oobCode, the `verifyPasswordResetCode` step would need to
+    // grant a temporary, secure session/token that this function can use to authorize the password change
+    // for the specified email. This typically involves backend logic (Firebase Functions).
+    // For now, this action primarily supports logged-in password changes or oobCode flow (if oobCode is passed).
+    
+    // If not logged in and no oobCode, this path is problematic for "forgot password".
+    if (!currentUser) {
+      console.warn("resetPassword action called for forgot password flow without oobCode or temporary auth. This is not secure for unauthenticated users without further backend implementation.");
+      return { success: false, error: "Password reset for unauthenticated users via this path requires further implementation (oobCode or custom token flow)." };
+    }
 
-    return { success: true, message: "Password has been reset successfully." };
+    return { success: false, error: "Could not reset password. User context mismatch or flow not fully supported." };
+
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return { success: false, error: 'Invalid input.'};
@@ -324,28 +318,37 @@ export async function resetPassword(values: z.infer<typeof ResetPasswordSchema>)
   }
 }
 
-// --- Update Profile Action (Simplified) ---
+// --- Update Profile Actions ---
+
+// Schema for demographics data received by the server action
 const DemographicsSchema = z.object({
-  firstName: z.string().min(3).max(50).regex(/^[a-zA-Z\s'-]+$/, "First name can only contain letters.").trim(),
-  middleInitial: z.string().max(1).optional().trim(),
-  lastName: z.string().min(3).max(50).regex(/^[a-zA-Z\s'-]+$/, "Last name can only contain letters.").trim(),
-  dateOfBirth: z.string().refine((val) => !isNaN(Date.parse(val)), { message: "Invalid date of birth" }),
+  firstName: z.string().min(3, "First name must be at least 3 characters.").max(50).regex(/^[a-zA-Z\s'-]+$/, "First name can only contain letters.").trim(),
+  middleInitial: z.string().max(1, "Middle initial can be at most 1 character.").trim().optional(),
+  lastName: z.string().min(3, "Last name must be at least 3 characters.").max(50).regex(/^[a-zA-Z\s'-]+$/, "Last name can only contain letters.").trim(),
+  dateOfBirth: z.string().refine((val) => !isNaN(Date.parse(val)), { message: "Invalid date of birth" }), // Expecting ISO string
+  email: z.string().email(), // Readonly from auth, for reference
   cellPhone: z.string().regex(/^$|^\d{3}-\d{3}-\d{4}$/, "Invalid phone format (e.g., 999-999-9999)").optional(),
-  email: z.string().email(), // Readonly, for reference
 }).refine(data => data.email || data.cellPhone, { 
     message: "Either email or cell phone must be provided.",
     path: ["cellPhone"], 
 });
 
 
-export async function updateDemographics(userId: string, values: z.infer<typeof DemographicsSchema>): Promise<{success: boolean, error?: string, data?: UserProfile, details?: any}> {
+export async function updateDemographics(userId: string, values: z.infer<typeof DemographicsSchema>): Promise<{success: boolean, error?: string, data?: Partial<UserProfile>, details?: any}> {
     try {
         const validatedValues = DemographicsSchema.parse(values);
         // TODO: Update user profile in Firestore for userId with validatedValues
         console.log("Updating demographics for user:", userId, validatedValues);
-        // const updatedProfile = { ... }; // Get updated profile
-        // return { success: true, data: updatedProfile };
-        return { success: true };
+        // const updatedProfileData: Partial<UserProfile> = {
+        //   firstName: validatedValues.firstName,
+        //   middleInitial: validatedValues.middleInitial,
+        //   lastName: validatedValues.lastName,
+        //   dateOfBirth: validatedValues.dateOfBirth, // Store as ISO string
+        //   cellPhone: validatedValues.cellPhone,
+        // };
+        // await db.collection('users').doc(userId).update(updatedProfileData);
+        // return { success: true, data: updatedProfileData };
+        return { success: true, data: values }; // Return parsed values for optimistic update
     } catch (error: any) {
         if (error instanceof z.ZodError) {
           return { success: false, error: 'Invalid input.', details: error.flatten() };
@@ -356,8 +359,13 @@ export async function updateDemographics(userId: string, values: z.infer<typeof 
 
 // TODO: Actions for updating Fitness, Diagnostics, Insurance connections
 // These will involve secure token handling if using OAuth, and communication with external APIs.
+// Example structure:
+// export async function updateFitnessConnections(userId: string, connections: UserProfile['connectedFitnessApps']): Promise<{success: boolean, error?: string}> { ... }
+// export async function updateDiagnosticsConnections(userId: string, connections: UserProfile['connectedDiagnosticsServices']): Promise<{success: boolean, error?: string}> { ... }
+// export async function updateInsuranceConnections(userId: string, connections: UserProfile['connectedInsuranceProviders']): Promise<{success: boolean, error?: string}> { ... }
 
-export async function updateUserTermsAcceptance(userId: string, accepted: boolean, version?: string): Promise<{success: boolean, error?: string}> {
+
+export async function updateUserTermsAcceptance(userId: string, accepted: boolean, version: string): Promise<{success: boolean, error?: string}> {
     try {
         // TODO: Update user profile in Firestore
         console.log(`User ${userId} terms acceptance: ${accepted}, version: ${version}`);
@@ -367,3 +375,4 @@ export async function updateUserTermsAcceptance(userId: string, accepted: boolea
         return { success: false, error: "Failed to update terms acceptance."};
     }
 }
+
