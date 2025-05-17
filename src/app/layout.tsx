@@ -4,10 +4,8 @@ import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 import { Toaster } from "@/components/ui/toaster";
-import { SidebarProvider } from "@/components/ui/sidebar";
-
-// GeistSans and GeistMono are objects providing .variable and .className
-// We don't call them as functions.
+// SidebarProvider removed from here, will be in (app)/layout.tsx
+import { AuthProvider } from '@/hooks/useAuth'; // Import AuthProvider
 
 export const metadata: Metadata = {
   title: 'Health Timeline',
@@ -22,10 +20,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className={`font-sans antialiased bg-background text-foreground`}>
-        <SidebarProvider defaultOpen={true}>
-          {children}
-          <Toaster />
-        </SidebarProvider>
+        <AuthProvider> {/* Wrap entire app with AuthProvider */}
+            {children}
+            <Toaster />
+        </AuthProvider>
       </body>
     </html>
   );
