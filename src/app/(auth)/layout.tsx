@@ -17,7 +17,7 @@ export default function AuthLayout({
 }>) {
   return (
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
-      <body className={`font-sans antialiased text-foreground`}>
+      <body className={`font-sans antialiased bg-background text-foreground`}>
         <div
           className="fixed inset-0 z-[-1] bg-cover bg-center"
           style={{ backgroundImage: "url('https://placehold.co/1920x1080.png')" }}
