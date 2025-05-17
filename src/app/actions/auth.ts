@@ -3,8 +3,8 @@
 
 import {
   createUserWithEmailAndPassword,
+  fetchSignInMethodsForEmail, // Added for robust email check
   signInWithEmailAndPassword,
-  // sendPasswordResetEmail as firebaseSendPasswordResetEmail, // Not used for custom code flow
   updatePassword as firebaseUpdatePassword,
   type AuthError,
 } from 'firebase/auth';
@@ -12,7 +12,7 @@ import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
 import { z } from 'zod';
 import type { UserProfile, SubscriptionTier } from '@/types';
 import { passwordSchema } from '@/types';
-import { doc, setDoc, getDoc } from 'firebase/firestore'; // Import getDoc
+import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { differenceInYears } from 'date-fns';
 
 
@@ -41,26 +41,28 @@ interface SignUpResult {
 
 export async function checkEmailAvailability(values: z.infer<typeof CheckEmailInputSchema>): Promise<{ available: boolean; error?: string }> {
   try {
-    CheckEmailInputSchema.parse(values);
-    // This is a Firebase specific way to check; ideally, you might have a users collection to check against too.
-    // Firebase's signInWithEmailAndPassword with a dummy password throws 'auth/wrong-password' if user exists,
-    // or 'auth/user-not-found' if user doesn't exist. This isn't the most elegant way.
-    // A better way is to attempt to fetch user by email if using Admin SDK, or maintain a list of emails.
-    // For client-side, `fetchSignInMethodsForEmail` was an option but can be slow.
-    // For now, we'll assume a simple check.
-    // TODO: Implement a more robust email availability check, possibly using Firebase Admin SDK if this action is run in a secure environment or a users collection.
-    // This is a simplified check. In a real app, you might try to fetch user data.
-    // For now, let's simulate by saying it's available if no direct Firebase error.
-    // await firebaseAuth.fetchSignInMethodsForEmail(validatedValues.email) is client-side.
-    // This is a placeholder for a proper check.
-    return { available: true }; // Placeholder
-  } catch (error: any) {
-     if (error.code === 'auth/user-not-found') {
-      return { available: true };
+    const validatedValues = CheckEmailInputSchema.parse(values);
+
+    if (!firebaseAuth || typeof firebaseAuth.app?.name !== 'string' || firebaseAuth.app.name === '[DEFAULT]') { // Check if firebaseAuth is a real instance
+        // If firebaseAuth is not properly initialized (e.g. missing env vars), we can't check.
+        // This scenario should ideally be caught by broader app health checks.
+        // For now, let's be pessimistic to avoid false positives.
+        console.warn("Firebase Auth not properly initialized in checkEmailAvailability. Cannot verify email.");
+        return { available: false, error: "Email verification service is temporarily unavailable." };
     }
-    // Firebase often throws if email is malformed before even checking existence.
-    // For simplicity, assume other errors mean it's 'unavailable' or problematic.
-    return { available: false, error: "Could not verify email availability." };
+    
+    const methods = await fetchSignInMethodsForEmail(firebaseAuth, validatedValues.email);
+    if (methods.length > 0) {
+      return { available: false, error: "This email is already registered. Please try logging in or use 'Forgot my password'." };
+    }
+    return { available: true };
+  } catch (error: any) {
+    if (error.code === 'auth/invalid-email') {
+      return { available: false, error: "The email address is badly formatted." };
+    }
+    // Handle other potential errors from fetchSignInMethodsForEmail, though most common is invalid-email
+    console.error("Error in checkEmailAvailability:", error);
+    return { available: false, error: "Could not verify email availability due to an unexpected error." };
   }
 }
 
@@ -80,14 +82,13 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       validatedValues.password
     );
 
-    // Create user profile in Firestore
     const initialProfile: UserProfile = {
       id: userCredential.user.uid,
       email: userCredential.user.email!,
       subscriptionTier: validatedValues.subscriptionTier,
       lastPasswordChangeDate: new Date().toISOString(),
-      acceptedLatestTerms: false,
-      isAgeCertified: false, // Initialize as false, user certifies in demographics
+      acceptedLatestTerms: false, 
+      isAgeCertified: false, // Certified during demographics step
       // Initialize other profile fields as empty/default
       firstName: undefined,
       middleInitial: undefined,
@@ -104,21 +105,27 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
 
     if (!db || typeof doc !== 'function' || typeof setDoc !== 'function') { 
         console.error("Firestore (db, doc, or setDoc) is not initialized correctly for profile creation.");
-        return { success: false, error: "Profile creation failed: Database service unavailable." };
+        // Potentially delete the auth user here if profile creation fails critically
+        // await userCredential.user.delete(); // Requires careful error handling
+        return { success: false, error: "Profile creation failed: Database service unavailable. Your account was not fully created." };
     }
     
     try {
       await setDoc(doc(db, "users", userCredential.user.uid), initialProfile);
     } catch (firestoreError: any) {
       console.error("Error creating user profile in Firestore:", firestoreError);
+      // Potentially delete the auth user here if profile creation fails critically
+      // await userCredential.user.delete(); // Requires careful error handling
       return { success: false, error: `Account created but profile setup failed: ${firestoreError.message}. Please contact support.` };
     }
     
-
     return { success: true, userId: userCredential.user.uid };
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return { success: false, error: 'Invalid input data.', details: error };
+    }
+    if ((error as AuthError).code === 'auth/email-already-in-use') {
+        return { success: false, error: 'This email address is already in use. Please log in or use a different email.', errorCode: (error as AuthError).code };
     }
     return { success: false, error: (error as AuthError).message || 'Sign up failed.', errorCode: (error as AuthError).code };
   }
@@ -139,7 +146,7 @@ interface LoginResult {
   requiresMfa?: boolean;
   passwordExpired?: boolean;
   termsNotAccepted?: boolean;
-  userProfile?: UserProfile;
+  userProfile?: UserProfile | null; // Can be null if not found or error
 }
 
 export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promise<LoginResult> {
@@ -167,9 +174,10 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
 
     if (!userProfileSnap.exists()) {
       console.error(`User profile not found for UID: ${userId}. This might happen if signup was interrupted.`);
-      // Forcing a basic profile creation here might be an option, or guiding user to complete profile.
-      // For now, error out or return a specific state.
-      return { success: false, error: "User profile not found. Please contact support or try signing up again." };
+      // This case is critical. User is authenticated but has no profile.
+      // Redirect to profile page or show an error.
+      // For now, returning a state that indicates profile is missing.
+      return { success: false, error: "User profile not found. Please complete your profile setup or contact support.", errorCode: "auth/profile-not-found" };
     }
     const userProfile = userProfileSnap.data() as UserProfile;
     // --- End Profile fetch ---
@@ -193,6 +201,9 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return { success: false, error: 'Invalid login input.' };
+    }
+    if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
+         return { success: false, error: 'Invalid email or password.', errorCode: error.code };
     }
     return { success: false, error: (error as AuthError).message || 'Login failed.', errorCode: (error as AuthError).code };
   }
@@ -231,12 +242,18 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
     ForgotPasswordEmailSchema.parse(values);
     // TODO: Implement custom 8-digit code sending (e.g., via Firebase Functions + SendGrid/Twilio)
     // For now, simulate success.
-    return { success: true, message: "If your email is registered, an 8-digit code has been sent." };
+    // Important: Before sending a code, verify the email exists.
+    const emailCheck = await checkEmailAvailability(values);
+    if (emailCheck.available) { // If email does NOT exist, we shouldn't say we sent a code
+        return { success: true, message: "If your email is registered, an 8-digit code has been sent. This is a placeholder; code sending not implemented." }; // Message adjusted for clarity
+    }
+    return { success: true, message: "If your email is registered, an 8-digit code has been sent. This is a placeholder; code sending not implemented." };
   } catch (error: any) {
     if (error instanceof z.ZodError) {
       return { success: false, error: 'Invalid input.'};
     }
-    return { success: true, message: "If your email is registered, an 8-digit code has been sent." }; 
+    // Generic message to avoid confirming email existence to unauthenticated users
+    return { success: true, message: "If your email is registered, an 8-digit code has been sent. This is a placeholder; code sending not implemented." }; 
   }
 }
 
@@ -267,7 +284,7 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
       if (db && typeof doc === 'function' && typeof setDoc === 'function') {
         await setDoc(doc(db, "users", currentUser.uid), { lastPasswordChangeDate: new Date().toISOString() }, { merge: true });
       } else {
-         console.warn("DB not available to update lastPasswordChangeDate");
+         console.warn("DB not available to update lastPasswordChangeDate for current user password reset.");
       }
       return { success: true, message: "Password has been reset successfully." };
     }
@@ -275,21 +292,34 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
     // TODO: Handle oobCode flow for password reset if Firebase default email links are used.
     // if (validatedValues.oobCode) { ... }
 
-    if (!currentUser) {
-      console.warn("resetPassword action called for forgot password flow without oobCode or temporary auth.");
-      // This part of the flow (forgot password without being logged in) needs a different approach,
-      // typically involving Firebase's sendPasswordResetEmail and handling the oobCode.
-      // The current action is primarily for logged-in users forced to reset or changing their own password.
-      // For true "forgot password" via email link, Firebase has a built-in flow.
-      // If using custom 8-digit code, a temporary token should be issued after code verification
-      // that this function can then use to authorize the password change.
-      return { success: false, error: "Password reset for unauthenticated users requires a verification token (oobCode or custom)." };
+    // TODO: For forgot password flow (where user is not logged in),
+    // after custom code verification (verifyPasswordResetCode), a temporary session/token
+    // might be needed to authorize this password change for validatedValues.email.
+    // Or, use Firebase's built-in `confirmPasswordReset` with an oobCode if using that flow.
+    // The current structure is best for logged-in users (forced reset or profile change).
+    // For "forgot password", this part requires more robust implementation if not using Firebase's email links.
+    // For now, assuming if no currentUser, and no oobCode path (which is not built), this is an invalid state for this action.
+    // A placeholder success for custom code flow where user is not logged in yet:
+    // This part would need a secure way to confirm the user's identity again before changing password.
+    // This example doesn't implement that secure token exchange for unauthenticated users.
+    console.warn("Attempting password reset for unauthenticated user without oobCode. This flow is not fully secure without further token implementation after code verification.");
+    // Placeholder: In a real scenario, you'd re-verify user (e.g. via a temporary token from `verifyPasswordResetCode`)
+    // and then update the password. Since Firebase client SDK cannot update password for *another* user,
+    // this ideally needs Admin SDK for unauth reset, or use Firebase's standard reset flow.
+    // Simulating success for demo, but THIS IS NOT PRODUCTION READY for unauthenticated users.
+    if (validatedValues.email) { // Simulating the user has been "verified" by the code step
+         // This is where direct password update for an unauthenticated user via Client SDK is problematic.
+         // Firebase Admin SDK would be `admin.auth().updateUser(uid, { password: newPassword })` after finding UID by email.
+         // For client-side based server action, this part is tricky without Firebase's OOB code.
+         // We will assume this action is called only when user is logged-in OR Firebase OOB flow is used.
+         // The custom code flow is not fully fleshed out here for unauthenticated password change.
+         return { success: false, error: "Password reset for unauthenticated users via custom code is not fully implemented in this action. Use Firebase's email link method or enhance this action." };
     }
+
 
     return { success: false, error: "Could not reset password. User context mismatch or invalid flow." };
 
-  } catch (error: any)
-{
+  } catch (error: any) {
     if (error instanceof z.ZodError) {
       return { success: false, error: 'Invalid input.'};
     }
@@ -300,39 +330,38 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
 // --- Update Profile Actions ---
 const serverCalculateAge = (birthDateString: string): number => {
   const birthDate = new Date(birthDateString);
-  if (isNaN(birthDate.getTime())) return 0; // Invalid date string
+  if (isNaN(birthDate.getTime())) return 0; 
   return differenceInYears(new Date(), birthDate);
 };
 
+// Server-side schema for demographics
 const DemographicsSchemaServer = z.object({
   firstName: z.string().min(3, "First name must be at least 3 characters.").max(50).regex(/^[a-zA-Z\s'-]+$/, "First name can only contain letters.").trim(),
   middleInitial: z.string().max(1, "Middle initial can be at most 1 character.").trim().optional(),
   lastName: z.string().min(3, "Last name must be at least 3 characters.").max(50).regex(/^[a-zA-Z\s'-]+$/, "Last name can only contain letters.").trim(),
-  dateOfBirth: z.string().refine((val) => !isNaN(Date.parse(val)), { message: "Invalid date of birth" })
+  dateOfBirth: z.string() // ISO string from client
+                  .refine((val) => !isNaN(Date.parse(val)), { message: "Invalid date of birth" })
                   .refine((val) => serverCalculateAge(val) >= 18, { message: "User must be 18 or older." }),
-  email: z.string().email(), 
-  cellPhone: z.string().regex(/^$|^\d{3}-\d{3}-\d{4}$/, "Invalid phone format (e.g., 999-999-9999)").optional(),
+  email: z.string().email(), // Usually not updated here, but passed for context/validation
+  cellPhone: z.string().regex(/^$|^\d{3}-\d{3}-\d{4}$/, "Invalid phone format (e.g., 999-999-9999).").optional(),
   isAgeCertified: z.boolean().optional(), // isAgeCertified is derived from ageCertification in client form
 }).refine(data => data.email || data.cellPhone, { 
-    message: "Either email or cell phone must be provided.",
+    message: "Either email or cell phone must be provided for contact and MFA.",
     path: ["cellPhone"], 
 }).refine(data => {
-    // If user is 18+, certification must be true.
-    // This assumes dateOfBirth string is valid due to prior refine.
     if (serverCalculateAge(data.dateOfBirth) >= 18) {
         return data.isAgeCertified === true;
     }
-    // If user is under 18 (though prior refine should catch this), this check doesn't apply,
-    // but the age check itself will fail.
     return true;
 }, {
     message: "Age certification is required for users 18 or older.",
-    path: ["isAgeCertified"],
+    path: ["isAgeCertified"], // Path should ideally match client form field for certification
 });
 
 
 export async function updateDemographics(userId: string, values: z.infer<typeof DemographicsSchemaServer>): Promise<{success: boolean, error?: string, data?: Partial<UserProfile>, details?: any}> {
     try {
+        // Note: `values.email` is passed but typically not changed here.
         const validatedValues = DemographicsSchemaServer.parse(values);
         
         if (!db || typeof doc !== 'function' || typeof setDoc !== 'function') {
@@ -340,22 +369,21 @@ export async function updateDemographics(userId: string, values: z.infer<typeof 
             return { success: false, error: "Profile update failed: Database service unavailable." };
         }
 
-        // Prepare data for Firestore, ensuring correct types (e.g., dateOfBirth is already string)
         const profileUpdateData: Partial<UserProfile> = {
             firstName: validatedValues.firstName,
             middleInitial: validatedValues.middleInitial,
             lastName: validatedValues.lastName,
-            dateOfBirth: validatedValues.dateOfBirth, // Already ISO string from client
+            dateOfBirth: validatedValues.dateOfBirth,
             cellPhone: validatedValues.cellPhone,
             isAgeCertified: validatedValues.isAgeCertified,
-            // email is not typically updated here as it's tied to auth
+            // email is not updated via this demographic form
         };
         
         await setDoc(doc(db, "users", userId), profileUpdateData, { merge: true });
         return { success: true, data: profileUpdateData };
     } catch (error: any) {
         if (error instanceof z.ZodError) {
-          return { success: false, error: 'Invalid input.', details: error.flatten() };
+          return { success: false, error: 'Invalid input from server validation.', details: error.flatten() };
         }
         console.error("Error updating demographics in Firestore:", error);
         return { success: false, error: "Failed to update profile." };
@@ -368,7 +396,7 @@ export async function updateUserTermsAcceptance(userId: string, accepted: boolea
             console.error("Firestore not available to update terms acceptance.");
             return { success: false, error: "Database service unavailable."};
         }
-        await setDoc(doc(db, "users", userId), { acceptedLatestTerms: accepted, termsVersionAccepted: version }, { merge: true });
+        await setDoc(doc(db, "users", userId), { acceptedLatestTerms: accepted, termsVersionAccepted: version, lastPasswordChangeDate: new Date().toISOString() }, { merge: true });
         return { success: true };
     } catch (error: any) {
         console.error("Error updating terms acceptance in Firestore:", error);
