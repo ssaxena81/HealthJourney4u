@@ -1,6 +1,7 @@
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
+import { getFirestore } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -12,6 +13,7 @@ const firebaseConfig = {
 };
 
 let firebaseApp: FirebaseApp;
+let db: ReturnType<typeof getFirestore>;
 
 if (!getApps().length) {
   if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
@@ -19,16 +21,19 @@ if (!getApps().length) {
       'Firebase config is missing. Please set NEXT_PUBLIC_FIREBASE_ environment variables.'
     );
     // Provide a default stub if not configured, to prevent app crash during build or initial load
-    // You might want to handle this differently, e.g., by throwing an error or disabling Firebase features.
     firebaseApp = {} as FirebaseApp; // This is a stub
+    db = {} as ReturnType<typeof getFirestore>; // Stub db
   } else {
     firebaseApp = initializeApp(firebaseConfig);
+    db = getFirestore(firebaseApp); // Initialize db
   }
 } else {
   firebaseApp = getApp();
+  db = getFirestore(firebaseApp); // Get existing db instance
 }
 
 // Initialize Auth only if Firebase app was properly initialized
 const auth = firebaseApp.name ? getAuth(firebaseApp) : ({} as ReturnType<typeof getAuth>);
 
-export { firebaseApp, auth };
+export { firebaseApp, auth, db };
+
