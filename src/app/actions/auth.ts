@@ -73,7 +73,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       return { success: false, error: "Authentication service is not available. Please configure Firebase." };
     }
 
-    const userCredential = await createUserWithEmailAndPassword( // Corrected call
+    const userCredential = await createUserWithEmailAndPassword(
       firebaseAuth,
       validatedValues.email,
       validatedValues.password
@@ -146,11 +146,11 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
   try {
     const validatedValues = LoginInputSchema.parse(values);
 
-    if (!firebaseAuth || !firebaseAuth.app) {
+    if (!firebaseAuth || !firebaseAuth.app) { // Corrected guard
       return { success: false, error: "Authentication service is not available." };
     }
 
-    const userCredential = await signInWithEmailAndPassword( // Corrected call
+    const userCredential = await signInWithEmailAndPassword(
       firebaseAuth,
       validatedValues.email,
       validatedValues.password
@@ -290,7 +290,7 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
     const currentUser = firebaseAuth.currentUser; 
 
     if (currentUser && currentUser.email === validatedValues.email) {
-      await firebaseUpdatePassword(currentUser, validatedValues.newPassword); // This uses the imported function
+      await firebaseUpdatePassword(currentUser, validatedValues.newPassword); 
       if (db && typeof doc === 'function' && typeof setDoc === 'function') {
         try {
           await setDoc(doc(db, "users", currentUser.uid), { lastPasswordChangeDate: new Date().toISOString() }, { merge: true });
