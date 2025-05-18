@@ -3,12 +3,11 @@ import type { Metadata } from 'next';
 import { GeistSans } from 'geist/font/sans';
 import { GeistMono } from 'geist/font/mono';
 import './globals.css';
-import { Toaster } from "@/components/ui/toaster";
-// SidebarProvider removed from here, will be in (app)/layout.tsx
-import { AuthProvider } from '@/hooks/useAuth'; // Import AuthProvider
+// import { Toaster } from "@/components/ui/toaster"; // Simplified
+// import { AuthProvider } from '@/hooks/useAuth'; // Simplified
 
 export const metadata: Metadata = {
-  title: 'Health Timeline',
+  title: 'Health Timeline (Simplified)',
   description: 'Track your health history with Health Timeline.',
 };
 
@@ -20,10 +19,10 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className={`font-sans antialiased bg-background text-foreground`}>
-        <AuthProvider> {/* Wrap entire app with AuthProvider */}
+        {/* <AuthProvider> */}
             {children}
-            <Toaster />
-        </AuthProvider>
+            {/* <Toaster /> */}
+        {/* </AuthProvider> */}
       </body>
     </html>
   );
