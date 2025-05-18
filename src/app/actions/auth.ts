@@ -44,7 +44,7 @@ export async function checkEmailAvailability(values: z.infer<typeof CheckEmailIn
   try {
     const validatedValues = CheckEmailInputSchema.parse(values);
 
-    if (!firebaseAuth || !firebaseAuth.app) { // Corrected guard
+    if (!firebaseAuth || !firebaseAuth.app) {
         console.warn("Firebase Auth not properly initialized in checkEmailAvailability. Cannot verify email. Check .env.local configuration and restart the server.");
         return { available: false, error: "Email verification service is temporarily unavailable. Please ensure Firebase is configured correctly." };
     }
@@ -68,7 +68,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
   try {
     const validatedValues = SignUpDetailsInputSchema.parse(values);
 
-    if (!firebaseAuth || !firebaseAuth.app) { // Corrected guard
+    if (!firebaseAuth || !firebaseAuth.app) {
       console.error("Firebase Auth is not initialized correctly in signUpUser. Potential .env.local issue.");
       return { success: false, error: "Authentication service is not available. Please configure Firebase." };
     }
@@ -146,7 +146,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
   try {
     const validatedValues = LoginInputSchema.parse(values);
 
-    if (!firebaseAuth || !firebaseAuth.app) { // Corrected guard
+    if (!firebaseAuth || !firebaseAuth.app) {
       return { success: false, error: "Authentication service is not available." };
     }
 
@@ -241,7 +241,7 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
   try {
     const validatedValues = ForgotPasswordEmailSchema.parse(values);
 
-    if (!firebaseAuth || !firebaseAuth.app) { // Corrected guard
+    if (!firebaseAuth || !firebaseAuth.app) {
         console.warn("Firebase Auth not properly initialized in sendPasswordResetCode.");
         return { success: false, error: "Password reset service is temporarily unavailable." };
     }
@@ -283,7 +283,7 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
   try {
     const validatedValues = FinalResetPasswordSchema.parse(values);
     
-    if (!firebaseAuth || !firebaseAuth.app) { // Corrected guard
+    if (!firebaseAuth || !firebaseAuth.app) {
         console.warn("Firebase Auth not properly initialized in resetPassword.");
         return { success: false, error: "Password reset service is temporarily unavailable." };
     }
@@ -402,7 +402,3 @@ export async function updateUserTermsAcceptance(userId: string, accepted: boolea
         return { success: false, error: "Failed to update terms acceptance."};
     }
 }
-
-    
-
-    
