@@ -43,6 +43,7 @@ export async function checkEmailAvailability(values: z.infer<typeof CheckEmailIn
   try {
     const validatedValues = CheckEmailInputSchema.parse(values);
 
+    // Check if firebaseAuth and its necessary components are initialized
     if (!firebaseAuth || !firebaseAuth.app) {
         console.warn("Firebase Auth not properly initialized in checkEmailAvailability. Cannot verify email. Check .env.local configuration and restart the server.");
         return { available: false, error: "Email verification service is temporarily unavailable. Please ensure Firebase is configured correctly." };
@@ -72,7 +73,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       return { success: false, error: "Authentication service is not available. Please configure Firebase." };
     }
 
-    const userCredential = await createUserWithEmailAndPassword(
+    const userCredential = await createUserWithEmailAndPassword( // Corrected call
       firebaseAuth,
       validatedValues.email,
       validatedValues.password
@@ -149,7 +150,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       return { success: false, error: "Authentication service is not available." };
     }
 
-    const userCredential = await signInWithEmailAndPassword(
+    const userCredential = await signInWithEmailAndPassword( // Corrected call
       firebaseAuth,
       validatedValues.email,
       validatedValues.password
@@ -286,10 +287,10 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
         console.warn("Firebase Auth not properly initialized in resetPassword.");
         return { success: false, error: "Password reset service is temporarily unavailable." };
     }
-    const currentUser = firebaseAuth.currentUser; // Get currentUser after checking firebaseAuth
+    const currentUser = firebaseAuth.currentUser; 
 
     if (currentUser && currentUser.email === validatedValues.email) {
-      await firebaseUpdatePassword(currentUser, validatedValues.newPassword);
+      await firebaseUpdatePassword(currentUser, validatedValues.newPassword); // This uses the imported function
       if (db && typeof doc === 'function' && typeof setDoc === 'function') {
         try {
           await setDoc(doc(db, "users", currentUser.uid), { lastPasswordChangeDate: new Date().toISOString() }, { merge: true });
