@@ -15,25 +15,41 @@ const firebaseConfig = {
 let firebaseApp: FirebaseApp;
 let db: ReturnType<typeof getFirestore>;
 
+// Check if all essential Firebase config keys are present
+const allConfigKeysPresent =
+  firebaseConfig.apiKey &&
+  firebaseConfig.authDomain &&
+  firebaseConfig.projectId &&
+  firebaseConfig.storageBucket &&
+  firebaseConfig.messagingSenderId &&
+  firebaseConfig.appId;
+
 if (!getApps().length) {
-  if (!firebaseConfig.apiKey || !firebaseConfig.projectId) {
+  if (!allConfigKeysPresent) {
     console.warn(
-      'Firebase config is missing. Please set NEXT_PUBLIC_FIREBASE_ environment variables.'
+      'Firebase config is incomplete. Please ensure all NEXT_PUBLIC_FIREBASE_ environment variables are set in .env.local and the server is restarted.'
     );
+    // Log which keys might be missing for easier debugging
+    (Object.keys(firebaseConfig) as Array<keyof typeof firebaseConfig>).forEach((key) => {
+      if (!firebaseConfig[key]) {
+        // Construct the expected environment variable name
+        const envVarName = `NEXT_PUBLIC_FIREBASE_${key.replace(/([A-Z])/g, '_$1').toUpperCase()}`;
+        console.warn(`Missing Firebase config key: ${key} (expected as ${envVarName} in .env.local)`);
+      }
+    });
     // Provide a default stub if not configured, to prevent app crash during build or initial load
-    firebaseApp = {} as FirebaseApp; // This is a stub
-    db = {} as ReturnType<typeof getFirestore>; // Stub db
+    firebaseApp = {} as FirebaseApp; 
+    db = {} as ReturnType<typeof getFirestore>; 
   } else {
     firebaseApp = initializeApp(firebaseConfig);
-    db = getFirestore(firebaseApp); // Initialize db
+    db = getFirestore(firebaseApp); 
   }
 } else {
   firebaseApp = getApp();
-  db = getFirestore(firebaseApp); // Get existing db instance
+  db = getFirestore(firebaseApp); 
 }
 
-// Initialize Auth only if Firebase app was properly initialized
-const auth = firebaseApp.name ? getAuth(firebaseApp) : ({} as ReturnType<typeof getAuth>);
+// Initialize Auth only if Firebase app was properly initialized (i.e., firebaseApp.name is set)
+const auth = firebaseApp && firebaseApp.name ? getAuth(firebaseApp) : ({} as ReturnType<typeof getAuth>);
 
 export { firebaseApp, auth, db };
-
