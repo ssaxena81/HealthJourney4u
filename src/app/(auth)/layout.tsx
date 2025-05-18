@@ -18,12 +18,12 @@ export default function AuthLayout({
       <div
         className="fixed inset-0 z-[-1] bg-cover bg-center"
         // IMPORTANT: Replace with your actual image path or keep the placeholder
-        style={{ backgroundImage: "url('https://placehold.co/1920x1080.png')" }}
-        data-ai-hint="health collage" 
+        style={{ backgroundImage: "url('/images/your-actual-login-background.jpg')" }}
         aria-hidden="true"
       >
         <div className="absolute inset-0 bg-background/70 backdrop-blur-sm"></div>
       </div>
+      {/* This div is responsible for centering the children (e.g., Login Card) */}
       <div className="relative z-10 flex min-h-screen flex-col items-center justify-center p-4">
         {children}
       </div>
