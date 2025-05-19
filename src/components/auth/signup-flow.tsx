@@ -15,10 +15,10 @@ import { checkEmailAvailability, signUpUser } from '@/app/actions/auth';
 import { passwordSchema } from '@/types';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import type { SubscriptionTier } from '@/types';
+import type { SubscriptionTier, UserProfile } from '@/types';
 import { subscriptionTiers } from '@/types';
 import ComparePlansDialog from '@/components/ui/compare-plans-dialog'; 
-import { useAuth } from '@/hooks/useAuth'; // Import useAuth
+import { useAuth } from '@/hooks/useAuth';
 
 const step1Schema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -40,7 +40,7 @@ type Step2Values = z.infer<typeof step2Schema>;
 export default function SignUpFlow() {
   const router = useRouter();
   const { toast } = useToast();
-  const { checkAuthState, setUserProfile: setAuthUserProfile } = useAuth(); // Get context setters
+  const { checkAuthState, setUserProfile: setAuthUserProfile } = useAuth();
   const [isPending, startTransition] = useTransition();
   const [currentStep, setCurrentStep] = useState(1);
   const [email, setEmail] = useState('');
@@ -83,17 +83,15 @@ export default function SignUpFlow() {
         subscriptionTier: values.subscriptionTier,
       });
 
-      if (result.success) {
+      if (result.success && result.userId) { // Check for userId as well
         toast({
           title: 'Account Created!',
           description: 'You have successfully signed up. Please complete your profile.',
         });
         
-        // Update AuthContext with the new user profile if available
-        if (result.userProfile && setAuthUserProfile) {
-          setAuthUserProfile(result.userProfile);
-        }
-        // Ensure Firebase Auth state is recognized by the client
+        // AuthContext will be updated by onAuthStateChanged listener after signup.
+        // Explicitly calling checkAuthState() and setUserProfile might not be strictly necessary
+        // if onAuthStateChanged handles it quickly, but can ensure state is updated before redirect.
         await checkAuthState(); 
 
         router.push('/profile'); 
@@ -105,10 +103,10 @@ export default function SignUpFlow() {
           variant: 'destructive',
         });
         if (result.details?.fieldErrors?.password) {
-            step2Form.setError('password', { type: 'manual', message: (result.details.fieldErrors.password).join(', ') });
+            step2Form.setError('password', { type: 'manual', message: (result.details.fieldErrors.password as string[]).join(', ') });
         }
         if (result.details?.fieldErrors?.confirmPassword) {
-            step2Form.setError('confirmPassword', { type: 'manual', message: (result.details.fieldErrors.confirmPassword).join(', ') });
+            step2Form.setError('confirmPassword', { type: 'manual', message: (result.details.fieldErrors.confirmPassword as string[]).join(', ') });
         }
       }
     });
@@ -230,5 +228,7 @@ export default function SignUpFlow() {
     </div>
   );
 }
+
+    
 
     
