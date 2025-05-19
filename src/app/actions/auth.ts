@@ -36,7 +36,7 @@ interface SignUpResult {
   userId?: string;
   error?: string;
   errorCode?: string;
-  details?: z.ZodError<z.infer<typeof SignUpDetailsInputSchema>>;
+  details?: z.ZodError<z.infer<typeof SignUpDetailsInputSchema>>['formErrors'] | z.inferFlattenedErrors<typeof SignUpDetailsInputSchema>; // Updated for flatten
 }
 
 export async function checkEmailAvailability(values: z.infer<typeof CheckEmailInputSchema>): Promise<{ available: boolean; error?: string }> {
@@ -57,16 +57,17 @@ export async function checkEmailAvailability(values: z.infer<typeof CheckEmailIn
     if (error.code === 'auth/invalid-email') {
       return { available: false, error: "The email address is badly formatted." };
     }
-    // Log more specific error details on the server
-    console.error("Detailed Error in checkEmailAvailability:", error);
     let errorMessage = "Could not verify email availability due to an unexpected error.";
     if (error.code) {
+      console.error("Detailed Error in checkEmailAvailability:", error);
       console.error("Firebase Error Code in checkEmailAvailability:", error.code);
       errorMessage = `Could not verify email: ${error.message} (Code: ${error.code})`;
-    }
-    if (error.message && !error.code) {
+    } else if (error.message) {
+      console.error("Detailed Error in checkEmailAvailability:", error);
       console.error("Firebase Error Message in checkEmailAvailability:", error.message);
        errorMessage = `Could not verify email: ${error.message}`;
+    } else {
+      console.error("Detailed Error in checkEmailAvailability:", error);
     }
     return { available: false, error: errorMessage };
   }
@@ -88,22 +89,17 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       validatedValues.password
     );
 
-    // Construct initial profile, omitting fields that are truly optional and not yet set.
-    // Firestore doesn't allow 'undefined' values. If a field is optional and not present
-    // in this object, it simply won't be written to the document, which is fine.
-    const initialProfile: UserProfile = {
+    const initialProfile: Partial<UserProfile> = { // Use Partial initially
       id: userCredential.user.uid,
       email: userCredential.user.email!,
       subscriptionTier: validatedValues.subscriptionTier,
       lastPasswordChangeDate: new Date().toISOString(),
       acceptedLatestTerms: false,
-      isAgeCertified: false, // Will be certified during profile setup
-      // Optional fields like firstName, lastName, dateOfBirth, cellPhone, mfaMethod, etc.,
-      // are intentionally omitted here. They will be added when the user completes
-      // their profile demographics form.
+      isAgeCertified: false, 
       connectedFitnessApps: [],
       connectedDiagnosticsServices: [],
       connectedInsuranceProviders: [],
+      // Optional fields are omitted instead of being set to undefined
     };
 
     if (!db || typeof doc !== 'function' || typeof setDoc !== 'function') {
@@ -112,7 +108,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     }
 
     try {
-      await setDoc(doc(db, "users", userCredential.user.uid), initialProfile);
+      await setDoc(doc(db, "users", userCredential.user.uid), initialProfile as UserProfile); // Cast to UserProfile for setDoc
     } catch (firestoreError: any) {
       console.error("Error creating user profile in Firestore:", firestoreError);
       return { success: false, error: `Account created but profile setup failed: ${firestoreError.message}. Please contact support.` };
@@ -121,7 +117,8 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     return { success: true, userId: userCredential.user.uid };
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      return { success: false, error: 'Invalid input data.', details: error };
+      // Return flattened Zod error for better serialization
+      return { success: false, error: 'Invalid input data.', details: error.flatten() };
     }
     if ((error as AuthError).code === 'auth/email-already-in-use') {
         return { success: false, error: 'This email address is already in use. Please log in or use a different email.', errorCode: (error as AuthError).code };
@@ -189,12 +186,13 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       return { success: true, userId, passwordExpired: true, userProfile };
     }
     
-    // The (app)/layout.tsx will handle redirecting to T&C modal if needed
-    // based on userProfile.acceptedLatestTerms and termsVersionAccepted.
-    // So, we don't explicitly return termsNotAccepted here unless login itself should be blocked.
-    // For now, let's assume login completes and AuthenticatedAppLayout handles the T&C display.
+    // Terms not accepted check will be primarily handled by (app)/layout.tsx which gets userProfile
+    // if (!userProfile.acceptedLatestTerms /* || check version */) {
+    //   return { success: true, userId, termsNotAccepted: true, userProfile };
+    // }
 
     if (userProfile.mfaMethod && !validatedValues.mfaCode) {
+      // TODO: Generate and send MFA code
       console.log(`MFA required for user ${userId} via ${userProfile.mfaMethod}. No code provided yet.`);
       return { success: false, requiresMfa: true, error: "MFA code required. Please check your device.", userProfile };
     }
@@ -212,7 +210,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
 
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      return { success: false, error: 'Invalid login input.' };
+      return { success: false, error: 'Invalid login input.', details: error.flatten() };
     }
     if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password' || error.code === 'auth/invalid-credential') {
          return { success: false, error: 'Invalid email or password.', errorCode: error.code };
@@ -325,7 +323,7 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
 
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      return { success: false, error: 'Invalid input.'};
+      return { success: false, error: 'Invalid input.', details: error.flatten()};
     }
     if ((error as AuthError).code === 'auth/requires-recent-login') {
       return { success: false, error: 'This operation is sensitive and requires recent authentication. Please log in again before changing your password.', errorCode: (error as AuthError).code };
