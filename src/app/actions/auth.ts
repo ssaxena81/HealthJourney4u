@@ -11,7 +11,7 @@ import {
 import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
 import { z } from 'zod';
 import type { UserProfile, SubscriptionTier } from '@/types';
-import { passwordSchema } from '@/types';
+import { passwordSchema } from '@/types'; // Moved from here
 import { doc, setDoc, getDoc } from 'firebase/firestore';
 import { differenceInYears } from 'date-fns';
 
@@ -45,6 +45,7 @@ export async function checkEmailAvailability(values: z.infer<typeof CheckEmailIn
 
     if (!firebaseAuth || !firebaseAuth.app) {
         console.warn("Firebase Auth not properly initialized in checkEmailAvailability. Potential .env.local issue. Cannot verify email.");
+        console.log("Current firebaseAuth object in checkEmailAvailability:", JSON.stringify(firebaseAuth));
         return { available: false, error: "Email verification service is temporarily unavailable. Please ensure Firebase is configured correctly." };
     }
 
@@ -91,8 +92,8 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       subscriptionTier: validatedValues.subscriptionTier,
       lastPasswordChangeDate: new Date().toISOString(),
       acceptedLatestTerms: false,
-      isAgeCertified: false,
-      // Demographics and connection fields will be populated during profile setup
+      isAgeCertified: false, // Certified during profile setup
+      // Initialize other fields as undefined or empty arrays - Firestore will omit these if not explicitly set
       connectedFitnessApps: [],
       connectedDiagnosticsServices: [],
       connectedInsuranceProviders: [],
@@ -410,7 +411,7 @@ export async function updateDemographics(userId: string, values: z.infer<typeof 
     }
 }
 
-export async function updateUserTermsAcceptance(userId: string, accepted: boolean, version: string): Promise<{success: boolean, error?: string}> {
+export async function updateUserTermsAcceptance(userId: string, accepted: boolean, version: string): Promise<{success: boolean, error?: string, errorCode?: string}> {
     try {
         if (!db || typeof doc !== 'function' || typeof setDoc !== 'function') {
             console.error("Firestore not available to update terms acceptance.");
