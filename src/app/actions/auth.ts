@@ -36,11 +36,11 @@ interface SignUpResult {
   userId?: string;
   error?: string;
   errorCode?: string;
-  details?: z.inferFlattenedErrors<typeof SignUpDetailsInputSchema>; // Corrected type
+  details?: z.inferFlattenedErrors<typeof SignUpDetailsInputSchema>;
 }
 
 export async function checkEmailAvailability(values: z.infer<typeof CheckEmailInputSchema>): Promise<{ available: boolean; error?: string }> {
-  try {
+  try { // Outermost try for any synchronous errors before Firebase logic
     const validatedValues = CheckEmailInputSchema.parse(values);
 
     if (!firebaseAuth || !firebaseAuth.app) {
@@ -48,30 +48,40 @@ export async function checkEmailAvailability(values: z.infer<typeof CheckEmailIn
         return { available: false, error: "Email verification service is temporarily unavailable. Please ensure Firebase is configured correctly." };
     }
 
-    const methods = await fetchSignInMethodsForEmail(firebaseAuth, validatedValues.email);
-    if (methods.length > 0) {
-      return { available: false, error: "This email is already registered. Please try logging in or use 'Forgot my password'." };
+    try { // Inner try for the actual Firebase call
+        const methods = await fetchSignInMethodsForEmail(firebaseAuth, validatedValues.email);
+        if (methods.length > 0) {
+          return { available: false, error: "This email is already registered. Please try logging in or use 'Forgot my password'." };
+        }
+        return { available: true };
+    } catch (firebaseError: any) {
+        if (firebaseError.code === 'auth/invalid-email') {
+          return { available: false, error: "The email address is badly formatted." };
+        }
+        // Log more detailed error on the server
+        console.error("Detailed Error in checkEmailAvailability (server log - firebaseError):", firebaseError);
+        if (firebaseError.code) {
+          console.error("Firebase Error Code in checkEmailAvailability (server log):", firebaseError.code);
+        }
+        if (firebaseError.message) {
+          console.error("Firebase Error Message in checkEmailAvailability (server log):", firebaseError.message);
+        }
+        return { available: false, error: "Could not verify email availability due to an internal error. Please check server logs for details." };
     }
-    return { available: true };
-  } catch (error: any) {
-    if (error.code === 'auth/invalid-email') {
-      return { available: false, error: "The email address is badly formatted." };
+  } catch (validationOrOtherError: any) { // Catch errors from Zod parse or other unexpected issues
+    console.error("[CHECK_EMAIL_AVAILABILITY_OUTER_ERROR] Unexpected error:", validationOrOtherError);
+    if (validationOrOtherError instanceof z.ZodError) {
+        // This case might be hit if `values` itself is malformed before even calling Zod.parse,
+        // though Zod.parse is the first line in the outer try.
+        return { available: false, error: "Invalid email format provided." };
     }
-    // Log more detailed error on the server
-    console.error("Detailed Error in checkEmailAvailability (server log):", error);
-    if (error.code) {
-      console.error("Firebase Error Code in checkEmailAvailability (server log):", error.code);
-    }
-    if (error.message) {
-      console.error("Firebase Error Message in checkEmailAvailability (server log):", error.message);
-    }
-    return { available: false, error: "Could not verify email availability due to an unexpected error. Please check server logs for details." };
+    return { available: false, error: "An unexpected error occurred while checking email availability. Please try again." };
   }
 }
 
 
 export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema>): Promise<SignUpResult> {
-  try {
+  try { // Outermost try for any synchronous errors before Firebase logic
     const validatedValues = SignUpDetailsInputSchema.parse(values);
 
     if (!firebaseAuth || !firebaseAuth.app) {
@@ -79,54 +89,65 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       return { success: false, error: "Authentication service is not available. Please configure Firebase.", errorCode: 'AUTH_UNAVAILABLE' };
     }
 
-    const userCredential = await createUserWithEmailAndPassword(
-      firebaseAuth,
-      validatedValues.email,
-      validatedValues.password
-    );
-
-    const initialProfile: UserProfile = {
-      id: userCredential.user.uid,
-      email: userCredential.user.email!,
-      subscriptionTier: validatedValues.subscriptionTier,
-      lastPasswordChangeDate: new Date().toISOString(),
-      acceptedLatestTerms: false,
-      isAgeCertified: false,
-      connectedFitnessApps: [],
-      connectedDiagnosticsServices: [],
-      connectedInsuranceProviders: [],
-    };
-
     if (!db || !db.app || typeof doc !== 'function' || typeof setDoc !== 'function') {
         console.error("Firestore (db, doc, or setDoc) is not initialized correctly for profile creation in signUpUser. Potential .env.local issue or Firebase setup. DB App:", db?.app);
         return { success: false, error: "Profile creation failed: Database service unavailable. Your account was created in Auth but profile data was not saved.", errorCode: 'FIRESTORE_UNAVAILABLE' };
     }
 
-    try {
-      await setDoc(doc(db, "users", userCredential.user.uid), initialProfile);
-    } catch (firestoreError: any) {
-      console.error("[SIGNUP_FIRESTORE_ERROR] Error creating user profile in Firestore:", firestoreError);
-      const errorMessage = String(firestoreError.message || 'Database error during profile creation.');
-      const errorCode = String(firestoreError.code || 'FIRESTORE_ERROR');
-      return { success: false, error: `Account created but profile setup failed: ${errorMessage}. Please contact support.`, errorCode: errorCode };
-    }
+    try { // Inner try for Firebase operations
+      const userCredential = await createUserWithEmailAndPassword(
+        firebaseAuth,
+        validatedValues.email,
+        validatedValues.password
+      );
 
-    return { success: true, userId: userCredential.user.uid };
-  } catch (error: any) {
-    // Log the raw error first for server-side debugging
-    console.error("[SIGNUP_ACTION_RAW_ERROR] Raw error in signUpUser:", error);
+      const initialProfile: UserProfile = {
+        id: userCredential.user.uid,
+        email: userCredential.user.email!,
+        subscriptionTier: validatedValues.subscriptionTier,
+        lastPasswordChangeDate: new Date().toISOString(),
+        acceptedLatestTerms: false,
+        isAgeCertified: false,
+        // Optional fields are not included if undefined
+        // firstName, middleInitial, lastName, dateOfBirth, cellPhone, mfaMethod, termsVersionAccepted, paymentDetails are omitted
+        connectedFitnessApps: [],
+        connectedDiagnosticsServices: [],
+        connectedInsuranceProviders: [],
+      };
+      if (validatedValues.email) initialProfile.email = validatedValues.email;
 
-    if (error instanceof z.ZodError) {
-      console.error("[SIGNUP_ACTION_ZOD_DETAILS] ZodError:", error.flatten());
-      return { success: false, error: 'Invalid input data.', details: error.flatten() };
+
+      try {
+        await setDoc(doc(db, "users", userCredential.user.uid), initialProfile);
+      } catch (firestoreError: any) {
+        console.error("[SIGNUP_FIRESTORE_ERROR] Error creating user profile in Firestore:", firestoreError);
+        const errorMessage = String(firestoreError.message || 'Database error during profile creation.');
+        const errorCode = String(firestoreError.code || 'FIRESTORE_ERROR');
+        // Consider deleting the Auth user if profile creation fails
+        // await userCredential.user.delete();
+        return { success: false, error: `Account created but profile setup failed: ${errorMessage}. Please contact support.`, errorCode: errorCode };
+      }
+
+      return { success: true, userId: userCredential.user.uid };
+
+    } catch (authError: any) { // Catch errors specific to Firebase Auth operations
+      console.error("[SIGNUP_AUTH_ERROR] Raw error during Firebase Auth operation:", authError);
+      if ((authError as AuthError).code === 'auth/email-already-in-use') {
+          return { success: false, error: 'This email address is already in use. Please log in or use a different email.', errorCode: (authError as AuthError).code };
+      }
+      const errorMessage = String(authError.message || 'An unexpected error occurred during account creation.');
+      const errorCode = String(authError.code || 'UNKNOWN_AUTH_ERROR');
+      return { success: false, error: errorMessage, errorCode: errorCode };
     }
-    if ((error as AuthError).code === 'auth/email-already-in-use') {
-        return { success: false, error: 'This email address is already in use. Please log in or use a different email.', errorCode: (error as AuthError).code };
+  } catch (validationOrOtherError: any) { // Catch errors from Zod parse or other unexpected issues at the top level
+    console.error("[SIGNUP_OUTER_ERROR] Unexpected error in signUpUser:", validationOrOtherError);
+    if (validationOrOtherError instanceof z.ZodError) {
+        console.error("[SIGNUP_ACTION_ZOD_DETAILS] ZodError:", validationOrOtherError.flatten());
+        return { success: false, error: 'Invalid input data.', details: validationOrOtherError.flatten() };
     }
     // Generic catch-all for other errors
-    console.error("[SIGNUP_ACTION_ERROR] Unhandled error in signUpUser (after processing):", error);
-    const errorMessage = String(error.message || 'An unexpected error occurred during sign up.');
-    const errorCode = String(error.code || 'UNKNOWN_SIGNUP_ERROR');
+    const errorMessage = String(validationOrOtherError.message || 'An unexpected server error occurred during sign up.');
+    const errorCode = String(validationOrOtherError.code || 'UNKNOWN_SIGNUP_OUTER_ERROR');
     return { success: false, error: errorMessage, errorCode: errorCode };
   }
 }
@@ -191,18 +212,12 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       return { success: true, userId, passwordExpired: true, userProfile };
     }
     
-    // if (!userProfile.acceptedLatestTerms /* || check version */) {
-    //   return { success: true, userId, termsNotAccepted: true, userProfile };
-    // }
-
     if (userProfile.mfaMethod && !validatedValues.mfaCode) {
-      // TODO: Generate and send MFA code
       console.log(`MFA required for user ${userId} via ${userProfile.mfaMethod}. No code provided yet.`);
       return { success: false, requiresMfa: true, error: "MFA code required. Please check your device.", userProfile };
     }
     
     if (userProfile.mfaMethod && validatedValues.mfaCode) {
-      // TODO: Implement actual MFA code validation.
       const isValidMfaCode = validatedValues.mfaCode.length === 8; 
       console.log(`MFA code provided for user ${userId}: ${validatedValues.mfaCode}. Placeholder validation result: ${isValidMfaCode}`);
       if (!isValidMfaCode) {
@@ -279,7 +294,6 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
       console.error("[SEND_RESET_CODE_ACTION_ZOD_DETAILS] ZodError:", error.flatten());
       return { success: false, error: 'Invalid input.', details: error.flatten()};
     }
-    // Still return a generic message for security
     console.error("[SEND_RESET_CODE_ACTION_ERROR] Unhandled error in sendPasswordResetCode (after processing):", error);
     return { success: true, message: "If your email is registered, an 8-digit code has been sent. This is a placeholder; code sending not implemented." };
   }
@@ -293,7 +307,8 @@ export async function verifyPasswordResetCode(values: z.infer<typeof VerifyReset
     } else {
         return { success: false, error: "Invalid or expired verification code."};
     }
-  } catch (error: any) {
+  } catch (error: any)
+ {
     console.error("[VERIFY_RESET_CODE_ACTION_RAW_ERROR] Raw error in verifyPasswordResetCode:", error);
      if (error instanceof z.ZodError) {
       console.error("[VERIFY_RESET_CODE_ACTION_ZOD_DETAILS] ZodError:", error.flatten());
@@ -440,5 +455,3 @@ export async function updateUserTermsAcceptance(userId: string, accepted: boolea
         return { success: false, error: errorMessage, errorCode: errorCode};
     }
 }
-
-
