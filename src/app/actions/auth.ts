@@ -7,7 +7,6 @@ import {
   signInWithEmailAndPassword,
   updatePassword as firebaseUpdatePassword, // Renamed import for clarity
   type AuthError,
-  // confirmPasswordReset, // For Firebase built-in email link flow, if used later
 } from 'firebase/auth';
 import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
 import { z } from 'zod';
@@ -58,8 +57,15 @@ export async function checkEmailAvailability(values: z.infer<typeof CheckEmailIn
     if (error.code === 'auth/invalid-email') {
       return { available: false, error: "The email address is badly formatted." };
     }
-    console.error("Error in checkEmailAvailability:", error);
-    return { available: false, error: "Could not verify email availability due to an unexpected error." };
+    console.error("Detailed Error in checkEmailAvailability:", error); // Log the full error object
+    let errorMessage = "Could not verify email availability. Please check server logs or Firebase console (ensure Email/Password provider is enabled) for more details.";
+    if (error.code) {
+      console.error("Firebase Error Code in checkEmailAvailability:", error.code);
+    }
+    if (error.message) {
+      console.error("Firebase Error Message in checkEmailAvailability:", error.message);
+    }
+    return { available: false, error: errorMessage };
   }
 }
 
@@ -235,6 +241,7 @@ interface ForgotPasswordResult {
   success: boolean;
   error?: string;
   message?: string;
+  errorCode?: string;
 }
 
 export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswordEmailSchema>): Promise<ForgotPasswordResult> {
@@ -314,14 +321,14 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
     if (error instanceof z.ZodError) {
       return { success: false, error: 'Invalid input.'};
     }
-    if (error.code === 'auth/requires-recent-login') {
-      return { success: false, error: 'This operation is sensitive and requires recent authentication. Please log in again before changing your password.', errorCode: error.code };
+    if ((error as AuthError).code === 'auth/requires-recent-login') {
+      return { success: false, error: 'This operation is sensitive and requires recent authentication. Please log in again before changing your password.', errorCode: (error as AuthError).code };
     }
-    if (error.code === 'auth/user-not-found') {
-      return { success: false, error: 'No user found with this email address.', errorCode: error.code };
+    if ((error as AuthError).code === 'auth/user-not-found') {
+      return { success: false, error: 'No user found with this email address.', errorCode: (error as AuthError).code };
     }
-     if (error.code === 'auth/weak-password') {
-      return { success: false, error: 'The new password is too weak.', errorCode: error.code };
+     if ((error as AuthError).code === 'auth/weak-password') {
+      return { success: false, error: 'The new password is too weak.', errorCode: (error as AuthError).code };
     }
     console.error("Reset password error:", error);
     return { success: false, error: (error as AuthError).message || 'Password reset failed.', errorCode: (error as AuthError).code };
@@ -402,3 +409,5 @@ export async function updateUserTermsAcceptance(userId: string, accepted: boolea
         return { success: false, error: "Failed to update terms acceptance."};
     }
 }
+
+    
