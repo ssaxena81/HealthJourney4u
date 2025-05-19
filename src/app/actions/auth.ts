@@ -5,7 +5,7 @@ import {
   createUserWithEmailAndPassword,
   fetchSignInMethodsForEmail,
   signInWithEmailAndPassword,
-  updatePassword as firebaseUpdatePassword, // Renamed import for clarity
+  updatePassword as firebaseUpdatePassword,
   type AuthError,
 } from 'firebase/auth';
 import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
@@ -57,13 +57,16 @@ export async function checkEmailAvailability(values: z.infer<typeof CheckEmailIn
     if (error.code === 'auth/invalid-email') {
       return { available: false, error: "The email address is badly formatted." };
     }
-    console.error("Detailed Error in checkEmailAvailability:", error); // Log the full error object
-    let errorMessage = "Could not verify email availability. Please check server logs or Firebase console (ensure Email/Password provider is enabled) for more details.";
+    // Log more specific error details on the server
+    console.error("Detailed Error in checkEmailAvailability:", error);
+    let errorMessage = "Could not verify email availability due to an unexpected error.";
     if (error.code) {
       console.error("Firebase Error Code in checkEmailAvailability:", error.code);
+      errorMessage = `Could not verify email: ${error.message} (Code: ${error.code})`;
     }
-    if (error.message) {
+    if (error.message && !error.code) {
       console.error("Firebase Error Message in checkEmailAvailability:", error.message);
+       errorMessage = `Could not verify email: ${error.message}`;
     }
     return { available: false, error: errorMessage };
   }
@@ -85,21 +88,19 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       validatedValues.password
     );
 
+    // Construct initial profile, omitting fields that are truly optional and not yet set.
+    // Firestore doesn't allow 'undefined' values. If a field is optional and not present
+    // in this object, it simply won't be written to the document, which is fine.
     const initialProfile: UserProfile = {
       id: userCredential.user.uid,
       email: userCredential.user.email!,
       subscriptionTier: validatedValues.subscriptionTier,
       lastPasswordChangeDate: new Date().toISOString(),
       acceptedLatestTerms: false,
-      isAgeCertified: false, 
-      firstName: undefined,
-      middleInitial: undefined,
-      lastName: undefined,
-      dateOfBirth: undefined,
-      cellPhone: undefined,
-      mfaMethod: undefined, 
-      termsVersionAccepted: undefined,
-      paymentDetails: undefined,
+      isAgeCertified: false, // Will be certified during profile setup
+      // Optional fields like firstName, lastName, dateOfBirth, cellPhone, mfaMethod, etc.,
+      // are intentionally omitted here. They will be added when the user completes
+      // their profile demographics form.
       connectedFitnessApps: [],
       connectedDiagnosticsServices: [],
       connectedInsuranceProviders: [],
@@ -187,6 +188,11 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       console.warn(`User ${userId} missing lastPasswordChangeDate. Treating as password expired.`);
       return { success: true, userId, passwordExpired: true, userProfile };
     }
+    
+    // The (app)/layout.tsx will handle redirecting to T&C modal if needed
+    // based on userProfile.acceptedLatestTerms and termsVersionAccepted.
+    // So, we don't explicitly return termsNotAccepted here unless login itself should be blocked.
+    // For now, let's assume login completes and AuthenticatedAppLayout handles the T&C display.
 
     if (userProfile.mfaMethod && !validatedValues.mfaCode) {
       console.log(`MFA required for user ${userId} via ${userProfile.mfaMethod}. No code provided yet.`);
