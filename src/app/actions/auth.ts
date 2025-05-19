@@ -36,7 +36,7 @@ interface SignUpResult {
   userId?: string;
   error?: string;
   errorCode?: string;
-  details?: z.ZodError<z.infer<typeof SignUpDetailsInputSchema>>['formErrors'] | z.inferFlattenedErrors<typeof SignUpDetailsInputSchema>; // Updated for flatten
+  details?: z.inferFlattenedErrors<typeof SignUpDetailsInputSchema>; // Use flattened errors
 }
 
 export async function checkEmailAvailability(values: z.infer<typeof CheckEmailInputSchema>): Promise<{ available: boolean; error?: string }> {
@@ -45,6 +45,7 @@ export async function checkEmailAvailability(values: z.infer<typeof CheckEmailIn
 
     if (!firebaseAuth || !firebaseAuth.app) {
         console.warn("Firebase Auth not properly initialized in checkEmailAvailability. Cannot verify email. Check .env.local configuration and restart the server.");
+        // console.log("Current firebaseAuth object in checkEmailAvailability:", JSON.stringify(firebaseAuth));
         return { available: false, error: "Email verification service is temporarily unavailable. Please ensure Firebase is configured correctly." };
     }
 
@@ -54,10 +55,11 @@ export async function checkEmailAvailability(values: z.infer<typeof CheckEmailIn
     }
     return { available: true };
   } catch (error: any) {
+    let errorMessage = "Could not verify email availability due to an unexpected error.";
     if (error.code === 'auth/invalid-email') {
       return { available: false, error: "The email address is badly formatted." };
     }
-    let errorMessage = "Could not verify email availability due to an unexpected error.";
+    
     if (error.code) {
       console.error("Detailed Error in checkEmailAvailability:", error);
       console.error("Firebase Error Code in checkEmailAvailability:", error.code);
@@ -89,17 +91,17 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       validatedValues.password
     );
 
-    const initialProfile: Partial<UserProfile> = { // Use Partial initially
+    const initialProfile: UserProfile = {
       id: userCredential.user.uid,
       email: userCredential.user.email!,
       subscriptionTier: validatedValues.subscriptionTier,
       lastPasswordChangeDate: new Date().toISOString(),
       acceptedLatestTerms: false,
       isAgeCertified: false, 
+      // Optional fields are omitted instead of being set to undefined
       connectedFitnessApps: [],
       connectedDiagnosticsServices: [],
       connectedInsuranceProviders: [],
-      // Optional fields are omitted instead of being set to undefined
     };
 
     if (!db || typeof doc !== 'function' || typeof setDoc !== 'function') {
@@ -108,7 +110,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     }
 
     try {
-      await setDoc(doc(db, "users", userCredential.user.uid), initialProfile as UserProfile); // Cast to UserProfile for setDoc
+      await setDoc(doc(db, "users", userCredential.user.uid), initialProfile);
     } catch (firestoreError: any) {
       console.error("Error creating user profile in Firestore:", firestoreError);
       return { success: false, error: `Account created but profile setup failed: ${firestoreError.message}. Please contact support.` };
@@ -117,7 +119,6 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     return { success: true, userId: userCredential.user.uid };
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      // Return flattened Zod error for better serialization
       return { success: false, error: 'Invalid input data.', details: error.flatten() };
     }
     if ((error as AuthError).code === 'auth/email-already-in-use') {
@@ -144,6 +145,7 @@ interface LoginResult {
   passwordExpired?: boolean;
   termsNotAccepted?: boolean;
   userProfile?: UserProfile | null; 
+  details?: z.inferFlattenedErrors<typeof LoginInputSchema>; // Added details field
 }
 
 export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promise<LoginResult> {
@@ -246,6 +248,7 @@ interface ForgotPasswordResult {
   error?: string;
   message?: string;
   errorCode?: string;
+  details?: z.inferFlattenedErrors<typeof FinalResetPasswordSchema> | z.inferFlattenedErrors<typeof ForgotPasswordEmailSchema> | z.inferFlattenedErrors<typeof VerifyResetCodeSchema>; // For Zod errors
 }
 
 export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswordEmailSchema>): Promise<ForgotPasswordResult> {
@@ -266,7 +269,7 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
     return { success: true, message: "If your email is registered, an 8-digit code has been sent. This is a placeholder; code sending not implemented." };
   } catch (error: any) {
     if (error instanceof z.ZodError) {
-      return { success: false, error: 'Invalid input.'};
+      return { success: false, error: 'Invalid input.', details: error.flatten()};
     }
     console.error("Error in sendPasswordResetCode:", error);
     return { success: true, message: "If your email is registered, an 8-digit code has been sent. This is a placeholder; code sending not implemented." };
@@ -283,7 +286,7 @@ export async function verifyPasswordResetCode(values: z.infer<typeof VerifyReset
     }
   } catch (error: any) {
      if (error instanceof z.ZodError) {
-      return { success: false, error: 'Invalid input.'};
+      return { success: false, error: 'Invalid input.', details: error.flatten()};
     }
     console.error("Error in verifyPasswordResetCode:", error);
     return { success: false, error: "Code verification failed."};
@@ -413,5 +416,7 @@ export async function updateUserTermsAcceptance(userId: string, accepted: boolea
         return { success: false, error: "Failed to update terms acceptance."};
     }
 }
+
+    
 
     
