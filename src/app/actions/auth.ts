@@ -36,7 +36,7 @@ interface SignUpResult {
   userId?: string;
   error?: string;
   errorCode?: string;
-  details?: z.inferFlattenedErrors<typeof SignUpDetailsInputSchema>; // Use flattened errors
+  details?: z.inferFlattenedErrors<typeof SignUpDetailsInputSchema>;
 }
 
 export async function checkEmailAvailability(values: z.infer<typeof CheckEmailInputSchema>): Promise<{ available: boolean; error?: string }> {
@@ -145,7 +145,7 @@ interface LoginResult {
   passwordExpired?: boolean;
   termsNotAccepted?: boolean;
   userProfile?: UserProfile | null; 
-  details?: z.inferFlattenedErrors<typeof LoginInputSchema>; // Added details field
+  details?: z.inferFlattenedErrors<typeof LoginInputSchema>;
 }
 
 export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promise<LoginResult> {
@@ -248,7 +248,7 @@ interface ForgotPasswordResult {
   error?: string;
   message?: string;
   errorCode?: string;
-  details?: z.inferFlattenedErrors<typeof FinalResetPasswordSchema> | z.inferFlattenedErrors<typeof ForgotPasswordEmailSchema> | z.inferFlattenedErrors<typeof VerifyResetCodeSchema>; // For Zod errors
+  details?: z.inferFlattenedErrors<typeof FinalResetPasswordSchema | typeof ForgotPasswordEmailSchema | typeof VerifyResetCodeSchema>;
 }
 
 export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswordEmailSchema>): Promise<ForgotPasswordResult> {
