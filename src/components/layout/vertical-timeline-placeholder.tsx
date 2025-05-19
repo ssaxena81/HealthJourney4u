@@ -9,7 +9,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 export function VerticalTimelinePlaceholder() {
   // TODO: Implement actual data fetching and rendering for doctor visits.
   // TODO: Implement resizable dialog for visit notes.
-  const numberOfItems = 20; // Increased from 8 to make scrolling more likely
+  const numberOfItems = 20; // Increased to make scrolling more likely
 
   return (
     <Card className="h-full shadow-none border-0 rounded-none flex flex-col">
