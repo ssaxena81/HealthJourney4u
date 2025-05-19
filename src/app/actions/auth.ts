@@ -85,13 +85,14 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       validatedValues.password
     );
 
-    const initialProfile: Omit<UserProfile, 'firstName' | 'middleInitial' | 'lastName' | 'dateOfBirth' | 'cellPhone' | 'mfaMethod' | 'termsVersionAccepted' | 'paymentDetails' | 'isAgeCertified'> & Partial<Pick<UserProfile, 'firstName' | 'middleInitial' | 'lastName' | 'dateOfBirth' | 'cellPhone' | 'mfaMethod' | 'termsVersionAccepted' | 'paymentDetails' | 'isAgeCertified'>> = {
+    const initialProfile: UserProfile = {
       id: userCredential.user.uid,
       email: userCredential.user.email!,
       subscriptionTier: validatedValues.subscriptionTier,
       lastPasswordChangeDate: new Date().toISOString(),
       acceptedLatestTerms: false,
       isAgeCertified: false,
+      // Demographics and connection fields will be populated during profile setup
       connectedFitnessApps: [],
       connectedDiagnosticsServices: [],
       connectedInsuranceProviders: [],
@@ -378,7 +379,7 @@ const DemographicsSchemaServer = z.object({
 });
 
 
-export async function updateDemographics(userId: string, values: z.infer<typeof DemographicsSchemaServer>): Promise<{success: boolean, error?: string, data?: Partial<UserProfile>, details?: any}> {
+export async function updateDemographics(userId: string, values: z.infer<typeof DemographicsSchemaServer>): Promise<{success: boolean, error?: string, errorCode?: string, data?: Partial<UserProfile>, details?: any}> {
     try {
         const validatedValues = DemographicsSchemaServer.parse(values);
 
@@ -417,10 +418,12 @@ export async function updateUserTermsAcceptance(userId: string, accepted: boolea
         }
         await setDoc(doc(db, "users", userId), { acceptedLatestTerms: accepted, termsVersionAccepted: version }, { merge: true });
         return { success: true };
-    } catch (error: any) {
+    } catch (error: any)
+     {
         console.error("[UPDATE_TERMS_ACTION_ERROR]", error);
         const errorMessage = typeof error.message === 'string' ? error.message : 'Failed to update terms acceptance.';
         const errorCode = typeof error.code === 'string' ? error.code : 'UNKNOWN_TERMS_UPDATE_ERROR';
         return { success: false, error: errorMessage, errorCode: errorCode};
     }
 }
+
