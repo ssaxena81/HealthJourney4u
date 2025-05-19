@@ -11,13 +11,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { checkEmailAvailability, signUpUser } from '@/app/actions/auth'; // passwordSchema removed
-import { passwordSchema } from '@/types'; // Import from types
+import { checkEmailAvailability, signUpUser } from '@/app/actions/auth';
+import { passwordSchema } from '@/types';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { SubscriptionTier } from '@/types';
 import { subscriptionTiers } from '@/types';
 import ComparePlansDialog from '@/components/ui/compare-plans-dialog'; 
+import { useAuth } from '@/hooks/useAuth'; // Import useAuth
 
 const step1Schema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -39,6 +40,7 @@ type Step2Values = z.infer<typeof step2Schema>;
 export default function SignUpFlow() {
   const router = useRouter();
   const { toast } = useToast();
+  const { checkAuthState, setUserProfile: setAuthUserProfile } = useAuth(); // Get context setters
   const [isPending, startTransition] = useTransition();
   const [currentStep, setCurrentStep] = useState(1);
   const [email, setEmail] = useState('');
@@ -86,9 +88,15 @@ export default function SignUpFlow() {
           title: 'Account Created!',
           description: 'You have successfully signed up. Please complete your profile.',
         });
-        // Firebase handles login automatically after signup with createUserWithEmailAndPassword
-        // Redirect to profile setup page
-        router.push('/profile'); // New users go to profile first
+        
+        // Update AuthContext with the new user profile if available
+        if (result.userProfile && setAuthUserProfile) {
+          setAuthUserProfile(result.userProfile);
+        }
+        // Ensure Firebase Auth state is recognized by the client
+        await checkAuthState(); 
+
+        router.push('/profile'); 
       } else {
         setError(result.error || 'An unknown error occurred.');
         toast({
@@ -96,11 +104,11 @@ export default function SignUpFlow() {
           description: result.error || 'Please try again.',
           variant: 'destructive',
         });
-        if (result.details?.fieldErrors?.password) { // Check for fieldErrors existence
-            step2Form.setError('password', { type: 'manual', message: (result.details.fieldErrors.password as string[]).join(', ') });
+        if (result.details?.fieldErrors?.password) {
+            step2Form.setError('password', { type: 'manual', message: (result.details.fieldErrors.password).join(', ') });
         }
         if (result.details?.fieldErrors?.confirmPassword) {
-            step2Form.setError('confirmPassword', { type: 'manual', message: (result.details.fieldErrors.confirmPassword as string[]).join(', ') });
+            step2Form.setError('confirmPassword', { type: 'manual', message: (result.details.fieldErrors.confirmPassword).join(', ') });
         }
       }
     });
@@ -222,3 +230,5 @@ export default function SignUpFlow() {
     </div>
   );
 }
+
+    
