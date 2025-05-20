@@ -15,16 +15,14 @@ export default function RootPage() {
   useEffect(() => {
     if (!isLoading) {
       if (user && userProfile) {
-        // Check for T&C and password expiry before redirecting to dashboard
-        // This logic is now primarily handled in AuthenticatedAppLayout
-        router.replace('/dashboard');
+        // User logged in, profile exists
+        // AppLayout in (app) group will handle T&C and password expiry checks
+        router.replace('/'); // Redirect to the authenticated root, which is now the dashboard
       } else if (user && !userProfile && !profileLoading) {
         // User exists but profile might be loading or missing, redirect to profile to complete
-        // Or if profile is truly missing after loading, this is an issue.
-        // For now, assuming new users are guided to /profile after signup.
-        // Existing users should have a profile.
-        router.replace('/profile'); // Or /dashboard and let AuthenticatedAppLayout handle it
+        router.replace('/profile');
       } else if (!user && !authLoading) {
+        // User not logged in
         router.replace('/login');
       }
     }
@@ -39,7 +37,6 @@ export default function RootPage() {
   }
 
   // Fallback content if redirection logic somehow doesn't kick in immediately
-  // or if there's a state not covered (should ideally not happen).
   return (
     <div className="flex min-h-screen items-center justify-center p-4">
       <p>Loading application...</p>

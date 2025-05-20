@@ -10,14 +10,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { loginUser } from '@/app/actions/auth'; // passwordSchema removed from here
+import { loginUser } from '@/app/actions/auth';
 import { passwordSchema } from '@/types'; // Import from types
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
 const loginFormSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
-  password: z.string().min(1, {message: "Password is required."}), // Full complexity check on server during login
+  password: z.string().min(1, {message: "Password is required."}), // Not using full passwordSchema here; complexity is on server
   mfaCode: z.string().length(8, { message: "MFA code must be 8 digits."}).optional().or(z.literal('')), // Optional, allow empty string
 });
 
@@ -30,7 +30,7 @@ export default function LoginForm() {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [requiresMfa, setRequiresMfa] = useState(false);
+  const [requiresMfa, setRequiresMfa] = useState(false); // State to control MFA input visibility
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
@@ -54,17 +54,21 @@ export default function LoginForm() {
         if (result.userProfile && setAuthUserProfile) {
           setAuthUserProfile(result.userProfile); // Update auth context with full profile
         }
-        await checkAuthState(); // Refresh auth state if needed
+        await checkAuthState(); // Ensure auth state is fresh
 
-        // AppLayout will handle redirects based on profile state
-        router.push('/dashboard'); // Go to dashboard, AppLayout handles checks
-
+        if (result.passwordExpired) {
+          router.push('/reset-password-required');
+        } else {
+          // AppLayout in (app) group will handle T&C modal if result.termsNotAccepted is true
+          router.push('/'); // Redirect to the authenticated root (dashboard)
+        }
       } else {
         if (result.requiresMfa) {
-          setRequiresMfa(true);
+          setRequiresMfa(true); // Show MFA input field
           setError(result.error || "MFA code required. Please check your device.");
+          // Don't show toast here, error message above form is sufficient
         } else {
-          setRequiresMfa(false); 
+          setRequiresMfa(false); // Hide MFA input if it was some other error
           setError(result.error || 'An unknown error occurred.');
           toast({
             title: 'Login Failed',
