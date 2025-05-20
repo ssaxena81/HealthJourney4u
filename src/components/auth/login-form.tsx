@@ -11,14 +11,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { loginUser } from '@/app/actions/auth';
-import { passwordSchema } from '@/types'; // Import from types
+// passwordSchema removed as it's not used here for loginFormSchema complexity
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 
 const loginFormSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
-  password: z.string().min(1, {message: "Password is required."}), // Not using full passwordSchema here; complexity is on server
-  mfaCode: z.string().length(8, { message: "MFA code must be 8 digits."}).optional().or(z.literal('')), // Optional, allow empty string
+  password: z.string().min(1, {message: "Password is required."}),
+  mfaCode: z.string().length(8, { message: "MFA code must be 8 digits."}).optional().or(z.literal('')),
 });
 
 type LoginFormValues = z.infer<typeof loginFormSchema>;
@@ -26,11 +26,11 @@ type LoginFormValues = z.infer<typeof loginFormSchema>;
 export default function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
-  const { checkAuthState, setUserProfile: setAuthUserProfile } = useAuth(); 
+  const { setUserProfile: setAuthUserProfile } = useAuth(); 
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [requiresMfa, setRequiresMfa] = useState(false); // State to control MFA input visibility
+  const [requiresMfa, setRequiresMfa] = useState(false);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
@@ -43,8 +43,10 @@ export default function LoginForm() {
 
   const onSubmit = (values: LoginFormValues) => {
     setError(null);
+    console.log('[LOGIN_FORM_SUBMIT_START] Submitting login form with values:', values);
     startTransition(async () => {
       const result = await loginUser(values);
+      console.log('[LOGIN_FORM_SUBMIT_RESULT] Received result from loginUser action:', result);
 
       if (result.success) {
         toast({
@@ -52,23 +54,30 @@ export default function LoginForm() {
           description: 'Welcome back.',
         });
         if (result.userProfile && setAuthUserProfile) {
-          setAuthUserProfile(result.userProfile); // Update auth context with full profile
+          console.log('[LOGIN_FORM_SUCCESS] Setting user profile in AuthContext.');
+          setAuthUserProfile(result.userProfile);
+        } else {
+          console.warn('[LOGIN_FORM_SUCCESS] No userProfile in result or setAuthUserProfile not available.');
         }
-        await checkAuthState(); // Ensure auth state is fresh
+        
+        // The onAuthStateChanged listener in AuthProvider should update the user object.
+        // The userProfile is now set directly.
 
         if (result.passwordExpired) {
+          console.log('[LOGIN_FORM_SUCCESS] Password expired, redirecting to /reset-password-required.');
           router.push('/reset-password-required');
         } else {
+          console.log('[LOGIN_FORM_SUCCESS] Login successful, redirecting to / (dashboard).');
           // AppLayout in (app) group will handle T&C modal if result.termsNotAccepted is true
-          router.push('/'); // Redirect to the authenticated root (dashboard)
+          router.push('/'); 
         }
       } else {
+        console.log('[LOGIN_FORM_FAILURE] Login failed. Result:', result);
         if (result.requiresMfa) {
-          setRequiresMfa(true); // Show MFA input field
+          setRequiresMfa(true);
           setError(result.error || "MFA code required. Please check your device.");
-          // Don't show toast here, error message above form is sufficient
         } else {
-          setRequiresMfa(false); // Hide MFA input if it was some other error
+          setRequiresMfa(false);
           setError(result.error || 'An unknown error occurred.');
           toast({
             title: 'Login Failed',
