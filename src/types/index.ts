@@ -125,14 +125,15 @@ export const healthMetricDisplayNames: Record<HealthMetricType, string> = {
 
 export type SubscriptionTier = 'free' | 'silver' | 'gold' | 'platinum';
 
-interface FitbitApiCallStatDetail {
+export interface FitbitApiCallStatDetail {
   lastCalledAt?: string; // ISO string
   callCountToday?: number;
 }
 
-interface FitbitApiCallStats {
+export interface FitbitApiCallStats {
   dailyActivitySummary?: FitbitApiCallStatDetail;
   heartRateTimeSeries?: FitbitApiCallStatDetail;
+  sleepData?: FitbitApiCallStatDetail;
   // Add other Fitbit endpoints here if they need rate limiting
 }
 
@@ -162,6 +163,8 @@ export interface UserProfile {
   connectedFitnessApps: Array<{
     id: string; // e.g., 'fitbit', 'strava' (identifier for the service)
     name: string; // e.g., 'Fitbit', 'Strava' (display name)
+    // OAuth tokens or sensitive connection details are stored securely on the server,
+    // not directly in this client-accessible profile.
     connectedAt: string; // ISO 8601 format - when the connection was established
   }>;
 
@@ -207,6 +210,7 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Multi-Factor Authentication", free: true, silver: true, gold: true, platinum: true },
   { feature: "Fitbit Daily Summary Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Fitbit Heart Rate Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
+  { feature: "Fitbit Sleep Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
 ];
 
 // For admin-managed dropdowns (mocked for now)
@@ -262,6 +266,40 @@ export interface FitbitHeartRateFirestore {
     dataset: Array<{ time: string; value: number }>; // time in HH:MM:SS
     datasetInterval: number; // e.g., 1 for 1 minute
     datasetType: string; // e.g., "minute"
+  };
+  lastFetched: string; // ISO string
+  dataSource: 'fitbit';
+}
+
+export interface FitbitSleepLogFirestore {
+  dateOfSleep: string; // YYYY-MM-DD, also the document ID for the main sleep log document
+  logId: number; // Fitbit's unique ID for this sleep log
+  startTime: string; // ISO 8601
+  endTime: string; // ISO 8601
+  duration: number; // Total duration in milliseconds
+  minutesToFallAsleep: number;
+  minutesAsleep: number;
+  minutesAwake: number;
+  minutesInBed: number;
+  efficiency: number; // Sleep efficiency score (0-100)
+  type: 'stages' | 'classic'; // Type of sleep log
+  levels?: { // Present if type is 'stages'
+    summary: {
+      deep?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
+      light?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
+      rem?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
+      wake?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
+    };
+    data: Array<{
+      dateTime: string; // ISO 8601 timestamp of the level
+      level: 'deep' | 'light' | 'rem' | 'wake' | 'asleep' | 'awake' | 'restless'; // 'asleep', 'awake', 'restless' for classic
+      seconds: number; // Duration of this stage in seconds
+    }>;
+    shortData?: Array<{ // Sometimes present for short sleep periods
+        dateTime: string;
+        level: 'wake';
+        seconds: number;
+    }>;
   };
   lastFetched: string; // ISO string
   dataSource: 'fitbit';
