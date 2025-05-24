@@ -2,26 +2,46 @@
 
 /**
  * @fileOverview Fitbit Service Module
- * This module will contain functions to interact with the Fitbit API.
- * NOTE: This is a placeholder. Actual implementation requires Fitbit API registration,
- * OAuth 2.0 handling, secure token storage, and HTTP requests.
+ * This module contains functions to interact with the Fitbit API.
+ * These functions assume a valid OAuth 2.0 access token for the user has been obtained.
  */
 
-// Placeholder types for Fitbit API responses. In a real app, these would be more detailed.
+const FITBIT_API_BASE_URL = 'https://api.fitbit.com/1';
+
+// --- Response Interfaces (could be expanded based on actual Fitbit API responses) ---
 export interface FitbitUserProfile {
-  userId: string;
-  displayName: string;
-  avatar?: string;
-  dateOfBirth?: string;
-  // ... other profile fields
+  user: {
+    avatar: string;
+    avatar150: string;
+    avatar640: string;
+    dateOfBirth: string;
+    displayName: string;
+    encodedId: string; // This is often the user ID used in API calls
+    firstName: string;
+    lastName: string;
+    gender: string;
+    height: number;
+    weight: number;
+    strideLengthWalking: number;
+    strideLengthRunning: number;
+    // ... many other fields available
+  };
 }
 
-export interface FitbitDailyActivitySummary {
-  date: string; // YYYY-MM-DD
+export interface FitbitActivitySummary {
   steps: number;
   distance: number; // in kilometers or miles based on user's Fitbit settings
   caloriesOut: number;
-  activeMinutes?: number; // Different types of active minutes
+  fairlyActiveMinutes: number;
+  lightlyActiveMinutes: number;
+  sedentaryMinutes: number;
+  veryActiveMinutes: number;
+}
+
+export interface FitbitDailyActivityResponse {
+  activities: any[]; // Placeholder for detailed activities if needed
+  goals: any; // Placeholder
+  summary: FitbitActivitySummary;
 }
 
 export interface FitbitHeartRateDataPoint {
@@ -29,40 +49,82 @@ export interface FitbitHeartRateDataPoint {
   value: number; // bpm
 }
 
-export interface FitbitHeartRateSeries {
-  date: string; // YYYY-MM-DD
-  restingHeartRate?: number;
-  series: FitbitHeartRateDataPoint[];
+export interface FitbitHeartRateIntradaySeries {
+  dataset: FitbitHeartRateDataPoint[];
+  datasetInterval: number;
+  datasetType: string; // e.g., "minute"
 }
+
+export interface FitbitHeartRateActivitiesResponse {
+  'activities-heart': Array<{
+    dateTime: string; // Date of the summary
+    value: {
+      restingHeartRate?: number;
+      heartRateZones: Array<{
+        name: string; // e.g., "Fat Burn", "Cardio", "Peak"
+        min: number;
+        max: number;
+        minutes: number;
+        caloriesOut?: number;
+      }>;
+    };
+  }>;
+  'activities-heart-intraday': FitbitHeartRateIntradaySeries;
+}
+
+// --- Helper for making API requests ---
+async function fitbitApiRequest<T>(endpoint: string, accessToken: string, method: 'GET' | 'POST' = 'GET', body?: any): Promise<T> {
+  const url = `${FITBIT_API_BASE_URL}${endpoint}`;
+  console.log(`[FitbitService] Making API Request: ${method} ${url}`);
+
+  const headers: HeadersInit = {
+    'Authorization': `Bearer ${accessToken}`,
+  };
+  if (method === 'POST' && body) {
+    headers['Content-Type'] = 'application/x-www-form-urlencoded'; // Fitbit often uses this for token refresh etc. Adjust if JSON.
+  }
+
+  const response = await fetch(url, {
+    method: method,
+    headers: headers,
+    body: body ? (typeof body === 'string' ? body : JSON.stringify(body)) : undefined,
+  });
+
+  if (!response.ok) {
+    let errorData;
+    try {
+      errorData = await response.json();
+    } catch (e) {
+      errorData = { message: response.statusText };
+    }
+    console.error('[FitbitService] API Error Response Status:', response.status);
+    console.error('[FitbitService] API Error Response Body:', errorData);
+    // Fitbit errors often come in an 'errors' array
+    const errorMessage = errorData.errors?.[0]?.message || errorData.message || `Fitbit API request failed: ${response.statusText}`;
+    throw new Error(errorMessage);
+  }
+
+  // Handle cases where response might be empty (e.g., 204 No Content for some POSTs)
+  if (response.status === 204) {
+    return {} as T; // Or handle as appropriate for the specific endpoint
+  }
+  
+  return response.json() as Promise<T>;
+}
+
 
 /**
  * Fetches the user's Fitbit profile information.
+ * The user's encoded ID is generally used for subsequent API calls.
  *
  * @param accessToken - The user's Fitbit access token.
  * @returns A Promise resolving to the user's Fitbit profile data.
  * @throws Will throw an error if the API call fails.
  */
 export async function getFitbitUserProfile(accessToken: string): Promise<FitbitUserProfile> {
-  console.log(`[FitbitService] Attempting to fetch user profile with token (first 5 chars): ${accessToken.substring(0, 5)}...`);
-  // TODO: Implement actual API call to Fitbit's user profile endpoint
-  // Example endpoint: GET https://api.fitbit.com/1/user/-/profile.json
-  // Headers: Authorization: Bearer <accessToken>
-
-  // Placeholder implementation
-  await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate network delay
-
-  if (Math.random() < 0.1) { // Simulate occasional error
-    throw new Error("Failed to fetch Fitbit user profile (Simulated API Error)");
-  }
-
-  const mockProfile: FitbitUserProfile = {
-    userId: "MOCK_FITBIT_ID_" + Math.random().toString(36).substring(7),
-    displayName: "Mock Fitbit User",
-    avatar: "https://placehold.co/100x100.png",
-    dateOfBirth: "1990-01-01",
-  };
-  console.log("[FitbitService] Successfully fetched mock user profile:", mockProfile);
-  return mockProfile;
+  console.log(`[FitbitService] Fetching user profile...`);
+  // The '-' in the URL means "the currently authenticated user".
+  return fitbitApiRequest<FitbitUserProfile>('/user/-/profile.json', accessToken);
 }
 
 /**
@@ -73,95 +135,95 @@ export async function getFitbitUserProfile(accessToken: string): Promise<FitbitU
  * @returns A Promise resolving to the daily activity summary.
  * @throws Will throw an error if the API call fails.
  */
-export async function getDailyActivitySummary(accessToken: string, date: string): Promise<FitbitDailyActivitySummary> {
-  console.log(`[FitbitService] Attempting to fetch daily activity for date: ${date} with token (first 5 chars): ${accessToken.substring(0, 5)}...`);
-  // TODO: Implement actual API call to Fitbit's daily activity summary endpoint
-  // Example endpoint: GET https://api.fitbit.com/1/user/-/activities/date/${date}.json
-  // Headers: Authorization: Bearer <accessToken>
-
-  // Placeholder implementation
-  await new Promise(resolve => setTimeout(resolve, 1500));
-
-  if (Math.random() < 0.1) {
-    throw new Error(`Failed to fetch Fitbit daily activity for ${date} (Simulated API Error)`);
-  }
-
-  const mockSummary: FitbitDailyActivitySummary = {
-    date: date,
-    steps: Math.floor(Math.random() * 15000) + 1000,
-    distance: parseFloat((Math.random() * 10 + 1).toFixed(2)),
-    caloriesOut: Math.floor(Math.random() * 1000) + 1800,
-    activeMinutes: Math.floor(Math.random() * 120),
-  };
-  console.log("[FitbitService] Successfully fetched mock daily activity summary:", mockSummary);
-  return mockSummary;
+export async function getDailyActivitySummary(accessToken: string, date: string): Promise<FitbitDailyActivityResponse> {
+  console.log(`[FitbitService] Fetching daily activity for date: ${date}...`);
+  return fitbitApiRequest<FitbitDailyActivityResponse>(`/user/-/activities/date/${date}.json`, accessToken);
 }
 
 /**
- * Fetches heart rate time series data for a specific date and period.
+ * Fetches heart rate time series data for a specific date.
+ * This example fetches both daily summary (resting heart rate, zones) and intraday data (minute by minute).
  *
  * @param accessToken - The user's Fitbit access token.
  * @param date - The date for which to fetch data (YYYY-MM-DD).
- * @param period - The period for which to fetch data (e.g., '1d', '7d', '1m', or '1min', '15min' for intraday).
+ * @param detailLevel - For intraday series, e.g., '1min' or '1sec'. Defaults to '1min'.
  * @returns A Promise resolving to the heart rate series data.
  * @throws Will throw an error if the API call fails.
  */
-export async function getHeartRateTimeSeries(accessToken: string, date: string, period: string = '1d'): Promise<FitbitHeartRateSeries> {
-  console.log(`[FitbitService] Attempting to fetch heart rate for date: ${date}, period: ${period} with token (first 5 chars): ${accessToken.substring(0, 5)}...`);
-  // TODO: Implement actual API call to Fitbit's heart rate time series endpoint
-  // Example endpoint for intraday: GET https://api.fitbit.com/1/user/-/activities/heart/date/${date}/1d/1min.json
-  // Example endpoint for date range: GET https://api.fitbit.com/1/user/-/activities/heart/date/${startDate}/${endDate}.json
-  // Headers: Authorization: Bearer <accessToken>
+export async function getHeartRateTimeSeries(
+  accessToken: string,
+  date: string, // YYYY-MM-DD
+  detailLevel: '1min' | '1sec' = '1min' // For intraday series
+): Promise<FitbitHeartRateActivitiesResponse> {
+  console.log(`[FitbitService] Fetching heart rate for date: ${date}, detail: ${detailLevel}...`);
+  // Fitbit API for heart rate can be fetched for a date range or a single day.
+  // For intraday data (minute by minute), the endpoint is specific.
+  // This endpoint gets both daily summary and intraday data for the specified date.
+  // GET /1/user/[user-id]/activities/heart/date/[date]/1d/[detail-level].json
+  // Example: /1/user/-/activities/heart/date/today/1d/1min.json
+  // Or for a specific date: /1/user/-/activities/heart/date/2024-01-15/1d/1min.json
+  return fitbitApiRequest<FitbitHeartRateActivitiesResponse>(
+    `/user/-/activities/heart/date/${date}/1d/${detailLevel}.json`,
+    accessToken
+  );
+}
 
-  // Placeholder implementation
-  await new Promise(resolve => setTimeout(resolve, 1200));
+// TODO: Add more functions as needed:
+// - getSleepLog(accessToken: string, date: string): Promise<FitbitSleepLogResponse>
+// - getWeightLog(accessToken: string, date: string): Promise<FitbitWeightLogResponse>
+// - Functions for specific activities if available through detailed activity logs.
 
-  if (Math.random() < 0.1) {
-    throw new Error(`Failed to fetch Fitbit heart rate data for ${date} (Simulated API Error)`);
+// Note on OAuth 2.0 Token Refresh:
+// Fitbit access tokens expire (usually after 8 hours). You'll need a mechanism
+// to use the refresh token to get a new access token. This typically involves
+// a POST request to https://api.fitbit.com/oauth2/token with:
+// - grant_type: 'refresh_token'
+// - refresh_token: <user's_refresh_token>
+// And an Authorization header: Basic <base64_encoded_client_id:client_secret>
+// This logic should be in a secure server-side environment (e.g., a Server Action or API route).
+// The new access token and potentially new refresh token would then be securely stored.
+// The functions in this service file would then use the new access token.
+// For example:
+/*
+export interface FitbitTokenRefreshResponse {
+  access_token: string;
+  expires_in: number;
+  refresh_token: string;
+  scope: string;
+  token_type: string;
+  user_id: string;
+}
+
+export async function refreshFitbitAccessToken(refreshToken: string): Promise<FitbitTokenRefreshResponse> {
+  const clientId = process.env.FITBIT_CLIENT_ID;
+  const clientSecret = process.env.FITBIT_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    throw new Error("Fitbit client ID or secret is not configured.");
   }
 
-  const mockSeries: FitbitHeartRateSeries = {
-    date: date,
-    restingHeartRate: Math.floor(Math.random() * 30) + 50,
-    series: Array.from({ length: 5 }, (_, i) => ({
-      time: `10:0${i}:00`,
-      value: Math.floor(Math.random() * 40) + 60,
-    })),
-  };
-  console.log("[FitbitService] Successfully fetched mock heart rate series:", mockSeries);
-  return mockSeries;
+  const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
+  const body = new URLSearchParams();
+  body.append('grant_type', 'refresh_token');
+  body.append('refresh_token', refreshToken);
+
+  const response = await fetch('https://api.fitbit.com/oauth2/token', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Basic ${credentials}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: body.toString(),
+  });
+
+  if (!response.ok) {
+    const errorData = await response.json();
+    console.error('[FitbitService] Token Refresh Error:', errorData);
+    throw new Error(errorData.errors?.[0]?.message || 'Failed to refresh Fitbit access token');
+  }
+  return response.json();
 }
-
-// TODO: Add more functions as needed, for example:
-// - getSleepLog(accessToken: string, date: string)
-// - getWeightLog(accessToken: string, date: string)
-// - refreshAccessToken(refreshToken: string)
-// - functions for specific activities like runs, walks, swims if available through detailed activity logs
-// - etc.
-
-// Helper function (placeholder) to simulate making an API request
-// In a real scenario, this would use fetch() or a library like axios
-// and include proper error handling, token management, etc.
-async function fitbitApiRequest(endpoint: string, accessToken: string, method: 'GET' | 'POST' = 'GET', body?: any) {
-  const FITBIT_API_BASE_URL = 'https://api.fitbit.com/1';
-  const url = `${FITBIT_API_BASE_URL}${endpoint}`;
-
-  console.log(`[FitbitService] Mock API Request: ${method} ${url}`);
-  // const response = await fetch(url, {
-  //   method: method,
-  //   headers: {
-  //     'Authorization': `Bearer ${accessToken}`,
-  //     'Content-Type': 'application/json',
-  //   },
-  //   body: body ? JSON.stringify(body) : undefined,
-  // });
-
-  // if (!response.ok) {
-  //   // Handle Fitbit API errors (e.g., 400, 401, 429, 500)
-  //   const errorData = await response.json().catch(() => ({}));
-  //   console.error('[FitbitService] API Error Response:', errorData);
-  //   throw new Error(`Fitbit API request failed: ${response.statusText} - ${JSON.stringify(errorData.errors || errorData)}`);
-  // }
-  // return response.json();
-  return { message: "This is a mock API response" }; // Placeholder
-}
+*/
+// The above refreshFitbitAccessToken would be called by your auth management logic,
+// not directly by UI components. The new token would then be used for subsequent calls
+// to getFitbitUserProfile, getDailyActivitySummary, etc.
