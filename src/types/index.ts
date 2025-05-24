@@ -34,7 +34,7 @@ export interface BaseHealthEntry {
   type: HealthMetricType;
   title: string;
   notes?: string;
-  source?: 'manual' | 'quest' | 'uhc'; // To represent integrations
+  source?: 'manual' | 'quest' | 'uhc' | 'fitbit'; // Added fitbit
 }
 
 export interface WalkingEntry extends BaseHealthEntry {
@@ -125,46 +125,64 @@ export const healthMetricDisplayNames: Record<HealthMetricType, string> = {
 
 export type SubscriptionTier = 'free' | 'silver' | 'gold' | 'platinum';
 
+interface FitbitApiCallStatDetail {
+  lastCalledAt?: string; // ISO string
+  callCountToday?: number;
+}
+
+interface FitbitApiCallStats {
+  dailyActivitySummary?: FitbitApiCallStatDetail;
+  // Add other Fitbit endpoints here if they need rate limiting
+  // e.g. heartRateTimeSeries?: FitbitApiCallStatDetail;
+}
+
 export interface UserProfile {
-  id: string; // Firebase Auth UID
-  firstName?: string;
-  middleInitial?: string;
-  lastName?: string;
-  dateOfBirth?: string; // ISO 8601
-  email: string; // Login ID, should match Auth email
-  cellPhone?: string;
-  mfaMethod?: 'email' | 'sms'; // For sending codes
+  id: string; // Firebase Auth UID - This will be the document ID in Firestore
+
+  // Part 1: Demographics
+  firstName?: string; // Mandatory during profile setup
+  middleInitial?: string; // Optional
+  lastName?: string; // Mandatory during profile setup
+  dateOfBirth?: string; // ISO 8601 format, Mandatory during profile setup
+  email: string; // Login ID, matches Auth email, effectively mandatory
+  cellPhone?: string; // Optional, but one of email/cellPhone needed for MFA
+  mfaMethod?: 'email' | 'sms'; // User's preferred/configured MFA method
   isAgeCertified?: boolean; // User certifies they are 18 or older
 
-  lastPasswordChangeDate: string; // ISO 8601
+  // Password and Terms Management
+  lastPasswordChangeDate: string; // ISO 8601 format
   acceptedLatestTerms: boolean;
-  termsVersionAccepted?: string; // To track specific T&C version
+  termsVersionAccepted?: string; // Version identifier of T&C accepted
 
+  // Subscription and Payment
   subscriptionTier: SubscriptionTier;
-  paymentDetails?: any; // Placeholder for payment info
+  paymentDetails?: any; // Placeholder for payment system identifiers (e.g., Stripe customer ID)
 
   // Part 2: Fitness Connections
   connectedFitnessApps: Array<{
-    id: string; // e.g., 'fitbit', 'strava'
-    name: string; // e.g., 'Fitbit'
-    connectedAt: string; // ISO 8601
+    id: string; // e.g., 'fitbit', 'strava' (identifier for the service)
+    name: string; // e.g., 'Fitbit', 'Strava' (display name)
+    connectedAt: string; // ISO 8601 format - when the connection was established
   }>;
 
   // Part 3: Diagnostics Connections
   connectedDiagnosticsServices: Array<{
     id: string; // e.g., 'quest', 'labcorp'
     name: string; // e.g., 'Quest Diagnostics'
-    connectedAt: string; // ISO 8601
+    connectedAt: string; // ISO 8601 format
   }>;
 
   // Part 4: Insurance Connections
   connectedInsuranceProviders: Array<{
-    id: string; // Internal ID or insurer's API identifier
+    id: string; // Identifier for the insurance provider
     name: string; // e.g., 'United Healthcare'
-    memberId: string;
-    groupId?: string;
-    connectedAt: string; // ISO 8601
+    memberId: string; // User's member ID for that insurer
+    groupId?: string; // User's group ID (optional)
+    connectedAt: string; // ISO 8601 format
   }>;
+
+  // Fitbit API Call Statistics for Rate Limiting
+  fitbitApiCallStats?: FitbitApiCallStats;
 }
 
 export const subscriptionTiers: SubscriptionTier[] = ['free', 'silver', 'gold', 'platinum'];
@@ -187,6 +205,7 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Password Expiry (90 days)", free: true, silver: true, gold: true, platinum: true },
   { feature: "Terms & Conditions Acceptance", free: true, silver: true, gold: true, platinum: true },
   { feature: "Multi-Factor Authentication", free: true, silver: true, gold: true, platinum: true },
+  { feature: "Fitbit Daily Summary Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
 ];
 
 // For admin-managed dropdowns (mocked for now)
@@ -216,3 +235,16 @@ export const mockInsuranceProviders: SelectableService[] = [
   { id: 'cigna', name: 'Cigna' },
   { id: 'blueshield', name: 'Blue Cross Blue Shield' },
 ];
+
+// Firestore specific data structures (examples)
+export interface FitbitActivitySummaryFirestore {
+    date: string; // YYYY-MM-DD, also the document ID
+    steps: number;
+    distance: number; // In km or miles, be consistent
+    caloriesOut: number;
+    activeMinutes: number; // Sum of fairlyActiveMinutes and veryActiveMinutes
+    lastFetched: string; // ISO string
+    dataSource: 'fitbit';
+}
+
+    
