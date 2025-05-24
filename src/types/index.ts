@@ -34,7 +34,7 @@ export interface BaseHealthEntry {
   type: HealthMetricType;
   title: string;
   notes?: string;
-  source?: 'manual' | 'quest' | 'uhc' | 'fitbit'; // Added fitbit
+  source?: 'manual' | 'quest' | 'uhc' | 'fitbit';
 }
 
 export interface WalkingEntry extends BaseHealthEntry {
@@ -132,8 +132,8 @@ interface FitbitApiCallStatDetail {
 
 interface FitbitApiCallStats {
   dailyActivitySummary?: FitbitApiCallStatDetail;
+  heartRateTimeSeries?: FitbitApiCallStatDetail;
   // Add other Fitbit endpoints here if they need rate limiting
-  // e.g. heartRateTimeSeries?: FitbitApiCallStatDetail;
 }
 
 export interface UserProfile {
@@ -206,6 +206,7 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Terms & Conditions Acceptance", free: true, silver: true, gold: true, platinum: true },
   { feature: "Multi-Factor Authentication", free: true, silver: true, gold: true, platinum: true },
   { feature: "Fitbit Daily Summary Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
+  { feature: "Fitbit Heart Rate Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
 ];
 
 // For admin-managed dropdowns (mocked for now)
@@ -247,4 +248,21 @@ export interface FitbitActivitySummaryFirestore {
     dataSource: 'fitbit';
 }
 
-    
+export interface FitbitHeartRateFirestore {
+  date: string; // YYYY-MM-DD, also the document ID
+  restingHeartRate?: number;
+  heartRateZones?: Array<{
+    name: string;
+    min: number;
+    max: number;
+    minutes: number;
+    caloriesOut?: number;
+  }>;
+  intradaySeries?: {
+    dataset: Array<{ time: string; value: number }>; // time in HH:MM:SS
+    datasetInterval: number; // e.g., 1 for 1 minute
+    datasetType: string; // e.g., "minute"
+  };
+  lastFetched: string; // ISO string
+  dataSource: 'fitbit';
+}
