@@ -12,7 +12,7 @@ import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
 import { z } from 'zod';
 import type { UserProfile, SubscriptionTier } from '@/types';
 import { passwordSchema } from '@/types';
-import { doc, setDoc, getDoc } from 'firebase/firestore';
+import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
 import { differenceInYears } from 'date-fns';
 
 
@@ -37,6 +37,7 @@ interface SignUpResult {
   error?: string;
   errorCode?: string;
   details?: z.inferFlattenedErrors<typeof SignUpDetailsInputSchema>;
+  userProfile?: UserProfile; // Added to return initial profile for client context
 }
 
 export async function checkEmailAvailability(values: z.infer<typeof CheckEmailInputSchema>): Promise<{ available: boolean; error?: string }> {
@@ -144,7 +145,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     }
 
     console.log("[SIGNUP_ACTION_SUCCESS] signUpUser action completed successfully for UID:", userCredential.user.uid);
-    return { success: true, userId: userCredential.user.uid }; // Return only userId
+    return { success: true, userId: userCredential.user.uid, userProfile: initialProfile }; // Return only userId
   } catch (error: any) {
     console.error("[SIGNUP_ACTION_RAW_ERROR] Raw error in signUpUser:", error);
     if (error instanceof z.ZodError) {
@@ -503,8 +504,94 @@ export async function updateUserTermsAcceptance(userId: string, accepted: boolea
         return { success: false, error: errorMessage, errorCode: errorCode};
     }
 }
-    
 
-    
+export async function finalizeFitbitConnection(userId: string): Promise<{success: boolean, error?: string}> {
+    console.log('[FINALIZE_FITBIT_CONNECTION_START] Action initiated for UID:', userId);
+    if (!userId) {
+        console.error('[FINALIZE_FITBIT_CONNECTION_ERROR] No user ID provided.');
+        return { success: false, error: 'User not authenticated.' };
+    }
+    try {
+        if (!db || !db.app) {
+            console.error('[FINALIZE_FITBIT_CONNECTION_ERROR] Firestore not initialized.');
+            return { success: false, error: 'Database service unavailable.' };
+        }
+        
+        const userProfileDocRef = doc(db, "users", userId);
+        const userProfileSnap = await getDoc(userProfileDocRef);
 
-    
+        if (!userProfileSnap.exists()) {
+            console.error(`[FINALIZE_FITBIT_CONNECTION_ERROR] User profile not found for UID: ${userId}.`);
+            return { success: false, error: 'User profile not found.' };
+        }
+        
+        const userProfile = userProfileSnap.data() as UserProfile;
+        const currentConnections = userProfile.connectedFitnessApps || [];
+        
+        // Check if Fitbit is already connected
+        if (currentConnections.some(app => app.id === 'fitbit')) {
+            console.log(`[FINALIZE_FITBIT_CONNECTION_INFO] Fitbit already connected for user ${userId}.`);
+            return { success: true }; // Or a message indicating it's already connected
+        }
+
+        const newConnection = {
+            id: 'fitbit',
+            name: 'Fitbit', // Ensure this name is consistent
+            connectedAt: new Date().toISOString(),
+        };
+        const updatedConnections = [...currentConnections, newConnection];
+
+        await updateDoc(userProfileDocRef, { connectedFitnessApps: updatedConnections });
+        console.log(`[FINALIZE_FITBIT_CONNECTION_SUCCESS] Fitbit connection finalized for user ${userId}.`);
+        return { success: true };
+
+    } catch (error: any) {
+        console.error(`[FINALIZE_FITBIT_CONNECTION_ERROR] Raw error for UID ${userId}:`, error);
+        return { success: false, error: String(error.message || 'Failed to finalize Fitbit connection.') };
+    }
+}
+
+export async function finalizeStravaConnection(userId: string): Promise<{success: boolean, error?: string}> {
+    console.log('[FINALIZE_STRAVA_CONNECTION_START] Action initiated for UID:', userId);
+    if (!userId) {
+        console.error('[FINALIZE_STRAVA_CONNECTION_ERROR] No user ID provided.');
+        return { success: false, error: 'User not authenticated.' };
+    }
+    try {
+        if (!db || !db.app) {
+            console.error('[FINALIZE_STRAVA_CONNECTION_ERROR] Firestore not initialized.');
+            return { success: false, error: 'Database service unavailable.' };
+        }
+        
+        const userProfileDocRef = doc(db, "users", userId);
+        const userProfileSnap = await getDoc(userProfileDocRef);
+
+        if (!userProfileSnap.exists()) {
+            console.error(`[FINALIZE_STRAVA_CONNECTION_ERROR] User profile not found for UID: ${userId}.`);
+            return { success: false, error: 'User profile not found.' };
+        }
+        
+        const userProfile = userProfileSnap.data() as UserProfile;
+        const currentConnections = userProfile.connectedFitnessApps || [];
+        
+        if (currentConnections.some(app => app.id === 'strava')) {
+            console.log(`[FINALIZE_STRAVA_CONNECTION_INFO] Strava already connected for user ${userId}.`);
+            return { success: true };
+        }
+
+        const newConnection = {
+            id: 'strava',
+            name: 'Strava',
+            connectedAt: new Date().toISOString(),
+        };
+        const updatedConnections = [...currentConnections, newConnection];
+
+        await updateDoc(userProfileDocRef, { connectedFitnessApps: updatedConnections });
+        console.log(`[FINALIZE_STRAVA_CONNECTION_SUCCESS] Strava connection finalized for user ${userId}.`);
+        return { success: true };
+
+    } catch (error: any) {
+        console.error(`[FINALIZE_STRAVA_CONNECTION_ERROR] Raw error for UID ${userId}:`, error);
+        return { success: false, error: String(error.message || 'Failed to finalize Strava connection.') };
+    }
+}
