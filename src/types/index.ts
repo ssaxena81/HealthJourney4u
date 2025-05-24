@@ -1,4 +1,3 @@
-
 import { z } from 'zod';
 
 // --- Password Policy ---
@@ -134,6 +133,7 @@ export interface FitbitApiCallStats {
   dailyActivitySummary?: FitbitApiCallStatDetail;
   heartRateTimeSeries?: FitbitApiCallStatDetail;
   sleepData?: FitbitApiCallStatDetail;
+  swimmingData?: FitbitApiCallStatDetail;
   // Add other Fitbit endpoints here if they need rate limiting
 }
 
@@ -211,6 +211,7 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Fitbit Daily Summary Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Fitbit Heart Rate Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Fitbit Sleep Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
+  { feature: "Fitbit Swimming Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
 ];
 
 // For admin-managed dropdowns (mocked for now)
@@ -272,7 +273,7 @@ export interface FitbitHeartRateFirestore {
 }
 
 export interface FitbitSleepLogFirestore {
-  dateOfSleep: string; // YYYY-MM-DD, also the document ID for the main sleep log document
+  dateOfSleep: string; // YYYY-MM-DD, document ID for the sleep log
   logId: number; // Fitbit's unique ID for this sleep log
   startTime: string; // ISO 8601
   endTime: string; // ISO 8601
@@ -280,7 +281,7 @@ export interface FitbitSleepLogFirestore {
   minutesToFallAsleep: number;
   minutesAsleep: number;
   minutesAwake: number;
-  minutesInBed: number;
+  timeInBed: number; // Fitbit API provides this (corrected from minutesInBed)
   efficiency: number; // Sleep efficiency score (0-100)
   type: 'stages' | 'classic'; // Type of sleep log
   levels?: { // Present if type is 'stages'
@@ -289,18 +290,36 @@ export interface FitbitSleepLogFirestore {
       light?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
       rem?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
       wake?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
+      // For classic sleep (if needed)
+      asleep?: { count: number; minutes: number };
+      awake?: { count: number; minutes: number };
+      restless?: { count: number; minutes: number };
     };
     data: Array<{
       dateTime: string; // ISO 8601 timestamp of the level
-      level: 'deep' | 'light' | 'rem' | 'wake' | 'asleep' | 'awake' | 'restless'; // 'asleep', 'awake', 'restless' for classic
+      level: 'deep' | 'light' | 'rem' | 'wake' | 'asleep' | 'awake' | 'restless';
       seconds: number; // Duration of this stage in seconds
     }>;
     shortData?: Array<{ // Sometimes present for short sleep periods
         dateTime: string;
-        level: 'wake';
+        level: 'wake' | 'deep' | 'light' | 'rem' | 'asleep' | 'awake' | 'restless'; // Ensure all possible levels are covered
         seconds: number;
     }>;
   };
   lastFetched: string; // ISO string
   dataSource: 'fitbit';
+}
+
+export interface FitbitSwimmingActivityFirestore {
+  logId: number; // Fitbit's unique activity log ID, also the document ID in Firestore subcollection
+  activityName: string; // Should be "Swim"
+  startTime: string; // ISO 8601
+  duration: number; // milliseconds
+  calories: number;
+  distance?: number; // meters or yards, if available
+  distanceUnit?: 'Meter' | 'Yard' | 'Kilometer' | 'Mile'; // if available
+  pace?: number; // seconds per 100m or 100yd, if available
+  lastFetched: string; // ISO string
+  dataSource: 'fitbit';
+  // You might add more fields like poolLengths, swimStrokes if Fitbit API provides them for specific activities
 }
