@@ -1,3 +1,4 @@
+
 import { z } from 'zod';
 
 // --- Password Policy ---
@@ -33,7 +34,7 @@ export interface BaseHealthEntry {
   type: HealthMetricType;
   title: string;
   notes?: string;
-  source?: 'manual' | 'quest' | 'uhc' | 'fitbit';
+  source?: 'manual' | 'quest' | 'uhc' | 'fitbit' | 'strava';
 }
 
 export interface WalkingEntry extends BaseHealthEntry {
@@ -120,7 +121,7 @@ export const healthMetricDisplayNames: Record<HealthMetricType, string> = {
   condition: 'Condition',
 };
 
-// --- New Types for Profile and Authentication ---
+// --- User Profile and Authentication Types ---
 
 export type SubscriptionTier = 'free' | 'silver' | 'gold' | 'platinum';
 
@@ -134,7 +135,16 @@ export interface FitbitApiCallStats {
   heartRateTimeSeries?: FitbitApiCallStatDetail;
   sleepData?: FitbitApiCallStatDetail;
   swimmingData?: FitbitApiCallStatDetail;
-  // Add other Fitbit endpoints here if they need rate limiting
+}
+
+export interface StravaApiCallStatDetail {
+  lastCalledAt?: string; // ISO string
+  callCountToday?: number;
+}
+
+export interface StravaApiCallStats {
+  activities?: StravaApiCallStatDetail;
+  // Add other Strava endpoints here if they need separate rate limiting
 }
 
 export interface UserProfile {
@@ -163,8 +173,6 @@ export interface UserProfile {
   connectedFitnessApps: Array<{
     id: string; // e.g., 'fitbit', 'strava' (identifier for the service)
     name: string; // e.g., 'Fitbit', 'Strava' (display name)
-    // OAuth tokens or sensitive connection details are stored securely on the server,
-    // not directly in this client-accessible profile.
     connectedAt: string; // ISO 8601 format - when the connection was established
   }>;
 
@@ -184,8 +192,9 @@ export interface UserProfile {
     connectedAt: string; // ISO 8601 format
   }>;
 
-  // Fitbit API Call Statistics for Rate Limiting
+  // API Call Statistics for Rate Limiting
   fitbitApiCallStats?: FitbitApiCallStats;
+  stravaApiCallStats?: StravaApiCallStats;
 }
 
 export const subscriptionTiers: SubscriptionTier[] = ['free', 'silver', 'gold', 'platinum'];
@@ -212,6 +221,7 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Fitbit Heart Rate Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Fitbit Sleep Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Fitbit Swimming Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
+  { feature: "Strava Activity Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
 ];
 
 // For admin-managed dropdowns (mocked for now)
@@ -273,36 +283,35 @@ export interface FitbitHeartRateFirestore {
 }
 
 export interface FitbitSleepLogFirestore {
-  dateOfSleep: string; // YYYY-MM-DD, document ID for the sleep log
-  logId: number; // Fitbit's unique ID for this sleep log
+  dateOfSleep: string; // YYYY-MM-DD
+  logId: number; // Fitbit's unique ID for this sleep log, use as document ID in subcollection
   startTime: string; // ISO 8601
   endTime: string; // ISO 8601
   duration: number; // Total duration in milliseconds
   minutesToFallAsleep: number;
   minutesAsleep: number;
   minutesAwake: number;
-  timeInBed: number; // Fitbit API provides this (corrected from minutesInBed)
+  timeInBed: number;
   efficiency: number; // Sleep efficiency score (0-100)
   type: 'stages' | 'classic'; // Type of sleep log
-  levels?: { // Present if type is 'stages'
+  levels?: {
     summary: {
       deep?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
       light?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
       rem?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
       wake?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
-      // For classic sleep (if needed)
-      asleep?: { count: number; minutes: number };
-      awake?: { count: number; minutes: number };
-      restless?: { count: number; minutes: number };
+      asleep?: { count: number; minutes: number }; // For classic
+      awake?: { count: number; minutes: number }; // For classic
+      restless?: { count: number; minutes: number }; // For classic
     };
     data: Array<{
       dateTime: string; // ISO 8601 timestamp of the level
       level: 'deep' | 'light' | 'rem' | 'wake' | 'asleep' | 'awake' | 'restless';
       seconds: number; // Duration of this stage in seconds
     }>;
-    shortData?: Array<{ // Sometimes present for short sleep periods
+    shortData?: Array<{
         dateTime: string;
-        level: 'wake' | 'deep' | 'light' | 'rem' | 'asleep' | 'awake' | 'restless'; // Ensure all possible levels are covered
+        level: 'wake' | 'deep' | 'light' | 'rem' | 'asleep' | 'awake' | 'restless';
         seconds: number;
     }>;
   };
@@ -311,9 +320,9 @@ export interface FitbitSleepLogFirestore {
 }
 
 export interface FitbitSwimmingActivityFirestore {
-  logId: number; // Fitbit's unique activity log ID, also the document ID in Firestore subcollection
+  logId: number; // Fitbit's unique activity log ID, use as document ID in subcollection
   activityName: string; // Should be "Swim"
-  startTime: string; // ISO 8601
+  startTime: string; // ISO 8601 (original startTime from activity log is HH:MM, needs to be combined with startDate)
   duration: number; // milliseconds
   calories: number;
   distance?: number; // meters or yards, if available
@@ -321,5 +330,27 @@ export interface FitbitSwimmingActivityFirestore {
   pace?: number; // seconds per 100m or 100yd, if available
   lastFetched: string; // ISO string
   dataSource: 'fitbit';
-  // You might add more fields like poolLengths, swimStrokes if Fitbit API provides them for specific activities
 }
+
+export interface StravaActivityFirestore {
+  id: number; // Strava activity ID, use as document ID in subcollection
+  type: 'Walk' | 'Run' | 'Hike' | 'Swim' | string; // Strava activity type
+  name: string;
+  distance: number; // In meters
+  movingTime: number; // In seconds
+  elapsedTime: number; // In seconds
+  totalElevationGain?: number; // In meters
+  startDate: string; // ISO 8601 format (UTC)
+  startDateLocal: string; // ISO 8601 format (local time)
+  timezone?: string; // e.g. "(GMT-08:00) America/Los_Angeles"
+  mapPolyline?: string; // Summary polyline for the map
+  averageSpeed?: number; // m/s
+  maxSpeed?: number; // m/s
+  averageHeartrate?: number; // bpm
+  maxHeartrate?: number; // bpm
+  calories?: number;
+  lastFetched: string; // ISO string
+  dataSource: 'strava';
+}
+
+    
