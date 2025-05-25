@@ -8,29 +8,21 @@ import FitnessConnections from '@/components/profile/fitness-connections';
 import DiagnosticsConnections from '@/components/profile/diagnostics-connections';
 import InsuranceConnections from '@/components/profile/insurance-connections';
 import ChangePasswordForm from '@/components/profile/change-password-form';
-import WalkingGoalsForm from '@/components/profile/walking-goals-form'; // Import new form
+import WalkingGoalsForm from '@/components/profile/walking-goals-form';
+import RunningGoalsForm from '@/components/profile/running-goals-form'; // Import new form
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
+import { Separator } from '@/components/ui/separator';
 
 export default function ProfilePage() {
   const { user, userProfile, loading, setUserProfile } = useAuth();
   const { toast } = useToast();
-  const [isSaving, setIsSaving] = useState(false);
+  // const [isSaving, setIsSaving] = useState(false); // Less relevant now
 
-  // This handleSaveProfile is a placeholder as each form now saves itself.
-  // It could be repurposed for a "Save All" if forms manage their state locally
-  // and expose data, but that's more complex.
-  const handleSaveProfile = async () => {
-    setIsSaving(true);
-    toast({ title: "Profile Update", description: "Each section now saves individually. This button is a placeholder." });
-    setTimeout(() => setIsSaving(false), 1000); 
-  };
-
-
-  if (loading || !user) { // Check for user only, userProfile might take a moment after user is available
+  if (loading || !user) { 
     return (
       <div className="flex min-h-screen items-center justify-center p-4">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -38,7 +30,6 @@ export default function ProfilePage() {
     );
   }
   
-  // If user is loaded but userProfile is still null, show loading for profile
   if (!userProfile) {
       return (
         <div className="flex min-h-screen items-center justify-center p-4">
@@ -79,22 +70,17 @@ export default function ProfilePage() {
         <TabsContent value="insurance">
           <InsuranceConnections userProfile={userProfile} onConnectionsUpdate={setUserProfile} />
         </TabsContent>
-        <TabsContent value="activity_goals">
+        <TabsContent value="activity_goals" className="space-y-6">
           <WalkingGoalsForm userProfile={userProfile} onProfileUpdate={setUserProfile} />
+          <Separator />
+          <RunningGoalsForm userProfile={userProfile} onProfileUpdate={setUserProfile} />
         </TabsContent>
          <TabsContent value="security">
           <ChangePasswordForm />
         </TabsContent>
       </Tabs>
       
-      {/* The global save button is less relevant now as forms save individually */}
-      {/* <div className="mt-8 flex justify-end">
-        <Button onClick={handleSaveProfile} disabled={isSaving}>
-          {isSaving ? 'Saving...' : 'Save All Profile Changes (Placeholder)'}
-        </Button>
-      </div> */}
     </div>
   );
 }
-
     
