@@ -388,7 +388,7 @@ export const mockInsuranceProviders: SelectableService[] = [
 export interface FitbitActivitySummaryFirestore {
     date: string; // YYYY-MM-DD, also the document ID
     steps?: number; 
-    distance?: number; // In km (as per current implementation, ensure consistency)
+    distance?: number; // In km (ensure consistency, but Fitbit API can vary based on user settings)
     caloriesOut?: number; 
     activeMinutes?: number; 
     lastFetched: string; // ISO string
@@ -451,16 +451,4 @@ export interface FitbitSleepLogFirestore {
   lastFetched: string; // ISO string
   dataSource: 'fitbit';
 }
-
-// This type was previously named FitbitSwimmingActivityFirestore, renamed for generality
-// It aligns with NormalizedActivityFirestore
-export interface StravaActivityFirestore extends NormalizedActivityFirestore {
-  dataSource: 'strava';
-  // Any Strava-specific fields can be added here if needed,
-  // but the goal is to primarily use NormalizedActivityFirestore fields.
-}
-
-// This type can be used for Google Fit specific normalized data too
-export interface GoogleFitActivityFirestore extends NormalizedActivityFirestore {
-  dataSource: 'google-fit';
-}
+```

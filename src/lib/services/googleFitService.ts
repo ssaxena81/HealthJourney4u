@@ -194,7 +194,13 @@ export async function listDataSources(accessToken: string): Promise<{ dataSource
  */
 export async function getAggregatedData(
   accessToken: string,
-  requestBody: any // Define a more specific type for this based on Google's spec
+  requestBody: {
+    aggregateBy: Array<{ dataTypeName: string; dataSourceId?: string }>;
+    bucketByTime?: { durationMillis: number; period?: { type: string; value: number; timeZoneId: string } };
+    startTimeMillis: number;
+    endTimeMillis: number;
+    // ... other aggregation parameters
+  }
 ): Promise<GoogleFitAggregateResponse> {
   console.log(`[GoogleFitService] Fetching aggregated data with body:`, JSON.stringify(requestBody));
   return googleFitApiRequest<GoogleFitAggregateResponse>(
@@ -205,18 +211,23 @@ export async function getAggregatedData(
   );
 }
 
+
 /**
  * Fetches sessions for the user within a specified time range.
  * @param accessToken The user's Google Fit access token.
  * @param startTimeIso ISO 8601 start time (e.g., "2023-10-01T00:00:00.000Z")
  * @param endTimeIso ISO 8601 end time (e.g., "2023-10-08T00:00:00.000Z")
  * @param activityType (Optional) Specific activity type number to filter sessions by.
+ * @param includeDeleted (Optional) If true, deleted sessions will be returned.
+ * @param pageToken (Optional) Token for fetching the next page of results.
  */
 export async function getSessions(
   accessToken: string,
   startTimeIso: string,
   endTimeIso: string,
-  activityType?: number
+  activityType?: number,
+  includeDeleted: boolean = false,
+  pageToken?: string
 ): Promise<GoogleFitListSessionsResponse> {
   console.log(`[GoogleFitService] Fetching sessions from ${startTimeIso} to ${endTimeIso}...`);
   const queryParams: Record<string, string> = {
@@ -225,6 +236,12 @@ export async function getSessions(
   };
   if (activityType !== undefined) {
     queryParams.activityType = String(activityType);
+  }
+  if (includeDeleted) {
+    queryParams.includeDeleted = "true";
+  }
+  if (pageToken) {
+    queryParams.pageToken = pageToken;
   }
   
   return googleFitApiRequest<GoogleFitListSessionsResponse>(
@@ -236,33 +253,19 @@ export async function getSessions(
   );
 }
 
-// Specific function to get activity sessions (walking, running, hiking, swimming)
+// Specific function to get activity sessions for normalization
 export async function getGoogleFitActivitySessions(
   accessToken: string,
   startTimeIso: string,
   endTimeIso: string
 ): Promise<GoogleFitSession[]> {
-  console.log(`[GoogleFitService] Fetching activity sessions (walk, run, hike, swim) from ${startTimeIso} to ${endTimeIso}...`);
+  console.log(`[GoogleFitService] Fetching activity sessions (all types initially) from ${startTimeIso} to ${endTimeIso}...`);
   
-  const relevantActivityTypes = [
-    7, // Walking
-    8, // Running
-    // Hiking can be multiple types:
-    113, // Hiking
-    114, // Light hiking
-    115, // Vigorous hiking
-    // Could also include other types like 25 (Trail running) if desired
-    57, // Swimming
-    // Add more types as needed
-  ];
-
-  // Google Fit API /sessions endpoint doesn't support filtering by multiple activityTypes in one call.
-  // We need to fetch all sessions and then filter, or make multiple calls if that's more efficient/necessary.
-  // For simplicity, fetch all and filter. If performance is an issue, one call per type might be needed.
+  // Fetch all sessions in the time range, filtering will happen in the server action
+  // as Google Fit API doesn't support filtering by a list of activityTypes in one go.
   const response = await getSessions(accessToken, startTimeIso, endTimeIso);
   
-  if (response && response.session) {
-    return response.session.filter(s => relevantActivityTypes.includes(s.activityType));
-  }
-  return [];
+  return response.session || [];
 }
+
+```
