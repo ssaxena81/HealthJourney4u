@@ -34,7 +34,7 @@ Welcome to Health Timeline!
 
 4. Subscription Tiers & Payments
    The App may offer different subscription tiers ("Free", "Silver", "Gold", "Platinum"). Features available may vary by tier.
-   For paid tiers, you agree to pay all applicable fees as described on the App for the services you select. All fees are in [Currency, e.g., USD] and are non-refundable except as required by law or as explicitly stated.
+   For paid tiers, you agree to pay all applicable fees as described on the App for the services you select. All fees are in USD (US Dollars) and are non-refundable except as required by law or as explicitly stated.
    We reserve the right to change subscription fees at any time.
 
 5. Data Privacy
@@ -45,26 +45,26 @@ Welcome to Health Timeline!
    You agree not to attempt to gain unauthorized access to the App or any networks, servers or computer systems connected to the App.
 
 7. Intellectual Property
-   The App and its original content (excluding content provided by users), features, and functionality are and will remain the exclusive property of [Your Company Name] and its licensors.
+   The App and its original content (excluding content provided by users), features, and functionality are and will remain the exclusive property of HealthJourney4u and its licensors.
 
 8. Connections to Third-Party Services
-   The App allows you to connect to third-party services (e.g., fitness trackers, diagnostic labs, insurance providers). You acknowledge that [Your Company Name] is not responsible for the data, content, or practices of these third-party services. Your interaction with any third-party service is subject to that service's own terms and policies.
+   The App allows you to connect to third-party services (e.g., fitness trackers, diagnostic labs, insurance providers). You acknowledge that HealthJourney4u is not responsible for the data, content, or practices of these third-party services. Your interaction with any third-party service is subject to that service's own terms and policies.
 
 9. Disclaimer of Warranties
-   The App is provided on an "AS IS" and "AS AVAILABLE" basis. [Your Company Name] makes no warranties, expressed or implied, and hereby disclaims and negates all other warranties including, without limitation, implied warranties or conditions of merchantability, fitness for a particular purpose, or non-infringement of intellectual property or other violation of rights.
+   The App is provided on an "AS IS" and "AS AVAILABLE" basis. HealthJourney4u makes no warranties, expressed or implied, and hereby disclaims and negates all other warranties including, without limitation, implied warranties or conditions of merchantability, fitness for a particular purpose, or non-infringement of intellectual property or other violation of rights.
 
 10. Limitation of Liability
-    In no event shall [Your Company Name], nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, special, consequential or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from (i) your access to or use of or inability to access or use the App; (ii) any conduct or content of any third party on the App; (iii) any content obtained from the App; and (iv) unauthorized access, use or alteration of your transmissions or content, whether based on warranty, contract, tort (including negligence) or any other legal theory, whether or not we have been informed of the possibility of such damage, and even if a remedy set forth herein is found to have failed of its essential purpose.
+    In no event shall HeaalthJourney4u, nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, special, consequential or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from (i) your access to or use of or inability to access or use the App; (ii) any conduct or content of any third party on the App; (iii) any content obtained from the App; and (iv) unauthorized access, use or alteration of your transmissions or content, whether based on warranty, contract, tort (including negligence) or any other legal theory, whether or not we have been informed of the possibility of such damage, and even if a remedy set forth herein is found to have failed of its essential purpose.
 
 11. Changes to Terms and Conditions
     We reserve the right, at our sole discretion, to modify or replace these T&C at any time. If a revision is material, we will provide at least 30 days' notice prior to any new terms taking effect. What constitutes a material change will be determined at our sole discretion.
     By continuing to access or use our App after any revisions become effective, you agree to be bound by the revised terms. If you do not agree to the new terms, you are no longer authorized to use the App.
 
 12. Governing Law
-    These T&C shall be governed and construed in accordance with the laws of [Your Jurisdiction, e.g., State of California, USA], without regard to its conflict of law provisions.
+    These T&C shall be governed and construed in accordance with the laws of State of Connecticut, USA, without regard to its conflict of law provisions.
 
 13. Contact Us
-    If you have any questions about these Terms, please contact us at [Your Support Email Address].
+    If you have any questions about these Terms, please contact us at info@healthjourney4u.com.
 `;
 const LATEST_TERMS_VERSION = "1.0"; // Example version
 
