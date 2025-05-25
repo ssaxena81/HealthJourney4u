@@ -130,15 +130,15 @@ export interface AppointmentEntry extends BaseHealthEntry {
 
 export interface MedicationEntry extends BaseHealthEntry {
   type: 'medication';
-  medicationName: string;
+  medicationName: string; // Overrides title for specific use
   dosage: string;
   frequency: string;
 }
 
 export interface ConditionEntry extends BaseHealthEntry {
   type: 'condition';
-  conditionName: string;
-  diagnosisDate?: string;
+  conditionName: string; // Overrides title
+  diagnosisDate?: string; // ISO 8601
   status?: 'active' | 'resolved' | 'chronic';
 }
 
@@ -286,7 +286,6 @@ export const AVAILABLE_DASHBOARD_METRICS: DashboardMetricConfig[] = [
   { id: DashboardMetricId.RESTING_HEART_RATE, label: 'Average Resting Heart Rate', unit: 'bpm', defaultMaxValue: 100 }, 
   { id: DashboardMetricId.AVG_WORKOUT_DURATION, label: 'Average Workout Duration', unit: 'min', defaultMaxValue: 90 },
   { id: DashboardMetricId.TOTAL_WORKOUTS, label: 'Total Workouts in Period', unit: 'sessions', defaultMaxValue: 10 },
-  // { id: DashboardMetricId.AVG_HEART_RATE_VARIABILITY, label: 'Avg. Heart Rate Variability', unit: 'ms', defaultMaxValue: 100 },
 ];
 // --- End Dashboard Metric Selection Types ---
 
@@ -298,7 +297,8 @@ export interface RadarDataPoint { // For the main dashboard radar chart
   fullMark: number; // Usually 100 for normalized radar charts
 }
 
-export interface PerformanceRadarChartDataPoint { // For individual exercise/sleep pages
+// For individual exercise/sleep pages
+export interface PerformanceRadarChartDataPoint {
   metric: string;
   minGoalNormalized?: number; // Normalized min goal (0-100)
   actualNormalized: number;   // Normalized actual performance (0-100)
@@ -314,6 +314,7 @@ export interface PerformanceRadarChartDataPoint { // For individual exercise/sle
 export interface UserProfile {
   id: string; 
 
+  // Part 1: Demographics
   firstName?: string; 
   middleInitial?: string; 
   lastName?: string; 
@@ -321,7 +322,8 @@ export interface UserProfile {
   email: string; 
   cellPhone?: string; 
   mfaMethod?: 'email' | 'sms'; 
-  mfaCodeAttempt?: { code: string; expiresAt: string; }; // For temporary MFA code storage
+  mfaCodeAttempt?: { code: string; expiresAt: string; };
+  passwordResetCodeAttempt?: { code: string; expiresAt: string; }; // For forgot password
   isAgeCertified?: boolean; 
 
   lastPasswordChangeDate: string; 
@@ -388,7 +390,8 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Fitbit Swimming Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Fitbit Logged Activities Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Strava Activity Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
-  { feature: "Google Fit Activity Fetch", free: "1/day (sessions) + 5/day (metrics)", silver: "1/day (sessions) + 5/day (metrics)", gold: "1/day (sessions) + 10/day (metrics)", platinum: "3/day (sessions) + 20/day (metrics)" },
+  { feature: "Google Fit Session Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
+  { feature: "Google Fit Metric Aggregation", free: "5/day", silver: "5/day", gold: "10/day", platinum: "20/day" },
   { feature: "Sync Connected Apps", free: "Auto (1/24h) + Manual (respects individual limits)", silver: "Auto (1/24h) + Manual (respects individual limits)", gold: "Auto (1/24h) + Manual (respects individual limits)", platinum: "Auto (1/24h) + Manual (respects individual limits)" },
 ];
 
@@ -398,13 +401,9 @@ export interface SelectableService {
 }
 
 export const mockFitnessApps: SelectableService[] = [
-  // { id: 'apple_health', name: 'Apple Health' }, // Requires native companion app
   { id: 'fitbit', name: 'Fitbit' },
   { id: 'strava', name: 'Strava' },
   { id: 'google-fit', name: 'Google Fit' },
-  // { id: 'nike_run_club', name: 'Nike Run Club' }, // Add when ready for integration
-  // { id: 'myfitnesspal', name: 'MyFitnessPal' }, // Add when ready
-  // { id: 'fiton', name: 'FitOn Workouts' }, // Add when ready
 ];
 
 export const mockDiagnosticServices: SelectableService[] = [
@@ -488,8 +487,9 @@ export interface FitbitSleepLogFirestore {
   dataSource: 'fitbit';
 }
 
-export interface StravaActivityFirestore extends Omit<NormalizedActivityFirestore, 'dataSource' | 'id' | 'userId'> {
-  dataSource: 'strava';
-}
+// StravaActivityFirestore was removed as we are using NormalizedActivityFirestore
+// It's good practice to keep types centralized and normalized.
+
+// GoogleFitActivityFirestore was removed for the same reason.
+// NormalizedActivityFirestore serves as the common structure.
     
-```

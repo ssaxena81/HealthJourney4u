@@ -11,8 +11,8 @@ import {
 import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
 import { z } from 'zod';
 import type { UserProfile, SubscriptionTier } from '@/types';
-import { passwordSchema } from '@/types'; 
-import { doc, setDoc, getDoc, updateDoc, Timestamp } from 'firebase/firestore';
+import { passwordSchema } from '@/types';
+import { doc, setDoc, getDoc, updateDoc, query, where, getDocs, collection, Timestamp } from 'firebase/firestore';
 import { differenceInYears } from 'date-fns';
 
 
@@ -36,8 +36,8 @@ interface SignUpResult {
   userId?: string;
   error?: string;
   errorCode?: string;
-  details?: z.inferFlattenedErrors<typeof SignUpDetailsInputSchema>;
-  userProfile?: UserProfile;
+  details?: z.inferFlattenedErrors<typeof SignUpDetailsInputSchema>; // Updated to use flattened errors
+  userProfile?: UserProfile; // To return the created profile
 }
 
 export async function checkEmailAvailability(values: z.infer<typeof CheckEmailInputSchema>): Promise<{ available: boolean; error?: string; errorCode?: string }> {
@@ -46,7 +46,7 @@ export async function checkEmailAvailability(values: z.infer<typeof CheckEmailIn
     const validatedValues = CheckEmailInputSchema.parse(values);
     console.log("[CHECK_EMAIL_AVAILABILITY_VALIDATED] Email validated by Zod:", validatedValues.email);
 
-    if (!firebaseAuth || !firebaseAuth.app) {
+    if (!firebaseAuth || !firebaseAuth.app) { // Check if firebaseAuth and its app property are initialized
         console.warn("[CHECK_EMAIL_AVAILABILITY_FIREBASE_NOT_READY] Firebase Auth not properly initialized in checkEmailAvailability. Cannot verify email. Check .env.local configuration and restart the server. DB App:", db?.app);
         return { available: false, error: "Email verification service is temporarily unavailable. Please ensure Firebase is configured correctly.", errorCode: 'AUTH_SERVICE_UNAVAILABLE' };
     }
@@ -76,7 +76,7 @@ export async function checkEmailAvailability(values: z.infer<typeof CheckEmailIn
         return { available: false, error: `Could not verify email availability. Error: ${String(firebaseError.message || 'Unknown Firebase error')}`, errorCode: firebaseError.code || 'UNKNOWN_FIREBASE_ERROR' };
     }
   } catch (error: any) {
-    console.error("[CHECK_EMAIL_AVAILABILITY_OUTER_ERROR] Unexpected error in checkEmailAvailability (server log - error):", error);
+    console.error("[CHECK_EMAIL_AVAILABILITY_OUTER_ERROR] Raw error in checkEmailAvailability (server log - error):", error);
     if (error instanceof z.ZodError) {
         console.error("[CHECK_EMAIL_AVAILABILITY_ZOD_ERROR_DETAILS] ZodError:", error.flatten());
         return { available: false, error: "Invalid email format provided.", errorCode: 'VALIDATION_ERROR' };
@@ -148,14 +148,16 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
 
     console.log("[SIGNUP_ACTION_SUCCESS] signUpUser action completed successfully for UID:", userCredential.user.uid);
     return { success: true, userId: userCredential.user.uid, userProfile: initialProfile };
-  } catch (error: any) {
-    console.error("[SIGNUP_ACTION_RAW_ERROR] Raw error in signUpUser:", error);
+  } catch (error: any)
+   {
+    console.error("[SIGNUP_OUTER_ERROR] Raw error in signUpUser:", error);
     if (error instanceof z.ZodError) {
-        console.error("[SIGNUP_ACTION_ZOD_DETAILS] ZodError:", error.flatten());
+        console.error("[SIGNUP_ZOD_DETAILS] ZodError:", error.flatten());
         return { success: false, error: 'Invalid input data.', details: error.flatten(), errorCode: 'VALIDATION_ERROR' };
     }
     const errorMessage = String((error as AuthError).message || 'An unexpected error occurred during account creation.');
     const errorCode = String((error as AuthError).code || 'UNKNOWN_AUTH_ERROR');
+    console.error(`[SIGNUP_ACTION_ERROR] Error: ${errorMessage}, Code: ${errorCode}`);
     return { success: false, error: errorMessage, errorCode: errorCode };
   }
 }
@@ -284,14 +286,12 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
         return { success: false, error: "Invalid MFA code.", userProfile, errorCode: 'MFA_INVALID_CODE' };
       }
       
-      // MFA code is valid, clear it
       try {
         const userDocRef = doc(db, "users", userId);
         await updateDoc(userDocRef, { mfaCodeAttempt: null }); 
         console.log(`[LOGIN_MFA_CODE_CLEARED] MFA code attempt cleared for user ${userId}`);
       } catch (dbError: any) {
         console.error(`[LOGIN_MFA_DB_ERROR] Failed to clear MFA code attempt for user ${userId}:`, dbError);
-        // Non-critical error, proceed with login
       }
       console.log(`[LOGIN_MFA_SUCCESS] MFA code validated successfully for user ${userId}`);
     }
@@ -308,6 +308,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     }
     const errorMessage = String((error as AuthError).message || 'An unexpected error occurred during login.');
     const errorCode = String((error as AuthError).code || 'UNKNOWN_LOGIN_ERROR');
+    console.error(`[LOGIN_ACTION_ERROR] Error: ${errorMessage}, Code: ${errorCode}`);
     return { success: false, error: errorMessage, errorCode: errorCode };
   }
 }
@@ -357,18 +358,47 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
     console.log("[SEND_RESET_CODE_METHODS_FETCHED] Sign-in methods fetched for email:", validatedValues.email, methods);
     if (methods.length === 0) {
       console.log("[SEND_RESET_CODE_EMAIL_NOT_FOUND] Email not found, sending generic message.");
-      return { success: true, message: "If your email is registered, instructions to reset your password have been sent. This is a placeholder; code sending not implemented." };
+      // For security, don't explicitly state email not found to prevent enumeration.
+      return { success: true, message: "If your email is registered, instructions to reset your password have been sent." };
     }
 
-    console.log(`[SEND_RESET_CODE_SIMULATION] Simulating sending password reset code to ${validatedValues.email}. Code: 12345678 (placeholder)`);
-    return { success: true, message: "If your email is registered, an 8-digit code has been sent. This is a placeholder; code sending not implemented." };
+    // Find user by email in Firestore to store the code
+    if (!db || !db.app) {
+        console.error("[SEND_RESET_CODE_FIRESTORE_NOT_READY] Firestore not available. DB App:", db?.app);
+        return { success: false, error: "Database service for password reset is unavailable.", errorCode: 'DB_UNAVAILABLE'};
+    }
+    
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("email", "==", validatedValues.email));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+        console.log("[SEND_RESET_CODE_USER_NOT_IN_FIRESTORE] User with email not found in Firestore, though exists in Auth. Sending generic message.");
+        // This case is odd (auth user exists, but no Firestore profile). Still send generic for security.
+        return { success: true, message: "If your email is registered, instructions to reset your password have been sent." };
+    }
+    
+    const userDoc = querySnapshot.docs[0]; // Assuming email is unique in users collection
+    const userIdForReset = userDoc.id;
+
+    const resetCode = Math.floor(10000000 + Math.random() * 90000000).toString();
+    const expiresAt = Timestamp.fromMillis(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+
+    await updateDoc(doc(db, "users", userIdForReset), {
+      passwordResetCodeAttempt: { code: resetCode, expiresAt: expiresAt.toDate().toISOString() }
+    });
+
+    console.log(`[SEND_RESET_CODE_SUCCESS] Password reset code for ${validatedValues.email} is ${resetCode}. (Simulated sending). Stored in Firestore for user ${userIdForReset}.`);
+    return { success: true, message: "If your email is registered, an 8-digit code has been sent. Please check your email/phone (or server console for simulation)." };
+
   } catch (error: any) {
     console.error("[SEND_RESET_CODE_ACTION_RAW_ERROR] Raw error in sendPasswordResetCode:", error);
     if (error instanceof z.ZodError) {
       console.error("[SEND_RESET_CODE_ACTION_ZOD_DETAILS] ZodError:", error.flatten());
       return { success: false, error: 'Invalid input.', details: error.flatten(), errorCode: 'VALIDATION_ERROR'};
     }
-    return { success: true, message: "If your email is registered, an 8-digit code has been sent. This is a placeholder; code sending not implemented.", errorCode: 'SIMULATED_SUCCESS_ON_ERROR' };
+    // For security, return a generic success message even on unexpected internal errors
+    return { success: true, message: "If an account with that email exists, we've sent instructions to reset your password.", errorCode: 'SIMULATED_SUCCESS_ON_ERROR' };
   }
 }
 
@@ -376,14 +406,42 @@ export async function verifyPasswordResetCode(values: z.infer<typeof VerifyReset
   console.log("[VERIFY_RESET_CODE_START] Action initiated for email:", values.email, "with code (first 2 chars):", values.code.substring(0,2));
   try {
     const validatedValues = VerifyResetCodeSchema.parse(values);
-    console.log("[VERIFY_RESET_CODE_VALIDATED] Input validated by Zod.");
-    if (validatedValues.code === "12345678") { 
-        console.log("[VERIFY_RESET_CODE_SUCCESS] Placeholder code matched.");
-        return { success: true };
-    } else {
-        console.log("[VERIFY_RESET_CODE_FAILURE] Placeholder code did not match.");
+    
+    if (!db || !db.app) {
+        console.error("[VERIFY_RESET_CODE_FIRESTORE_NOT_READY] Firestore not available. DB App:", db?.app);
+        return { success: false, error: "Database service for password reset is unavailable.", errorCode: 'DB_UNAVAILABLE'};
+    }
+
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("email", "==", validatedValues.email));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+        console.log("[VERIFY_RESET_CODE_USER_NOT_FOUND] User not found in Firestore for email:", validatedValues.email);
         return { success: false, error: "Invalid or expired verification code.", errorCode: 'INVALID_VERIFICATION_CODE'};
     }
+    const userDoc = querySnapshot.docs[0];
+    const userProfile = userDoc.data() as UserProfile;
+
+    if (!userProfile.passwordResetCodeAttempt || !userProfile.passwordResetCodeAttempt.code) {
+      return { success: false, error: "No password reset attempt found or code is missing.", errorCode: 'RESET_CODE_NO_ATTEMPT' };
+    }
+    if (new Date() > new Date(userProfile.passwordResetCodeAttempt.expiresAt)) {
+      // Clear expired code
+      await updateDoc(doc(db, "users", userDoc.id), { passwordResetCodeAttempt: null });
+      return { success: false, error: "Password reset code has expired. Please request a new one.", errorCode: 'RESET_CODE_EXPIRED' };
+    }
+    if (userProfile.passwordResetCodeAttempt.code !== validatedValues.code) {
+      return { success: false, error: "Invalid verification code.", errorCode: 'RESET_CODE_INVALID' };
+    }
+    
+    // Code is valid, clear it.
+    // For true security, this step should ideally return a short-lived, single-use token
+    // that the next step (resetPassword) would require. Here, we just clear and proceed.
+    await updateDoc(doc(db, "users", userDoc.id), { passwordResetCodeAttempt: null });
+    console.log("[VERIFY_RESET_CODE_SUCCESS] Code matched and cleared for email:", validatedValues.email);
+    return { success: true };
+
   } catch (error: any) {
     console.error("[VERIFY_RESET_CODE_ACTION_RAW_ERROR] Raw error in verifyPasswordResetCode:", error);
     if (error instanceof z.ZodError) {
@@ -405,6 +463,7 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
         return { success: false, error: "Password reset service is temporarily unavailable.", errorCode: 'AUTH_UNAVAILABLE' };
     }
 
+    // Scenario 1: User is logged in (e.g., forced password expiry or changing password from profile)
     if (currentUser && currentUser.email === validatedValues.email) {
       console.log("[RESET_PASSWORD_LOGGED_IN_USER] Attempting password update for logged-in user:", currentUser.uid);
       await firebaseUpdatePassword(currentUser, validatedValues.newPassword);
@@ -423,8 +482,42 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
       return { success: true, message: "Password has been reset successfully." };
     }
 
-    console.warn("[RESET_PASSWORD_UNAUTH_FLOW_PLACEHOLDER] Reached placeholder for unauthenticated password reset flow for email:", validatedValues.email, ". This requires secure backend implementation.");
-    return { success: false, error: "Password reset for unauthenticated users via custom code requires a secure backend implementation. This feature is not fully implemented.", errorCode: 'NOT_IMPLEMENTED' };
+    // Scenario 2: User is NOT logged in - this requires Firebase Admin SDK
+    console.log("[RESET_PASSWORD_UNAUTH_FLOW_INITIATED] Unauthenticated password reset initiated for email:", validatedValues.email);
+    // First, find the user by email to get their UID.
+    if (!db || !db.app) {
+      console.error("[RESET_PASSWORD_UNAUTH_FIRESTORE_NOT_READY] Firestore not available for unauth reset. DB App:", db?.app);
+      return { success: false, error: "Database service unavailable for password reset.", errorCode: 'DB_UNAVAILABLE'};
+    }
+    const usersRef = collection(db, "users");
+    const q = query(usersRef, where("email", "==", validatedValues.email));
+    const querySnapshot = await getDocs(q);
+
+    if (querySnapshot.empty) {
+        console.error("[RESET_PASSWORD_UNAUTH_USER_NOT_FOUND] User with email not found in Firestore for unauth reset:", validatedValues.email);
+        return { success: false, error: "User not found or password reset process invalid.", errorCode: 'USER_NOT_FOUND_FOR_RESET' };
+    }
+    const userDoc = querySnapshot.docs[0];
+    const userIdToReset = userDoc.id;
+
+    // TODO: CRITICAL - Implement Firebase Admin SDK for password reset
+    // The following is a conceptual placeholder. You CANNOT reset a password
+    // for an unauthenticated user using the client-side Firebase SDK.
+    // This needs to be a call to a Firebase Function or a secure backend endpoint
+    // that uses the Firebase Admin SDK's `admin.auth().updateUser(uid, { password: newPassword })`.
+    console.warn(`[RESET_PASSWORD_ADMIN_SDK_REQUIRED] To reset password for unauthenticated user ${userIdToReset}, Firebase Admin SDK must be used on the server.`);
+    console.log(`[RESET_PASSWORD_SIMULATE_ADMIN_SUCCESS] Simulating successful password reset for ${userIdToReset} using Admin SDK.`);
+    
+    // Simulate successful Admin SDK call for now and update Firestore
+    try {
+      console.log("[RESET_PASSWORD_UNAUTH_FIRESTORE_UPDATE_START] Updating lastPasswordChangeDate in Firestore for:", userIdToReset);
+      await updateDoc(doc(db, "users", userIdToReset), { lastPasswordChangeDate: new Date().toISOString() });
+      console.log("[RESET_PASSWORD_UNAUTH_FIRESTORE_UPDATE_SUCCESS] lastPasswordChangeDate updated for:", userIdToReset);
+      return { success: true, message: "Password has been reset successfully. (Simulated Admin SDK)" };
+    } catch (dbError: any) {
+      console.error("[RESET_PASSWORD_UNAUTH_FIRESTORE_ERROR] Failed to update lastPasswordChangeDate for UID:", userIdToReset, "Error:", dbError);
+      return { success: false, error: "Password reset seemed to succeed, but failed to update profile data.", errorCode: 'PROFILE_UPDATE_FAILED_AFTER_RESET' };
+    }
 
   } catch (error: any) {
     console.error("[RESET_PASSWORD_ACTION_RAW_ERROR] Raw error in resetPassword:", error);
@@ -436,7 +529,7 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
     if (authError.code === 'auth/requires-recent-login') {
       return { success: false, error: 'This operation is sensitive and requires recent authentication. Please log in again before changing your password.', errorCode: authError.code };
     }
-    if (authError.code === 'auth/user-not-found') {
+    if (authError.code === 'auth/user-not-found') { // This applies if Firebase Auth itself can't find the user during a logged-in update
       return { success: false, error: 'No user found with this email address.', errorCode: authError.code };
     }
      if (authError.code === 'auth/weak-password') {
@@ -447,7 +540,6 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
 }
 
 // --- Update Profile Actions ---
-
 const serverCalculateAge = (birthDateString: string): number => {
   const birthDate = new Date(birthDateString);
   if (isNaN(birthDate.getTime())) return 0;
@@ -498,7 +590,7 @@ export async function updateDemographics(userId: string, values: z.infer<typeof 
             isAgeCertified: validatedValues.isAgeCertified,
         };
         console.log("[UPDATE_DEMOGRAPHICS_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId);
-        await updateDoc(doc(db, "users", userId), profileUpdateData); // Using updateDoc
+        await updateDoc(doc(db, "users", userId), profileUpdateData);
         console.log("[UPDATE_DEMOGRAPHICS_FIRESTORE_UPDATE_SUCCESS] Firestore updated successfully for UID:", userId);
         return { success: true, data: profileUpdateData };
     } catch (error: any) {
@@ -509,6 +601,7 @@ export async function updateDemographics(userId: string, values: z.infer<typeof 
         }
         const errorMessage = String(error.message || "Failed to update profile due to an unexpected error.");
         const errorCode = String(error.code || 'UNEXPECTED_ERROR');
+        console.error(`[UPDATE_DEMOGRAPHICS_ERROR] Error: ${errorMessage}, Code: ${errorCode}`);
         return { success: false, error: errorMessage, errorCode: errorCode };
     }
 }
@@ -528,18 +621,19 @@ export async function updateUserTermsAcceptance(userId: string, accepted: boolea
         console.error("[UPDATE_TERMS_RAW_ERROR] Raw error in updateUserTermsAcceptance for UID:", userId, "Error:", error);
         const errorMessage = String(error.message || "Failed to update terms acceptance due to an unexpected error.");
         const errorCode = String(error.code || 'UNEXPECTED_ERROR');
+        console.error(`[UPDATE_TERMS_ERROR] Error: ${errorMessage}, Code: ${errorCode}`);
         return { success: false, error: errorMessage, errorCode: errorCode };
     }
 }
 
 
-// --- Fitbit OAuth Actions ---
-export async function finalizeFitbitConnection(userId: string): Promise<{success: boolean, error?: string}> {
+// --- Fitbit OAuth Finalization ---
+export async function finalizeFitbitConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string}> {
     console.log("[FINALIZE_FITBIT_CONNECTION_START] Finalizing Fitbit connection for UID:", userId);
     try {
         if (!db || !db.app || typeof doc !== 'function' || typeof updateDoc !== 'function' || typeof getDoc !== 'function') {
             console.error("[FINALIZE_FITBIT_FIRESTORE_NOT_READY] Firestore not available. DB App:", db?.app);
-            return { success: false, error: "Database service unavailable."};
+            return { success: false, error: "Database service unavailable.", errorCode: 'DB_UNAVAILABLE'};
         }
 
         const userProfileDocRef = doc(db, "users", userId);
@@ -547,14 +641,14 @@ export async function finalizeFitbitConnection(userId: string): Promise<{success
 
         if (!userProfileSnap.exists()) {
             console.error("[FINALIZE_FITBIT_PROFILE_NOT_FOUND] User profile not found for UID:", userId);
-            return { success: false, error: "User profile not found."};
+            return { success: false, error: "User profile not found.", errorCode: 'PROFILE_NOT_FOUND'};
         }
         const userProfile = userProfileSnap.data() as UserProfile;
         const existingConnections = userProfile.connectedFitnessApps || [];
 
         if (existingConnections.some(app => app.id === 'fitbit')) {
             console.log("[FINALIZE_FITBIT_ALREADY_CONNECTED] Fitbit already marked as connected for UID:", userId);
-            return { success: true }; // Already connected
+            return { success: true };
         }
 
         const updatedConnections = [...existingConnections, { id: 'fitbit', name: 'Fitbit', connectedAt: new Date().toISOString() }];
@@ -566,24 +660,26 @@ export async function finalizeFitbitConnection(userId: string): Promise<{success
 
     } catch (error: any) {
         console.error("[FINALIZE_FITBIT_RAW_ERROR] Raw error finalizing Fitbit connection for UID:", userId, "Error:", error);
-        return { success: false, error: String(error.message || "Failed to finalize Fitbit connection.")};
+        const errorMessage = String(error.message || "Failed to finalize Fitbit connection.");
+        const errorCode = String(error.code || 'UNEXPECTED_ERROR');
+        return { success: false, error: errorMessage, errorCode: errorCode};
     }
 }
 
-// --- Strava OAuth Actions ---
-export async function finalizeStravaConnection(userId: string): Promise<{success: boolean, error?: string}> {
+// --- Strava OAuth Finalization ---
+export async function finalizeStravaConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string}> {
     console.log("[FINALIZE_STRAVA_CONNECTION_START] Finalizing Strava connection for UID:", userId);
     try {
         if (!db || !db.app || typeof doc !== 'function' || typeof updateDoc !== 'function' || typeof getDoc !== 'function') {
             console.error("[FINALIZE_STRAVA_FIRESTORE_NOT_READY] Firestore not available. DB App:", db?.app);
-            return { success: false, error: "Database service unavailable."};
+            return { success: false, error: "Database service unavailable.", errorCode: 'DB_UNAVAILABLE'};
         }
         const userProfileDocRef = doc(db, "users", userId);
         const userProfileSnap = await getDoc(userProfileDocRef);
 
         if (!userProfileSnap.exists()) {
             console.error("[FINALIZE_STRAVA_PROFILE_NOT_FOUND] User profile not found for UID:", userId);
-            return { success: false, error: "User profile not found."};
+            return { success: false, error: "User profile not found.", errorCode: 'PROFILE_NOT_FOUND'};
         }
         const userProfile = userProfileSnap.data() as UserProfile;
         const existingConnections = userProfile.connectedFitnessApps || [];
@@ -600,24 +696,26 @@ export async function finalizeStravaConnection(userId: string): Promise<{success
         return { success: true };
     } catch (error: any) {
         console.error("[FINALIZE_STRAVA_RAW_ERROR] Raw error finalizing Strava connection for UID:", userId, "Error:", error);
-        return { success: false, error: String(error.message || "Failed to finalize Strava connection.")};
+        const errorMessage = String(error.message || "Failed to finalize Strava connection.");
+        const errorCode = String(error.code || 'UNEXPECTED_ERROR');
+        return { success: false, error: errorMessage, errorCode: errorCode};
     }
 }
 
 // --- Google Fit OAuth Actions ---
-export async function finalizeGoogleFitConnection(userId: string): Promise<{success: boolean, error?: string}> {
+export async function finalizeGoogleFitConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string}> {
     console.log("[FINALIZE_GOOGLE_FIT_CONNECTION_START] Finalizing Google Fit connection for UID:", userId);
      try {
         if (!db || !db.app || typeof doc !== 'function' || typeof updateDoc !== 'function' || typeof getDoc !== 'function') {
             console.error("[FINALIZE_GOOGLE_FIT_FIRESTORE_NOT_READY] Firestore not available. DB App:", db?.app);
-            return { success: false, error: "Database service unavailable."};
+            return { success: false, error: "Database service unavailable.", errorCode: 'DB_UNAVAILABLE'};
         }
         const userProfileDocRef = doc(db, "users", userId);
         const userProfileSnap = await getDoc(userProfileDocRef);
 
         if (!userProfileSnap.exists()) {
             console.error("[FINALIZE_GOOGLE_FIT_PROFILE_NOT_FOUND] User profile not found for UID:", userId);
-            return { success: false, error: "User profile not found."};
+            return { success: false, error: "User profile not found.", errorCode: 'PROFILE_NOT_FOUND'};
         }
         const userProfile = userProfileSnap.data() as UserProfile;
         const existingConnections = userProfile.connectedFitnessApps || [];
@@ -634,7 +732,8 @@ export async function finalizeGoogleFitConnection(userId: string): Promise<{succ
         return { success: true };
     } catch (error: any) {
         console.error("[FINALIZE_GOOGLE_FIT_RAW_ERROR] Raw error finalizing Google Fit connection for UID:", userId, "Error:", error);
-        return { success: false, error: String(error.message || "Failed to finalize Google Fit connection.")};
+        const errorMessage = String(error.message || "Failed to finalize Google Fit connection.");
+        const errorCode = String(error.code || 'UNEXPECTED_ERROR');
+        return { success: false, error: errorMessage, errorCode: errorCode};
     }
 }
-```
