@@ -5,9 +5,6 @@ import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import AppLayoutClient from '@/components/layout/app-layout-client';
-import { Toaster } from "@/components/ui/toaster";
-// SidebarProvider is in RootLayout now, so not needed here directly for AppLayoutClient
-// import { SidebarProvider } from "@/components/ui/sidebar";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -16,10 +13,11 @@ import { Label } from '@/components/ui/label';
 import type { UserProfile } from '@/types';
 import { updateUserTermsAcceptance } from '@/app/actions/auth';
 import { Loader2 } from 'lucide-react';
+import { useToast } from '@/hooks/use-toast';
 
 // Define the latest version of T&C here or import from a config file
 const LATEST_TERMS_AND_CONDITIONS = `
-Last Updated: [Date]
+Last Updated: [Date - Replace with Current Date]
 
 Welcome to Health Timeline!
 
@@ -77,6 +75,7 @@ export default function AuthenticatedAppLayout({
 }>) {
   const { user, loading: authLoading, userProfile, setUserProfile, loading: profileLoading } = useAuth();
   const router = useRouter();
+  const { toast } = useToast();
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsScrolledToEnd, setTermsScrolledToEnd] = useState(false);
   const [termsAcceptedCheckbox, setTermsAcceptedCheckbox] = useState(false);
@@ -88,8 +87,13 @@ export default function AuthenticatedAppLayout({
     if (!isLoading) {
       if (!user) {
         router.replace('/login');
+      } else if (user && !userProfile && !profileLoading) {
+        // User exists, but profile isn't loaded or doesn't exist yet
+        // This could be a new user who hasn't completed profile setup
+        // Or, profile fetch failed during login.
+        router.replace('/profile'); // Force to profile if userProfile is missing after loading
       } else if (user && userProfile) {
-        // Check for password expiry
+        // Check for password expiry first
         if (userProfile.lastPasswordChangeDate) {
           const lastChange = new Date(userProfile.lastPasswordChangeDate);
           const daysSinceChange = (new Date().getTime() - lastChange.getTime()) / (1000 * 3600 * 24);
@@ -97,23 +101,25 @@ export default function AuthenticatedAppLayout({
             router.replace('/reset-password-required');
             return; // Stop further checks if redirecting for password reset
           }
+        } else {
+          // If lastPasswordChangeDate is missing, treat as needing reset (security precaution)
+          console.warn("User profile missing lastPasswordChangeDate, redirecting to password reset.");
+          router.replace('/reset-password-required');
+          return;
         }
 
-        // Check T&C acceptance
+        // Then check T&C acceptance if password is not expired
         if (!userProfile.acceptedLatestTerms || userProfile.termsVersionAccepted !== LATEST_TERMS_VERSION) {
           setShowTermsModal(true);
         }
-      } else if (user && !userProfile && !profileLoading) {
-        // User exists, but profile isn't loaded or doesn't exist yet
-        // This could be a new user who hasn't completed profile setup
-        router.replace('/profile');
       }
     }
   }, [user, userProfile, isLoading, authLoading, profileLoading, router]);
 
   const handleScrollTerms = (event: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
-    if (scrollHeight - scrollTop <= clientHeight + 10) { // +10 for buffer
+    // Add a small buffer to ensure it's truly at the end
+    if (scrollHeight - scrollTop <= clientHeight + 10) {
       setTermsScrolledToEnd(true);
     }
   };
@@ -121,15 +127,21 @@ export default function AuthenticatedAppLayout({
   const handleAcceptTerms = async () => {
     if (!user || !termsAcceptedCheckbox || !termsScrolledToEnd) return;
     setIsSavingTerms(true);
-    const result = await updateUserTermsAcceptance(user.uid, true, LATEST_TERMS_VERSION);
-    if (result.success) {
-      if (setUserProfile) {
-        setUserProfile(prev => prev ? ({ ...prev, acceptedLatestTerms: true, termsVersionAccepted: LATEST_TERMS_VERSION }) : null);
+    try {
+      const result = await updateUserTermsAcceptance(user.uid, true, LATEST_TERMS_VERSION);
+      if (result.success) {
+        if (setUserProfile) {
+          setUserProfile(prev => prev ? ({ ...prev, acceptedLatestTerms: true, termsVersionAccepted: LATEST_TERMS_VERSION }) : null);
+        }
+        setShowTermsModal(false);
+        toast({ title: "Terms Accepted", description: "Thank you for accepting the terms." });
+      } else {
+        console.error("Failed to update terms acceptance:", result.error);
+        toast({ title: "Error", description: result.error || "Could not save terms acceptance. Please try again.", variant: "destructive" });
       }
-      setShowTermsModal(false);
-    } else {
-      // Handle error (e.g., show a toast)
-      console.error("Failed to update terms acceptance:", result.error);
+    } catch (error) {
+      console.error("Exception updating terms acceptance:", error);
+      toast({ title: "Error", description: "An unexpected error occurred. Please try again.", variant: "destructive" });
     }
     setIsSavingTerms(false);
   };
@@ -151,6 +163,19 @@ export default function AuthenticatedAppLayout({
       </div>
     );
   }
+  
+  // If user is logged in but profile is still null after loading, redirect to /profile.
+  // This handles cases where profile creation might have failed or is pending.
+  if (user && !userProfile && !profileLoading) {
+    // The useEffect should handle this, but this is an extra safeguard.
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <Loader2 className="h-16 w-16 animate-spin text-primary" />
+        <p className="ml-4">Loading profile or redirecting...</p>
+      </div>
+    );
+  }
+
 
   if (showTermsModal) {
     return (
@@ -168,8 +193,8 @@ export default function AuthenticatedAppLayout({
               Please review and accept our updated Terms and Conditions to continue.
             </DialogDescription>
           </DialogHeader>
-          <ScrollArea className="flex-grow border rounded-md p-4 text-sm" onScroll={handleScrollTerms}>
-            <pre className="whitespace-pre-wrap font-sans">{LATEST_TERMS_AND_CONDITIONS}</pre>
+          <ScrollArea className="flex-grow border rounded-md p-4 text-sm whitespace-pre-wrap" onScroll={handleScrollTerms}>
+            <pre className="font-sans">{LATEST_TERMS_AND_CONDITIONS}</pre>
           </ScrollArea>
           <div className="items-top flex space-x-2 pt-4">
             <Checkbox
@@ -194,22 +219,10 @@ export default function AuthenticatedAppLayout({
     );
   }
 
-  if (!userProfile && !isLoading) {
-    // This handles the case where a user is logged in but their profile data hasn't loaded yet
-    // or is missing (e.g., for a new user who needs to complete profile setup).
-    // The useEffect hook should redirect to /profile, but this can be a fallback.
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Loader2 className="h-16 w-16 animate-spin text-primary" />
-        <p className="ml-4">Finalizing session...</p>
-      </div>
-    );
-  }
-
-
   return (
       <AppLayoutClient>
         {children}
       </AppLayoutClient>
   );
 }
+    
