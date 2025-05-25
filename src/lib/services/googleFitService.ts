@@ -1,0 +1,231 @@
+
+// src/lib/services/googleFitService.ts
+/**
+ * @fileOverview Google Fit Service Module
+ * This module contains functions to interact with the Google Fit REST API.
+ * These functions assume a valid OAuth 2.0 access token for the user has been obtained.
+ *
+ * Google Fit API Documentation: https://developers.google.com/fit/rest
+ */
+
+const GOOGLE_FIT_API_BASE_URL = 'https://www.googleapis.com/fitness/v1/users/me';
+
+// --- Interface Definitions for Google Fit API Responses ---
+
+// Data Source
+export interface GoogleFitDevice {
+  manufacturer: string;
+  model: string;
+  type: 'phone' | 'watch' | 'scale' | 'chestStrap' | 'tablet' | 'unknown';
+  uid: string;
+  platformType?: 'android' | 'ios' | 'web';
+}
+
+export interface GoogleFitApplication {
+  detailsUrl?: string;
+  name?: string;
+  packageName?: string;
+  version?: string;
+}
+
+export interface GoogleFitDataTypeField {
+  name: string; // e.g., "steps", "x", "y", "z", "rpm"
+  format: 'integer' | 'floatPoint' | 'string' | 'map' | 'integerList' | 'floatList' | 'blob';
+  optional?: boolean;
+}
+
+export interface GoogleFitDataType {
+  name: string; // e.g., "com.google.step_count.delta", "com.google.heart_rate.bpm"
+  field: GoogleFitDataTypeField[];
+}
+
+export interface GoogleFitDataSource {
+  dataStreamId: string;
+  dataStreamName?: string;
+  name?: string;
+  type: 'raw' | 'derived';
+  dataType: GoogleFitDataType;
+  device?: GoogleFitDevice;
+  application?: GoogleFitApplication;
+  dataQualityStandard?: string[];
+}
+
+// Data Point (for datasets)
+export interface GoogleFitDataPointValue {
+  intVal?: number;
+  fpVal?: number;
+  stringVal?: string;
+  mapVal?: Array<{ key: string; value: { fpVal?: number; intVal?: number } }>;
+  // Add other potential value types as needed based on the data types you query
+}
+
+export interface GoogleFitDataPointOriginDataSource {
+  dataSourceId?: string;
+  streamId?: string; // Deprecated, use dataSourceId
+  device?: GoogleFitDevice;
+  application?: GoogleFitApplication;
+}
+
+export interface GoogleFitDataPoint {
+  startTimeNanos: string; // Nanoseconds since epoch
+  endTimeNanos: string; // Nanoseconds since epoch
+  dataTypeName: string;
+  originDataSourceId?: string; // ID of the data source that created the data point
+  value: GoogleFitDataPointValue[];
+  modifiedTimeMillis?: string; // Milliseconds since epoch
+  rawTimestampNanos?: string;
+}
+
+// Aggregated Data
+export interface GoogleFitAggregateBucket {
+  startTimeMillis: string; // Milliseconds since epoch
+  endTimeMillis: string; // Milliseconds since epoch
+  dataset: Array<{
+    dataSourceId: string; // Can also be referred to as streamId in older contexts
+    point: GoogleFitDataPoint[];
+  }>;
+}
+
+export interface GoogleFitAggregateResponse {
+  bucket: GoogleFitAggregateBucket[];
+}
+
+// Session
+export interface GoogleFitSession {
+  id: string;
+  name?: string;
+  description?: string;
+  startTimeMillis: string; // Milliseconds since epoch
+  endTimeMillis: string; // Milliseconds since epoch
+  modifiedTimeMillis?: string;
+  version?: string;
+  application: GoogleFitApplication;
+  activityType: number; // See https://developers.google.com/fit/rest/v1/reference/activity-types
+  activeTimeMillis?: string;
+}
+
+
+// --- Request Helper ---
+async function googleFitApiRequest<T>(
+  endpoint: string,
+  accessToken: string,
+  method: 'GET' | 'POST' = 'GET',
+  body?: any,
+  queryParams?: Record<string, string>
+): Promise<T> {
+  let url = `${GOOGLE_FIT_API_BASE_URL}${endpoint}`;
+
+  if (queryParams) {
+    const params = new URLSearchParams(queryParams);
+    url += `?${params.toString()}`;
+  }
+
+  console.log(`[GoogleFitService] Making API Request: ${method} ${url}`);
+
+  const headers: HeadersInit = {
+    'Authorization': `Bearer ${accessToken}`,
+  };
+
+  if (method === 'POST' && body) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  const response = await fetch(url, {
+    method: method,
+    headers: headers,
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (!response.ok) {
+    let errorData;
+    try {
+      errorData = await response.json();
+    } catch (e) {
+      errorData = { message: response.statusText };
+    }
+    console.error('[GoogleFitService] API Error Response Status:', response.status, 'URL:', url);
+    console.error('[GoogleFitService] API Error Response Body:', errorData);
+    const errorToThrow = new Error((errorData as any).error?.message || (errorData as any).message || `Google Fit API request failed: ${response.statusText}`);
+    (errorToThrow as any).status = response.status;
+    (errorToThrow as any).details = errorData;
+    throw errorToThrow;
+  }
+
+  if (response.status === 204) { // No Content
+    return {} as T;
+  }
+  return response.json() as Promise<T>;
+}
+
+// --- Service Functions ---
+
+/**
+ * Lists all data sources that are visible to this app.
+ * The data sources will be obtained from all Google Fit platforms (e.g. Android, Wear OS).
+ * @param accessToken The user's Google Fit access token.
+ */
+export async function listDataSources(accessToken: string): Promise<{ dataSource: GoogleFitDataSource[] }> {
+  console.log(`[GoogleFitService] Fetching user's data sources...`);
+  return googleFitApiRequest<{ dataSource: GoogleFitDataSource[] }>(`/dataSources`, accessToken);
+}
+
+/**
+ * Fetches aggregated data for the user.
+ * The request body must specify the data types, aggregation buckets, and time range.
+ * @param accessToken The user's Google Fit access token.
+ * @param requestBody The request body for the dataset:aggregate call.
+ *                    See: https://developers.google.com/fit/rest/v1/reference/users/dataset/aggregate
+ */
+export async function getAggregatedData(
+  accessToken: string,
+  requestBody: any // Define a more specific type for this based on Google's spec
+): Promise<GoogleFitAggregateResponse> {
+  console.log(`[GoogleFitService] Fetching aggregated data with body:`, JSON.stringify(requestBody));
+  return googleFitApiRequest<GoogleFitAggregateResponse>(
+    `/dataset:aggregate`,
+    accessToken,
+    'POST',
+    requestBody
+  );
+}
+
+/**
+ * Fetches sleep sessions for the user within a specified time range.
+ * ActivityType 72 represents sleep.
+ * @param accessToken The user's Google Fit access token.
+ * @param startTimeIso ISO 8601 start time (e.g., "2023-10-01T00:00:00.000Z")
+ * @param endTimeIso ISO 8601 end time (e.g., "2023-10-08T00:00:00.000Z")
+ */
+export async function getSleepSessions(
+  accessToken: string,
+  startTimeIso: string,
+  endTimeIso: string
+): Promise<{ session: GoogleFitSession[]; deletedSession?: GoogleFitSession[]; nextPageToken?: string; hasMoreData?: boolean; }> {
+  console.log(`[GoogleFitService] Fetching sleep sessions from ${startTimeIso} to ${endTimeIso}...`);
+  const queryParams = {
+    startTime: startTimeIso,
+    endTime: endTimeIso,
+    // activityType: "72", // Filter for sleep sessions if needed, or filter client-side
+  };
+  // The sessions endpoint may return more than just sleep, so you might need to filter by activityType client-side
+  // or check if the API supports direct filtering by activityType in query params for sessions.
+  // According to docs, activityType is not a query param for /sessions. Filtering happens post-fetch.
+  const response = await googleFitApiRequest<{ session: GoogleFitSession[]; deletedSession?: GoogleFitSession[]; nextPageToken?: string; hasMoreData?: boolean; }>(
+    `/sessions`,
+    accessToken,
+    'GET',
+    undefined,
+    queryParams
+  );
+  // Filter for sleep sessions if not directly supported by API query param
+  if (response.session) {
+    response.session = response.session.filter(s => s.activityType === 72);
+  }
+  return response;
+}
+
+// TODO: Add more functions as needed, for example:
+// - getDailyStepCount(accessToken, date) -> uses getAggregatedData with specific body
+// - getHeartRateData(accessToken, dateRange) -> uses getAggregatedData
+// - getSpecificActivityDetails(accessToken, sessionId) // if sessions are used for activities
+
