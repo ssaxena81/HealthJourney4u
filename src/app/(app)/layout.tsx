@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useTransition } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import AppLayoutClient from '@/components/layout/app-layout-client';
@@ -12,61 +12,87 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import type { UserProfile } from '@/types';
 import { updateUserTermsAcceptance } from '@/app/actions/auth';
+import { syncAllConnectedData } from '@/app/actions/syncActions'; // Import the new sync action
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
+import { isAfter, subHours } from 'date-fns';
 
-// Define the latest version of T&C here or import from a config file
 const LATEST_TERMS_AND_CONDITIONS = `
-Last Updated: [Date - Replace with Current Date]
-
-Welcome to Health Timeline!
+Last Updated: [Current Date]
 
 1. Acceptance of Terms
-   By accessing or using Health Timeline ("the App"), you agree to be bound by these Terms and Conditions ("T&C"). If you disagree with any part of the terms, then you may not access the App.
+By using this application (“App”), you (“User” or “Member”) agree to be bound by these Terms and Conditions, our Privacy Policy, and any additional terms and conditions that may apply to specific sections of the App or to products and services available through the App.
 
-2. User Accounts
-   When you create an account with us, you must provide information that is accurate, complete, and current at all times. Failure to do so constitutes a breach of the T&C, which may result in immediate termination of your account on our App.
-   You are responsible for safeguarding the password that you use to access the App and for any activities or actions under your password.
-   You agree not to disclose your password to any third party. You must notify us immediately upon becoming aware of any breach of security or unauthorized use of your account.
+2. Modification of Terms
+We reserve the right to change, modify, or update these Terms and Conditions at any time. You will be required to accept the revised terms before continuing to use the App.
 
-3. Age Requirement
-   You must be at least 18 years old to use this App. By using this App, you represent and warrant that you are 18 years of age or older.
+3. Geographic Scope
+These Terms apply to users located in the continental United States. Certain provisions may vary based on state law and shall be interpreted accordingly.
 
-4. Subscription Tiers & Payments
-   The App may offer different subscription tiers ("Free", "Silver", "Gold", "Platinum"). Features available may vary by tier.
-   For paid tiers, you agree to pay all applicable fees as described on the App for the services you select. All fees are in USD (US Dollars) and are non-refundable except as required by law or as explicitly stated.
-   We reserve the right to change subscription fees at any time.
+4. Collection of Personal Identifiable Information
+With your consent, we may collect your personal identifiable information, including but not limited to your name, email, contact information, device identifiers, and usage data.
 
-5. Data Privacy
-   Your privacy is important to us. Our Privacy Policy, which is incorporated into these T&C by reference, explains how we collect, use, and share your personal information. By using the App, you agree to the collection and use of information in accordance with our Privacy Policy.
+5. Use of Cookies
+The App uses cookies and similar technologies to provide a seamless user experience, personalize content, and perform analytics. You may manage your cookie preferences within the App settings.
 
-6. User Conduct
-   You agree not to use the App for any unlawful purpose or in any way that interrupts, damages, or impairs the service.
-   You agree not to attempt to gain unauthorized access to the App or any networks, servers or computer systems connected to the App.
+6. Data Storage and Retention
+Personal data collected through the App is stored securely. Data will be retained as long as the App is installed or in use. Upon uninstallation, your personal data will be deleted, subject to legal obligations.
 
-7. Intellectual Property
-   The App and its original content (excluding content provided by users), features, and functionality are and will remain the exclusive property of HealthJourney4u and its licensors.
+7. Non-Discrimination
+We do not discriminate against users on the basis of race, color, religion, gender, sexual orientation, or any other protected class.
 
-8. Connections to Third-Party Services
-   The App allows you to connect to third-party services (e.g., fitness trackers, diagnostic labs, insurance providers). You acknowledge that HealthJourney4u is not responsible for the data, content, or practices of these third-party services. Your interaction with any third-party service is subject to that service's own terms and policies.
+8. Changes to Terms
+We may update these Terms at our discretion. You must accept any changes to continue using the App.
 
-9. Disclaimer of Warranties
-   The App is provided on an "AS IS" and "AS AVAILABLE" basis. HealthJourney4u makes no warranties, expressed or implied, and hereby disclaims and negates all other warranties including, without limitation, implied warranties or conditions of merchantability, fitness for a particular purpose, or non-infringement of intellectual property or other violation of rights.
+9. Privacy Policy
+Our Privacy Policy describes in detail the data we collect, how we use it, and your rights. The policy is available within the App and on our website.
 
-10. Limitation of Liability
-    In no event shall HeaalthJourney4u, nor its directors, employees, partners, agents, suppliers, or affiliates, be liable for any indirect, incidental, special, consequential or punitive damages, including without limitation, loss of profits, data, use, goodwill, or other intangible losses, resulting from (i) your access to or use of or inability to access or use the App; (ii) any conduct or content of any third party on the App; (iii) any content obtained from the App; and (iv) unauthorized access, use or alteration of your transmissions or content, whether based on warranty, contract, tort (including negligence) or any other legal theory, whether or not we have been informed of the possibility of such damage, and even if a remedy set forth herein is found to have failed of its essential purpose.
+10. Use of Personal Identifiable Information
+        a) Delivering products and services.
+        b) Personalizing your digital experience.
+        c) Performing analytics.
+        d) Complying with legal requirements.
+        e) Enabling features within our App.
 
-11. Changes to Terms and Conditions
-    We reserve the right, at our sole discretion, to modify or replace these T&C at any time. If a revision is material, we will provide at least 30 days' notice prior to any new terms taking effect. What constitutes a material change will be determined at our sole discretion.
-    By continuing to access or use our App after any revisions become effective, you agree to be bound by the revised terms. If you do not agree to the new terms, you are no longer authorized to use the App.
+11. Terms of Use
+        a) By using the App, you agree to be bound by these Terms.
+        b) We may update these Terms at any time.
+        c) These Terms apply throughout the continental United States.   
+        d) All trademarks used in the App are the property of their respective owners.
+        e) The App may access or display third-party content.
+        f) We do not guarantee timeliness or accuracy of content.
+        g) Users are responsible for password security.
+        h) We are not liable for unauthorized access resulting from user negligence.
+        i) We employ encryption and other security measures to protect communications.
+        j) Our liability is limited to the maximum extent permitted by law.
+        k) You agree to indemnify and hold harmless [Your Company Name] against claims arising from your use.
+        l) We are not responsible for content or data sourced from third-party services.
 
-12. Governing Law
-    These T&C shall be governed and construed in accordance with the laws of State of Connecticut, USA, without regard to its conflict of law provisions.
+12. Arbitration and Dispute Resolution
+All disputes shall be resolved through binding arbitration in accordance with the rules of the American Arbitration Association. You waive the right to participate in class-action lawsuits.
 
-13. Contact Us
-    If you have any questions about these Terms, please contact us at info@healthjourney4u.com.
+13. Payment and Billing
+If you upgrade the App, you authorize us to collect and store your payment details securely. You agree not to hold us liable for any payment-related issues caused by third-party processors.
+
+14. Consent for Data Sharing with Affiliated Entities
+By using the App, you consent to allow us to access your personal data from affiliated partners or third-party sources, where authorization is provided or APIs are integrated.
+
+15. Aggregated Data Sources
+Our App connects with external services such as Fitbit, Strava, Samsung Health, Quest Diagnostics, LabCorp, UnitedHealthcare, Aetna, Cigna, and others via secure APIs. You authorize us to access your data from these sources as part of the functionality.
+
+16. Third-Party Integrations Policy
+We access limited user data from connected third-party platforms to deliver app functionality, perform analytics, and provide personalized experiences. Data retrieved includes fitness metrics, diagnostic lab results, and insurance information, as permitted by you.
+
+17. HIPAA Notice of Privacy Practices
+This Notice describes how [Your Company Name] may use and disclose your protected health information (PHI). We operate as a Business Associate when connecting to Covered Entities and follow HIPAA standards. PHI is used solely for delivering services you've authorized.
+
+18. Clickwrap Consent for Insurance and Medical Data Integration
+Before connecting your insurance or medical accounts (e.g., UnitedHealthcare, LabCorp), you must accept a clickwrap agreement outlining the data access and usage, in accordance with HIPAA.
+
+19. Limitations on Medical Data Storage
+We do not store raw lab results, clinical notes, or full medical records unless explicitly authorized by you. If authorized, data is encrypted and only retained as needed for your selected services.
 `;
-const LATEST_TERMS_VERSION = "1.0"; // Example version
+const LATEST_TERMS_VERSION = "1.0";
 
 export default function AuthenticatedAppLayout({
   children,
@@ -76,6 +102,7 @@ export default function AuthenticatedAppLayout({
   const { user, loading: authLoading, userProfile, setUserProfile, loading: profileLoading } = useAuth();
   const router = useRouter();
   const { toast } = useToast();
+  const [isSyncing, startSyncTransition] = useTransition();
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [termsScrolledToEnd, setTermsScrolledToEnd] = useState(false);
   const [termsAcceptedCheckbox, setTermsAcceptedCheckbox] = useState(false);
@@ -83,32 +110,79 @@ export default function AuthenticatedAppLayout({
 
   const isLoading = authLoading || profileLoading;
 
+  // --- AUTOMATIC DATA SYNC LOGIC ---
+  useEffect(() => {
+    const checkAndTriggerAutoSync = async () => {
+      if (user && userProfile && userProfile.connectedFitnessApps && userProfile.connectedFitnessApps.length > 0) {
+        let shouldSync = true;
+        const twentyFourHoursAgo = subHours(new Date(), 24);
+
+        // Check Fitbit primary sync timestamp
+        if (userProfile.connectedFitnessApps.some(app => app.id === 'fitbit') && userProfile.fitbitApiCallStats?.dailyActivitySummary?.lastCalledAt) {
+          if (isAfter(new Date(userProfile.fitbitApiCallStats.dailyActivitySummary.lastCalledAt), twentyFourHoursAgo)) {
+            shouldSync = false;
+            console.log('[AutoSync] Fitbit daily activity synced recently, skipping auto-sync for it.');
+          }
+        }
+        // Check Strava primary sync timestamp
+        if (userProfile.connectedFitnessApps.some(app => app.id === 'strava') && userProfile.stravaApiCallStats?.activities?.lastCalledAt) {
+          if (isAfter(new Date(userProfile.stravaApiCallStats.activities.lastCalledAt), twentyFourHoursAgo)) {
+            shouldSync = false;
+            console.log('[AutoSync] Strava activities synced recently, skipping auto-sync for it.');
+          }
+        }
+        // Check Google Fit primary sync timestamp
+        if (userProfile.connectedFitnessApps.some(app => app.id === 'google-fit') && userProfile.googleFitApiCallStats?.sessions?.lastCalledAt) {
+          if (isAfter(new Date(userProfile.googleFitApiCallStats.sessions.lastCalledAt), twentyFourHoursAgo)) {
+            shouldSync = false;
+            console.log('[AutoSync] Google Fit sessions synced recently, skipping auto-sync for it.');
+          }
+        }
+        
+        // Add more checks for other services if needed
+
+        if (shouldSync) {
+          console.log('[AutoSync] Triggering automatic data sync.');
+          toast({
+            title: "Auto-Syncing Data",
+            description: "Refreshing data from your connected apps in the background...",
+            duration: 5000,
+          });
+          // Call the main sync handler, but perhaps with less verbose toasting on success
+          await handleSyncAllData(true); // Pass a flag for silent success
+        } else {
+          console.log('[AutoSync] Auto-sync not needed, data is recent.');
+        }
+      }
+    };
+
+    if (!isLoading && userProfile) {
+      checkAndTriggerAutoSync();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userProfile, isLoading, user]); // Rerun if userProfile or loading state changes
+
+
   useEffect(() => {
     if (!isLoading) {
       if (!user) {
         router.replace('/login');
       } else if (user && !userProfile && !profileLoading) {
-        // User exists, but profile isn't loaded or doesn't exist yet
-        // This could be a new user who hasn't completed profile setup
-        // Or, profile fetch failed during login.
-        router.replace('/profile'); // Force to profile if userProfile is missing after loading
+        router.replace('/profile'); 
       } else if (user && userProfile) {
-        // Check for password expiry first
         if (userProfile.lastPasswordChangeDate) {
           const lastChange = new Date(userProfile.lastPasswordChangeDate);
           const daysSinceChange = (new Date().getTime() - lastChange.getTime()) / (1000 * 3600 * 24);
           if (daysSinceChange >= 90) {
             router.replace('/reset-password-required');
-            return; // Stop further checks if redirecting for password reset
+            return; 
           }
         } else {
-          // If lastPasswordChangeDate is missing, treat as needing reset (security precaution)
           console.warn("User profile missing lastPasswordChangeDate, redirecting to password reset.");
           router.replace('/reset-password-required');
           return;
         }
 
-        // Then check T&C acceptance if password is not expired
         if (!userProfile.acceptedLatestTerms || userProfile.termsVersionAccepted !== LATEST_TERMS_VERSION) {
           setShowTermsModal(true);
         }
@@ -118,7 +192,6 @@ export default function AuthenticatedAppLayout({
 
   const handleScrollTerms = (event: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
-    // Add a small buffer to ensure it's truly at the end
     if (scrollHeight - scrollTop <= clientHeight + 10) {
       setTermsScrolledToEnd(true);
     }
@@ -134,6 +207,8 @@ export default function AuthenticatedAppLayout({
           setUserProfile(prev => prev ? ({ ...prev, acceptedLatestTerms: true, termsVersionAccepted: LATEST_TERMS_VERSION }) : null);
         }
         setShowTermsModal(false);
+        setTermsScrolledToEnd(false);
+        setTermsAcceptedCheckbox(false);
         toast({ title: "Terms Accepted", description: "Thank you for accepting the terms." });
       } else {
         console.error("Failed to update terms acceptance:", result.error);
@@ -146,6 +221,67 @@ export default function AuthenticatedAppLayout({
     setIsSavingTerms(false);
   };
 
+  const handleSyncAllData = async (isAutoSync: boolean = false) => {
+    if (isSyncing) return;
+    startSyncTransition(async () => {
+      if (!isAutoSync) {
+        toast({
+          title: "Syncing Data...",
+          description: "Attempting to fetch latest data from all connected apps.",
+          duration: 8000,
+        });
+      }
+      
+      const result = await syncAllConnectedData();
+
+      if (result.success) {
+        let allIndividualSyncsSucceeded = true;
+        let messages: string[] = [];
+        result.results.forEach(res => {
+          if (res.success) {
+            messages.push(`${res.service}: Synced ${res.activitiesProcessed ?? 'data'}.`);
+          } else {
+            allIndividualSyncsSucceeded = false;
+            messages.push(`${res.service}: ${res.message || 'Failed'}`);
+          }
+        });
+
+        if (allIndividualSyncsSucceeded && result.results.length > 0) {
+          if (!isAutoSync) {
+            toast({ title: "Sync Complete", description: "All connected apps synced successfully." });
+          } else {
+             console.log("[AutoSync] Automatic sync completed successfully.");
+          }
+        } else if (result.results.length > 0) {
+          toast({
+            title: "Sync Partially Complete",
+            description: (
+              <div>
+                <p>Some services could not be synced:</p>
+                <ul className="list-disc list-inside text-xs mt-1">
+                  {messages.filter(m => m.includes('Failed') || m.includes('Rate limit') || m.includes('Error')).map((msg, i) => <li key={i}>{msg}</li>)}
+                </ul>
+              </div>
+            ),
+            duration: 15000,
+            variant: "default", 
+          });
+        } else if (!isAutoSync) {
+          toast({ title: "No Services Synced", description: "No services were attempted or an issue occurred." });
+        }
+      } else {
+        toast({
+          title: "Sync Failed",
+          description: result.error || "Could not sync data from apps.",
+          variant: "destructive",
+        });
+      }
+      // Optionally, trigger a re-fetch of profile to update API call stats for UI
+      // This might be implicitly handled by how individual sync actions update profile.
+    });
+  };
+
+
   if (isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -155,8 +291,6 @@ export default function AuthenticatedAppLayout({
   }
 
   if (!user) {
-    // This case should ideally be caught by the useEffect redirect,
-    // but as a fallback, show loading or a redirect message.
     return (
       <div className="flex min-h-screen items-center justify-center">
         <p>Redirecting to login...</p>
@@ -164,10 +298,7 @@ export default function AuthenticatedAppLayout({
     );
   }
   
-  // If user is logged in but profile is still null after loading, redirect to /profile.
-  // This handles cases where profile creation might have failed or is pending.
   if (user && !userProfile && !profileLoading) {
-    // The useEffect should handle this, but this is an extra safeguard.
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -180,7 +311,6 @@ export default function AuthenticatedAppLayout({
   if (showTermsModal) {
     return (
       <Dialog open={showTermsModal} onOpenChange={(open) => {
-        // Prevent closing via overlay click or escape key if terms not accepted
         if (!open && (!termsAcceptedCheckbox || !userProfile?.acceptedLatestTerms)) {
           return;
         }
@@ -220,7 +350,7 @@ export default function AuthenticatedAppLayout({
   }
 
   return (
-      <AppLayoutClient>
+      <AppLayoutClient onSyncAllClick={handleSyncAllData}>
         {children}
       </AppLayoutClient>
   );

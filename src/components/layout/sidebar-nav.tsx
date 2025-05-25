@@ -14,9 +14,9 @@ import {
   SidebarMenuSubButton,
 } from '@/components/ui/sidebar';
 import { AppLogo } from '@/components/icons/app-logo';
-import { Button } from '@/components/ui/button';
+// import { Button } from '@/components/ui/button'; // No longer used for settings button here
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dumbbell, Bed, Heart, UserCircle, LogOut, Footprints, Run, Hiking as HikingIcon, Waves } from 'lucide-react';
+import { Dumbbell, Bed, Heart, UserCircle, LogOut, Footprints, Run, Hiking as HikingIcon, Waves, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 
@@ -32,16 +32,28 @@ interface NavItemDef {
   icon: React.ElementType;
   action?: () => void;
   subItems?: SubNavItemDef[];
+  disabled?: boolean; // For disabling sync button based on tier (handled by caller for now)
 }
 
-export default function SidebarNav() {
+interface SidebarNavProps {
+    onSyncAllClick?: () => Promise<void>; // Make it optional
+}
+
+export default function SidebarNav({ onSyncAllClick }: SidebarNavProps) {
   const router = useRouter();
-  const { logout } = useAuth();
+  const { user, userProfile, logout } = useAuth();
 
   const handleLogout = async () => {
     await logout();
     router.push('/login');
   };
+  
+  // Determine if the sync button should be enabled
+  // Platinum users can always sync. Others rely on rate limits within individual actions.
+  // The auto-sync logic is in AuthenticatedAppLayout.
+  // For simplicity here, the button is always enabled, and the server actions handle rate limits.
+  // const isSyncButtonEnabled = userProfile?.subscriptionTier === 'platinum';
+
 
   const navItems: NavItemDef[] = [
     {
@@ -57,8 +69,14 @@ export default function SidebarNav() {
     },
     { href: '/sleep', label: 'Sleep', icon: Bed },
     { href: '/heart', label: 'Heart', icon: Heart },
+    {
+      label: 'Sync Apps',
+      icon: RefreshCw,
+      action: onSyncAllClick,
+      // disabled: !isSyncButtonEnabled // Let individual actions handle rate limits
+    },
     { href: '/profile', label: 'Profile', icon: UserCircle },
-    { href: '#', label: 'Logout', icon: LogOut, action: handleLogout },
+    { label: 'Logout', icon: LogOut, action: handleLogout },
   ];
 
   return (
@@ -75,6 +93,7 @@ export default function SidebarNav() {
                   variant="ghost"
                   className="w-full justify-start"
                   onClick={item.action ? item.action : item.href ? () => router.push(item.href!) : undefined}
+                  disabled={item.disabled}
                   tooltip={{ children: item.label, side: 'right', align: 'center' }}
                   aria-label={item.label}
                 >

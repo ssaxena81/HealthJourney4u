@@ -350,6 +350,7 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Fitbit Swimming Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Strava Activity Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Google Fit Activity Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
+  { feature: "Centralized App Sync", free: "Auto (1/24h)", silver: "Auto (1/24h)", gold: "Auto (1/24h)", platinum: "Auto (1/24h) + Manual (up to 3/day)" },
 ];
 
 export interface SelectableService {
@@ -361,13 +362,13 @@ export const mockFitnessApps: SelectableService[] = [
   { id: 'fitbit', name: 'Fitbit' },
   { id: 'strava', name: 'Strava' },
   { id: 'google-fit', name: 'Google Fit' },
-  { id: 'apple_health', name: 'Apple Health (Via Companion App)' },
-  { id: 'nike_run_club', name: 'Nike Run Club' },
-  { id: 'myfitnesspal', name: 'MyFitnessPal' },
-  { id: 'fiton', name: 'FitOn Workouts' },
-  { id: 'garmin', name: 'Garmin Connect' },
-  { id: 'oura', name: 'Oura Ring' },
-  { id: 'whoop', name: 'WHOOP' },
+  // { id: 'apple_health', name: 'Apple Health (Via Companion App)' },
+  // { id: 'nike_run_club', name: 'Nike Run Club' },
+  // { id: 'myfitnesspal', name: 'MyFitnessPal' },
+  // { id: 'fiton', name: 'FitOn Workouts' },
+  // { id: 'garmin', name: 'Garmin Connect' },
+  // { id: 'oura', name: 'Oura Ring' },
+  // { id: 'whoop', name: 'WHOOP' },
 ];
 
 export const mockDiagnosticServices: SelectableService[] = [
@@ -449,4 +450,17 @@ export interface FitbitSleepLogFirestore {
   };
   lastFetched: string; // ISO string
   dataSource: 'fitbit';
+}
+
+// This type was previously named FitbitSwimmingActivityFirestore, renamed for generality
+// It aligns with NormalizedActivityFirestore
+export interface StravaActivityFirestore extends NormalizedActivityFirestore {
+  dataSource: 'strava';
+  // Any Strava-specific fields can be added here if needed,
+  // but the goal is to primarily use NormalizedActivityFirestore fields.
+}
+
+// This type can be used for Google Fit specific normalized data too
+export interface GoogleFitActivityFirestore extends NormalizedActivityFirestore {
+  dataSource: 'google-fit';
 }
