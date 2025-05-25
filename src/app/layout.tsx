@@ -21,12 +21,13 @@ export default function RootLayout({
   return (
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
       <body className={`font-sans antialiased bg-background text-foreground`}>
-        <AuthProvider>
-          <SidebarProvider defaultOpen={true}>
+        {/* Reordered SidebarProvider and AuthProvider - this is a speculative change. */}
+        <SidebarProvider defaultOpen={true}>
+          <AuthProvider>
             {children}
-          </SidebarProvider>
-          <Toaster />
-        </AuthProvider>
+            <Toaster />
+          </AuthProvider>
+        </SidebarProvider>
       </body>
     </html>
   );
