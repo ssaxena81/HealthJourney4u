@@ -13,12 +13,14 @@ import RunningGoalsForm from '@/components/profile/running-goals-form';
 import HikingGoalsForm from '@/components/profile/hiking-goals-form';
 import SwimmingGoalsForm from '@/components/profile/swimming-goals-form';
 import SleepGoalsForm from '@/components/profile/sleep-goals-form';
+import DashboardMetricsForm from '@/components/profile/dashboard-metrics-form'; // New import
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import type { UserProfile } from '@/types'; // Ensure UserProfile is imported
 
 export default function ProfilePage() {
   const { user, userProfile, loading, setUserProfile } = useAuth();
@@ -41,7 +43,6 @@ export default function ProfilePage() {
       );
   }
 
-  // Callback to update local UserProfile state in AuthContext
   const handleProfilePartUpdate = (updatedData: Partial<UserProfile>) => {
     if (setUserProfile) {
       setUserProfile(prev => prev ? ({ ...prev, ...updatedData }) : null);
@@ -58,13 +59,14 @@ export default function ProfilePage() {
       </Card>
 
       <Tabs defaultValue="demographics" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-3 lg:grid-cols-7 mb-6">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-8 mb-6">
           <TabsTrigger value="demographics">Demographics</TabsTrigger>
           <TabsTrigger value="fitness">Fitness Apps</TabsTrigger>
           <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>
           <TabsTrigger value="insurance">Insurance</TabsTrigger>
           <TabsTrigger value="activity_goals">Activity Goals</TabsTrigger>
           <TabsTrigger value="sleep_goals">Sleep Goals</TabsTrigger>
+          <TabsTrigger value="dashboard_metrics">Dashboard</TabsTrigger> 
           <TabsTrigger value="security">Security</TabsTrigger>
         </TabsList>
 
@@ -91,6 +93,9 @@ export default function ProfilePage() {
         </TabsContent>
         <TabsContent value="sleep_goals"> 
           <SleepGoalsForm userProfile={userProfile} onProfileUpdate={handleProfilePartUpdate} />
+        </TabsContent>
+         <TabsContent value="dashboard_metrics">
+          <DashboardMetricsForm userProfile={userProfile} onProfileUpdate={handleProfilePartUpdate} />
         </TabsContent>
          <TabsContent value="security">
           <ChangePasswordForm />

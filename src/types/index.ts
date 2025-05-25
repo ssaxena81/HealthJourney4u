@@ -34,34 +34,32 @@ export const normalizedActivityTypeDisplayNames: Record<NormalizedActivityType, 
 export interface NormalizedActivityFirestore {
   id: string; // Unique ID in our database (e.g., dataSource-originalId)
   userId: string;
-  originalId: string; // ID from the source platform (e.g., Fitbit logId, Strava activity id, Google Fit session id)
-  dataSource: 'fitbit' | 'strava' | 'google-fit' | 'apple_health' | 'manual' | string; // Extensible
+  originalId: string; // ID from the source platform
+  dataSource: 'fitbit' | 'strava' | 'google-fit' | 'apple_health' | 'manual' | string;
   
-  type: NormalizedActivityType; // Standardized type
+  type: NormalizedActivityType;
   name?: string; // User-defined name/title if available
   
   startTimeUtc: string; // ISO 8601 format (UTC)
   startTimeLocal?: string; // ISO 8601 format (local time of activity, if available)
-  timezone?: string; // e.g., "America/Los_Angeles" (if available)
+  timezone?: string; // e.g., "America/Los_Angeles"
   
   durationMovingSec?: number; // Active duration in seconds
-  durationElapsedSec?: number; // Total duration in seconds (including pauses)
+  durationElapsedSec?: number; // Total duration in seconds
   
-  distanceMeters?: number; // Distance in meters
+  distanceMeters?: number;
   calories?: number;
-  steps?: number; // Optional, mainly for step-based activities
+  steps?: number;
   
-  averageHeartRateBpm?: number; // Optional
-  maxHeartRateBpm?: number; // Optional
+  averageHeartRateBpm?: number;
+  maxHeartRateBpm?: number;
   
-  elevationGainMeters?: number; // Optional
+  elevationGainMeters?: number;
   
-  mapPolyline?: string; // Optional, for map display (summary polyline)
+  mapPolyline?: string;
   
-  // For easy daily grouping/querying, derived from startTimeLocal or startTimeUtc
   date: string; // YYYY-MM-DD format 
-  
-  lastFetched: string; // ISO 8601 string (when this record was created/last updated in our DB)
+  lastFetched: string; // ISO 8601 string
 }
 
 
@@ -89,31 +87,31 @@ export interface BaseHealthEntry {
   type: HealthMetricTypeTimeline;
   title: string;
   notes?: string;
-  source?: 'manual' | 'quest' | 'uhc' | 'fitbit' | 'strava' | 'google-fit'; // To represent integrations
+  source?: 'manual' | 'quest' | 'uhc' | 'fitbit' | 'strava' | 'google-fit';
 }
 
 export interface WalkingEntry extends BaseHealthEntry {
   type: 'walking';
-  value: number; // steps or distance
+  value: number;
   unit: 'steps' | 'km' | 'miles';
 }
 
 export interface StandingEntry extends BaseHealthEntry {
   type: 'standing';
-  value: number; // duration
+  value: number;
   unit: 'minutes' | 'hours';
 }
 
 export interface BreathingEntry extends BaseHealthEntry {
   type: 'breathing';
-  value: number; // rate
+  value: number;
   unit: 'breaths/min';
-  quality?: string; // e.g., 'normal', 'labored'
+  quality?: string;
 }
 
 export interface PulseEntry extends BaseHealthEntry {
   type: 'pulse';
-  value: number; // bpm
+  value: number;
   unit: 'bpm';
 }
 
@@ -127,20 +125,20 @@ export interface AppointmentEntry extends BaseHealthEntry {
   doctor?: string;
   location?: string;
   reason?: string;
-  visitNotes?: string; // For UHC deep dive
+  visitNotes?: string;
 }
 
 export interface MedicationEntry extends BaseHealthEntry {
   type: 'medication';
-  medicationName: string; // Overrides title for specific use
+  medicationName: string;
   dosage: string;
   frequency: string;
 }
 
 export interface ConditionEntry extends BaseHealthEntry {
   type: 'condition';
-  conditionName: string; // Overrides title
-  diagnosisDate?: string; // ISO 8601
+  conditionName: string;
+  diagnosisDate?: string;
   status?: 'active' | 'resolved' | 'chronic';
 }
 
@@ -215,12 +213,10 @@ export interface GoogleFitApiCallStats {
 
 
 export interface WalkingRadarGoals {
-  // Maximums
   maxDailySteps?: number | null;
   maxDailyDistanceMeters?: number | null;
   maxDailyDurationSec?: number | null; 
   maxDailySessions?: number | null;
-  // Minimums
   minDailySteps?: number | null;
   minDailyDistanceMeters?: number | null;
   minDailyDurationSec?: number | null; 
@@ -228,23 +224,19 @@ export interface WalkingRadarGoals {
 }
 
 export interface RunningRadarGoals {
-  // Maximums
   maxDailyDistanceMeters?: number | null;
   maxDailyDurationSec?: number | null;
   maxDailySessions?: number | null;
-  // Minimums
   minDailyDistanceMeters?: number | null;
   minDailyDurationSec?: number | null;
   minDailySessions?: number | null;
 }
 
 export interface HikingRadarGoals {
-  // Maximums
   maxDailyDistanceMeters?: number | null;
   maxDailyDurationSec?: number | null;
   maxDailySessions?: number | null;
   maxDailyElevationGainMeters?: number | null;
-  // Minimums
   minDailyDistanceMeters?: number | null;
   minDailyDurationSec?: number | null;
   minDailySessions?: number | null;
@@ -252,28 +244,58 @@ export interface HikingRadarGoals {
 }
 
 export interface SwimmingRadarGoals {
-  // Maximums
   maxDailyDistanceMeters?: number | null;
   maxDailyDurationSec?: number | null;
   maxDailySessions?: number | null;
-  // Minimums
   minDailyDistanceMeters?: number | null;
   minDailyDurationSec?: number | null;
   minDailySessions?: number | null;
 }
 
 export interface SleepRadarGoals {
-  targetSleepDurationHours?: number | null; // Target for sleep duration
-  minSleepEfficiencyPercent?: number | null; // Minimum acceptable sleep efficiency
-  minTimeInDeepSleepMinutes?: number | null; // Minimum time in deep sleep
-  minTimeInRemSleepMinutes?: number | null; // Minimum time in REM sleep
+  targetSleepDurationHours?: number | null;
+  minSleepEfficiencyPercent?: number | null;
+  minTimeInDeepSleepMinutes?: number | null;
+  minTimeInRemSleepMinutes?: number | null;
 }
+
+// --- Dashboard Metric Selection Types ---
+export const DashboardMetricId = {
+  AVG_DAILY_STEPS: 'avgDailySteps',
+  AVG_SLEEP_DURATION: 'avgSleepDuration',
+  AVG_ACTIVE_MINUTES: 'avgActiveMinutes',
+  RESTING_HEART_RATE: 'restingHeartRate',
+  AVG_WORKOUT_DURATION: 'avgWorkoutDuration', // Example: average duration of 'workout' type activities
+  TOTAL_WORKOUTS: 'totalWorkouts',         // Example: count of 'workout' type activities in period
+  AVG_HEART_RATE_VARIABILITY: 'avgHRV',      // Example: if HRV data becomes available
+} as const;
+
+export type DashboardMetricIdValue = typeof DashboardMetricId[keyof typeof DashboardMetricId];
+
+export interface DashboardMetricConfig {
+  id: DashboardMetricIdValue;
+  label: string; // Display label for UI (checkbox, chart axis)
+  unit?: string; // Unit for display (e.g., 'steps', 'hours', 'bpm')
+  defaultMaxValue: number; // Default max for radar chart normalization if no user goal
+  // We might add a function here later like:
+  // calculateValue: (userId: string, dateRange: {from: string, to: string}) => Promise<number | undefined>;
+}
+
+export const AVAILABLE_DASHBOARD_METRICS: DashboardMetricConfig[] = [
+  { id: DashboardMetricId.AVG_DAILY_STEPS, label: 'Average Daily Steps', unit: 'steps', defaultMaxValue: 15000 },
+  { id: DashboardMetricId.AVG_SLEEP_DURATION, label: 'Average Sleep Duration', unit: 'hours', defaultMaxValue: 10 },
+  { id: DashboardMetricId.AVG_ACTIVE_MINUTES, label: 'Average Active Minutes', unit: 'min', defaultMaxValue: 120 },
+  { id: DashboardMetricId.RESTING_HEART_RATE, label: 'Average Resting Heart Rate', unit: 'bpm', defaultMaxValue: 100 }, // Assuming higher is 'worse' for normalization, or we take (max - value)
+  { id: DashboardMetricId.AVG_WORKOUT_DURATION, label: 'Average Workout Duration', unit: 'min', defaultMaxValue: 90 },
+  { id: DashboardMetricId.TOTAL_WORKOUTS, label: 'Total Workouts in Period', unit: 'sessions', defaultMaxValue: 10 },
+  // { id: DashboardMetricId.AVG_HEART_RATE_VARIABILITY, label: 'Avg. Heart Rate Variability', unit: 'ms', defaultMaxValue: 100 },
+];
+// --- End Dashboard Metric Selection Types ---
 
 
 export interface UserProfile {
-  id: string; // Firebase Auth UID - This will be the document ID in Firestore
+  id: string; 
 
-  // Part 1: Demographics
   firstName?: string; 
   middleInitial?: string; 
   lastName?: string; 
@@ -283,30 +305,25 @@ export interface UserProfile {
   mfaMethod?: 'email' | 'sms'; 
   isAgeCertified?: boolean; 
 
-  // Password and Terms Management
   lastPasswordChangeDate: string; 
   acceptedLatestTerms: boolean;
   termsVersionAccepted?: string; 
 
-  // Subscription and Payment
   subscriptionTier: SubscriptionTier;
   paymentDetails?: any; 
 
-  // Part 2: Fitness Connections
   connectedFitnessApps: Array<{
     id: string; 
     name: string; 
     connectedAt: string; 
   }>;
 
-  // Part 3: Diagnostics Connections
   connectedDiagnosticsServices: Array<{
     id: string; 
     name: string; 
     connectedAt: string; 
   }>;
 
-  // Part 4: Insurance Connections
   connectedInsuranceProviders: Array<{
     id: string; 
     name: string; 
@@ -324,6 +341,7 @@ export interface UserProfile {
   hikingRadarGoals?: HikingRadarGoals;
   swimmingRadarGoals?: SwimmingRadarGoals;
   sleepRadarGoals?: SleepRadarGoals;
+  dashboardRadarMetrics?: DashboardMetricIdValue[]; // Stores IDs of selected metrics
 }
 
 export const subscriptionTiers: SubscriptionTier[] = ['free', 'silver', 'gold', 'platinum'];
@@ -352,7 +370,7 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Fitbit Logged Activities Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Strava Activity Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Google Fit Activity Fetch", free: "1/day (sessions) + 5/day (metrics)", silver: "1/day (sessions) + 5/day (metrics)", gold: "1/day (sessions) + 10/day (metrics)", platinum: "3/day (sessions) + 20/day (metrics)" },
-  { feature: "Centralized App Sync", free: "Auto (1/24h)", silver: "Auto (1/24h)", gold: "Auto (1/24h)", platinum: "Auto (1/24h) + Manual (up to 3/day)" },
+  { feature: "Sync Connected Apps", free: "Auto (1/24h) + Manual (respects individual limits)", silver: "Auto (1/24h) + Manual (respects individual limits)", gold: "Auto (1/24h) + Manual (respects individual limits)", platinum: "Auto (1/24h) + Manual (respects individual limits)" },
 ];
 
 export interface SelectableService {
@@ -364,13 +382,6 @@ export const mockFitnessApps: SelectableService[] = [
   { id: 'fitbit', name: 'Fitbit' },
   { id: 'strava', name: 'Strava' },
   { id: 'google-fit', name: 'Google Fit' },
-  // { id: 'apple_health', name: 'Apple Health (Via Companion App)' },
-  // { id: 'nike_run_club', name: 'Nike Run Club' },
-  // { id: 'myfitnesspal', name: 'MyFitnessPal' },
-  // { id: 'fiton', name: 'FitOn Workouts' },
-  // { id: 'garmin', name: 'Garmin Connect' },
-  // { id: 'oura', name: 'Oura Ring' },
-  // { id: 'whoop', name: 'WHOOP' },
 ];
 
 export const mockDiagnosticServices: SelectableService[] = [
@@ -390,7 +401,7 @@ export const mockInsuranceProviders: SelectableService[] = [
 export interface FitbitActivitySummaryFirestore {
     date: string; // YYYY-MM-DD, also the document ID
     steps?: number; 
-    distance?: number; // In km (ensure consistency, but Fitbit API can vary based on user settings)
+    distance?: number; 
     caloriesOut?: number; 
     activeMinutes?: number; 
     lastFetched: string; // ISO string
@@ -417,10 +428,10 @@ export interface FitbitHeartRateFirestore {
 }
 
 export interface FitbitSleepLogFirestore {
-  dateOfSleep: string; // YYYY-MM-DD
-  logId: number; // Use as document ID in fitbit_sleep subcollection
-  startTime: string; // ISO 8601
-  endTime: string; // ISO 8601
+  dateOfSleep: string; 
+  logId: number; 
+  startTime: string; 
+  endTime: string; 
   duration: number; // milliseconds
   isMainSleep: boolean;
   minutesToFallAsleep: number;
@@ -454,4 +465,8 @@ export interface FitbitSleepLogFirestore {
   dataSource: 'fitbit';
 }
 
+export interface StravaActivityFirestore extends Omit<NormalizedActivityFirestore, 'dataSource' | 'id' | 'userId'> {
+  dataSource: 'strava';
+  // Strava specific fields can be added if needed, but mostly covered by NormalizedActivityFirestore
+}
     
