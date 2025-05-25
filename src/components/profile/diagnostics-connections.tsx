@@ -30,9 +30,42 @@ const getMaxConnectionsDiagnostics = (tier: SubscriptionTier): number => {
 const QUEST_DIAGNOSTICS_ID = 'quest'; // Assuming 'quest' is the ID for Quest Diagnostics
 
 const questAgreementText: string[] = [
+  "Effective Date: 25th May, 2025",
+  "1. Authorization to Access Health Information",
+  "By proceeding, you authorize HealthJourney4u (\"we,\" \"our,\" \"us\") to access and retrieve your Protected Health Information (PHI) from Quest Diagnostics through secure API integrations.",
+  "This information may include:",
+  "- Lab test results",
+  "- Diagnostic reports",
+  "- Appointment data",
+  "- Patient identifiers (e.g., name, date of birth)",
+  "We access only the data you explicitly authorize through the Quest Diagnostics interface or your account settings.",
+  "2. Purpose of Data Access",
+  "We will access and use your data from Quest Diagnostics solely for the following purposes:",
+  "- To display and summarize lab test results within the App",
+  "- To provide insights or analytics related to your health",
+  "- To integrate with your other connected services (e.g., fitness, insurance)",
+  "- To comply with applicable healthcare regulations",
+  "- To personalize your user experience",
+  "We will not use, disclose, or sell this data for marketing or third-party purposes without your additional consent.",
+  "3. HIPAA Compliance",
+  "We comply with the Health Insurance Portability and Accountability Act (HIPAA) and operate as a Business Associate where applicable. All accessed PHI is handled, transmitted, and stored (if applicable) in accordance with HIPAA Security and Privacy Rules.",
+  "4. No Storage Without Authorization",
+  "Unless you explicitly authorize storage of raw lab data, we do not permanently store your diagnostic or clinical information. Lab results and related data are accessed only in real-time and shown temporarily within the App interface.",
+  "If you choose to authorize storage, such data will be encrypted and retained only as long as necessary for the purpose specified.",
+  "5. Withdrawal of Consent",
+  "You may revoke this access at any time by:",
+  "- Disconnecting Quest Diagnostics in your account settings, or",
+  "- Contacting our support team at support@example.com", // Replace with your actual support email
+  "Upon revocation, we will immediately stop retrieving your data from Quest and remove any stored data (if previously authorized) in accordance with our data deletion policy.",
+  "6. Liability Disclaimer",
+  "You understand and agree that:",
+  "- Your Company Name is not responsible for the accuracy, completeness, or timeliness of the information provided by Quest Diagnostics.", // Replace with your actual company name
+  "- Any medical interpretation or action based on the retrieved data is solely your responsibility or that of your licensed healthcare provider.",
+  "- We are not liable for data access errors, outages, or delays from Quest Diagnostics' systems or APIs.",
+  "7. Acceptance",
   "By clicking “I Agree”:",
   "- You confirm that you are the rightful account holder or have the legal authority to access the Quest Diagnostics data being connected.",
-  "- You give us permission to access your PHI from Quest Diagnostics as outlined above.",
+  "- You give us permission to access your PHI from Quest Diagnostics as outlined above and store it so, in future, you can access it through the app.",
   "- You acknowledge that you have read and understood this Clickwrap Agreement and agree to its terms."
 ];
 
@@ -218,3 +251,4 @@ export default function DiagnosticsConnections({ userProfile, onConnectionsUpdat
     </>
   );
 }
+
