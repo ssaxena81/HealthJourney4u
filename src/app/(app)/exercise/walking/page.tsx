@@ -108,7 +108,7 @@ export default function WalkingExercisePage() {
                 <label htmlFor="sync-date" className="block text-sm font-medium mb-1">Select Date to Sync:</label>
                 <DatePicker id="sync-date" date={syncDate} setDate={setSyncDate} />
               </div>
-              <Button onClick={handleSyncFitbitData} disabled={isSyncing || !syncDate}>
+              <Button onClick={handleSyncFitbitData} disabled={isSyncing || !syncDate || !user}>
                 {isSyncing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
                 Sync Steps for Selected Date
               </Button>
@@ -130,7 +130,7 @@ export default function WalkingExercisePage() {
                         className="w-full"
                     />
                 </div>
-                <Button onClick={fetchDataForRange} disabled={isLoadingData || !viewDateRange.from || !viewDateRange.to}>
+                <Button onClick={fetchDataForRange} disabled={isLoadingData || !viewDateRange.from || !viewDateRange.to || !user}>
                   {isLoadingData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Load Data"}
                 </Button>
              </div>
@@ -181,3 +181,5 @@ export default function WalkingExercisePage() {
     </div>
   );
 }
+
+    

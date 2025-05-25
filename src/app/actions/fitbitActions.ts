@@ -105,7 +105,7 @@ export async function fetchAndStoreFitbitDailyActivity(
     const firestoreData: FitbitActivitySummaryFirestore = {
       date: targetDate, // Storing as YYYY-MM-DD
       steps: summary.steps,
-      distance: summary.distance, // This is typically a sum of distances from all activities for the day
+      distance: summary.distance, 
       caloriesOut: summary.caloriesOut,
       activeMinutes: (summary.fairlyActiveMinutes || 0) + (summary.veryActiveMinutes || 0),
       lastFetched: new Date().toISOString(),
@@ -150,14 +150,6 @@ export async function getFitbitActivitySummariesForDateRange(
   }
 
   try {
-    const summariesRef = collection(db, 'users', userId, 'fitbit_activity_summaries');
-    // Firestore queries for document IDs (which are dates here) within a range
-    const q = query(summariesRef, 
-                    where(doc().id, '>=', dateRange.from), 
-                    where(doc().id, '<=', dateRange.to),
-                    orderBy(doc().id, 'desc') // Get most recent first within the range
-                  );
-    
     // Firebase JS SDK v9 uses FieldPath.documentId() for querying by document ID
     // However, direct string comparison on document IDs (YYYY-MM-DD) works for lexicographical range queries
     // For more robust date range queries where IDs aren't dates, you'd store the date as a field.
@@ -398,7 +390,6 @@ export async function fetchAndStoreFitbitSleep(
         processedSleepLogs.push(firestoreData);
 
         // Store each sleep log using its logId as the document ID for uniqueness
-        // The subcollection is 'fitbit_sleep', documents are identified by logId
         const sleepDocRef = doc(db, 'users', userId, 'fitbit_sleep', String(log.logId));
         await setDoc(sleepDocRef, firestoreData, { merge: true });
         console.log(`[FitbitActions] Fitbit sleep log stored in Firestore for user ${userId}, logId ${log.logId}.`);
@@ -505,7 +496,22 @@ export async function fetchAndStoreFitbitSwimmingData(
     const processedSwims: FitbitSwimmingActivityFirestore[] = [];
     for (const swim of swimmingActivities) {
       // Combine startDate (YYYY-MM-DD) and startTime (HH:MM) to create a full ISO string for startTime
-      const fullStartTimeISO = parseISO(`${swim.startDate}T${swim.startTime}:00Z`).toISOString(); // Assuming UTC for now, Fitbit API might specify timezone
+      // Fitbit API's activity startTime is local to the user. For consistency in DB, we could store as UTC.
+      // However, parseISO assumes the input is ISO8601. If startTime is just "HH:MM", we need to combine it carefully.
+      // A robust solution considers the activity's timezone. For now, a simpler approach:
+      let fullStartTimeISO = swim.startTime; // Assume it's already ISO or can be parsed.
+      if (swim.startDate && swim.startTime && !swim.startTime.includes('T')) { // Basic check if it's just HH:MM
+         // Attempt to parse by combining. This assumes the user's local timezone for startTime.
+         // For global apps, full timezone handling is needed.
+         try {
+            const activityDateTime = parseISO(`${swim.startDate}T${swim.startTime}`); // This will be local time of server if no TZ
+            fullStartTimeISO = activityDateTime.toISOString(); // Convert to UTC ISO string
+         } catch(parseErr) {
+            console.warn(`[FitbitActions] Could not parse startDate ${swim.startDate} and startTime ${swim.startTime} for swim log ${swim.logId}. Storing original startTime.`, parseErr);
+            fullStartTimeISO = `${swim.startDate}T${swim.startTime}`; // Fallback
+         }
+      }
+
 
       const firestoreData: FitbitSwimmingActivityFirestore = {
         logId: swim.logId,
@@ -521,7 +527,6 @@ export async function fetchAndStoreFitbitSwimmingData(
       };
       processedSwims.push(firestoreData);
 
-      // Store each swim log using its logId as the document ID for uniqueness
       const swimDocRef = doc(db, 'users', userId, 'fitbit_swimming_activities', String(swim.logId));
       await setDoc(swimDocRef, firestoreData, { merge: true });
       console.log(`[FitbitActions] Fitbit swimming activity stored in Firestore for user ${userId}, logId ${swim.logId}.`);
@@ -545,3 +550,6 @@ export async function fetchAndStoreFitbitSwimmingData(
     return { success: false, message: `An unexpected server error occurred: ${String(error.message || 'Unknown server error')}`, errorCode: 'UNEXPECTED_SERVER_ERROR' };
   }
 }
+
+
+    
