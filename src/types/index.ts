@@ -64,6 +64,7 @@ export interface NormalizedActivityFirestore {
   lastFetched: string; // ISO 8601 string (when this record was created/last updated in our DB)
 }
 
+
 // --- Health Metric Types for Manual Entry & Timeline (Example) ---
 export type HealthMetricTypeTimeline =
   | 'walking'
@@ -348,8 +349,9 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Fitbit Heart Rate Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Fitbit Sleep Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Fitbit Swimming Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
+  { feature: "Fitbit Logged Activities Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Strava Activity Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
-  { feature: "Google Fit Activity Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
+  { feature: "Google Fit Activity Fetch", free: "1/day (sessions) + 5/day (metrics)", silver: "1/day (sessions) + 5/day (metrics)", gold: "1/day (sessions) + 10/day (metrics)", platinum: "3/day (sessions) + 20/day (metrics)" },
   { feature: "Centralized App Sync", free: "Auto (1/24h)", silver: "Auto (1/24h)", gold: "Auto (1/24h)", platinum: "Auto (1/24h) + Manual (up to 3/day)" },
 ];
 
@@ -451,4 +453,5 @@ export interface FitbitSleepLogFirestore {
   lastFetched: string; // ISO string
   dataSource: 'fitbit';
 }
-```
+
+    

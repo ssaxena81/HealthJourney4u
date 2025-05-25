@@ -8,7 +8,8 @@ import {
     fetchAndStoreFitbitDailyActivity, 
     fetchAndStoreFitbitHeartRate, 
     fetchAndStoreFitbitSleep,
-    fetchAndStoreFitbitSwimmingData
+    fetchAndStoreFitbitSwimmingData,
+    fetchAndStoreFitbitLoggedActivities // Import the new action
 } from './fitbitActions';
 import { fetchAndStoreStravaRecentActivities } from './stravaActions';
 import { fetchAndStoreGoogleFitActivities } from './googleFitActions';
@@ -53,14 +54,12 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
   }
 
   if (!userProfile) {
-    // Should have been caught above, but as a safeguard
     return { success: false, results: [], error: 'User profile is null.' };
   }
 
   const syncResults: SyncResult[] = [];
   const todayDateString = format(new Date(), 'yyyy-MM-dd');
   
-  // For Strava and Google Fit, fetch data for the last 48 hours as an example
   const now = new Date();
   const startTimeIso48hAgo = new Date(now.getTime() - 48 * 60 * 60 * 1000).toISOString();
   const endTimeIsoNow = now.toISOString();
@@ -71,23 +70,25 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
     console.log('[SyncActions] Attempting to sync Fitbit data...');
     try {
       const activityRes = await fetchAndStoreFitbitDailyActivity(todayDateString);
-      syncResults.push({ service: 'Fitbit Daily Activity', ...activityRes, activitiesProcessed: activityRes.data ? 1 : 0 });
+      syncResults.push({ service: 'Fitbit Daily Activity Summary', ...activityRes, activitiesProcessed: activityRes.data ? 1 : 0 });
 
       const heartRes = await fetchAndStoreFitbitHeartRate(todayDateString);
       syncResults.push({ service: 'Fitbit Heart Rate', ...heartRes, activitiesProcessed: heartRes.data ? 1 : 0 });
       
       const sleepRes = await fetchAndStoreFitbitSleep(todayDateString);
-      syncResults.push({ service: 'Fitbit Sleep', ...sleepRes, activitiesProcessed: sleepRes.data?.length });
+      syncResults.push({ service: 'Fitbit Sleep', ...sleepRes, activitiesProcessed: sleepRes.activitiesProcessed });
 
       const swimmingRes = await fetchAndStoreFitbitSwimmingData(todayDateString);
-      syncResults.push({ service: 'Fitbit Swimming', ...swimmingRes, activitiesProcessed: swimmingRes.activitiesProcessed });
+      syncResults.push({ service: 'Fitbit Swimming Activities', ...swimmingRes, activitiesProcessed: swimmingRes.activitiesProcessed });
       
-      // TODO: Add calls for other individual Fitbit activity types if actions are created
-      // e.g., fetchAndStoreFitbitLoggedActivities(todayDateString) for walks, runs, hikes...
+      // Add call for other individual Fitbit logged activities
+      const loggedActivitiesRes = await fetchAndStoreFitbitLoggedActivities(todayDateString);
+      syncResults.push({ service: 'Fitbit Logged Activities (Walk, Run, Hike etc.)', ...loggedActivitiesRes, activitiesProcessed: loggedActivitiesRes.activitiesProcessed });
+
 
     } catch (error: any) {
-      console.error('[SyncActions] Error during Fitbit sync:', error);
-      syncResults.push({ service: 'Fitbit', success: false, message: `Fitbit sync failed: ${error.message}` });
+      console.error('[SyncActions] Error during Fitbit sync portion:', error);
+      syncResults.push({ service: 'Fitbit (Overall)', success: false, message: `Fitbit sync portion failed: ${error.message}` });
     }
   }
 
@@ -95,7 +96,6 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
   if (userProfile.connectedFitnessApps?.some(app => app.id === 'strava')) {
     console.log('[SyncActions] Attempting to sync Strava data...');
     try {
-      // Fetch activities for the last 48 hours.
       const afterTimestamp = Math.floor(new Date(startTimeIso48hAgo).getTime() / 1000);
       const stravaRes = await fetchAndStoreStravaRecentActivities({ after: afterTimestamp });
       syncResults.push({ service: 'Strava Activities', ...stravaRes });
@@ -117,8 +117,9 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
     }
   }
 
-  // TODO: Add sync for Diagnostics and Insurance if/when those integrations are built
-
   console.log('[SyncActions] Completed syncAllConnectedData. Results:', syncResults);
   return { success: true, results: syncResults };
 }
+
+
+    

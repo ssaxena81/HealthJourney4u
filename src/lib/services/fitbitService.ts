@@ -139,6 +139,7 @@ export interface FitbitActivityLog {
   activityId: number; // ID of the activity type (e.g., 90013 for Walk)
   activityParentId?: number;
   activityParentName?: string;
+  activityName?: string; // Often used instead of 'name' for specific activity type
   calories: number;
   description?: string;
   distance?: number; // Distance of the activity. Unit depends on Accept-Language header or user's unit system.
@@ -152,7 +153,7 @@ export interface FitbitActivityLog {
   startDate: string; // YYYY-MM-DD
   startTime: string; // HH:MM (local time)
   steps?: number;
-  logType?: 'manual' | 'auto_detected' | 'mobile_run';
+  logType?: 'manual' | 'auto_detected' | 'mobile_run' | 'tracker'; // Added 'tracker'
   // Swim specific if available
   pace?: number; // seconds per 100m or 100yd
   speed?: number; // This is often redundant if pace is given, or one derives the other
@@ -190,8 +191,7 @@ async function fitbitApiRequest<T>(endpoint: string, accessToken: string, apiVer
 
   const headers: HeadersInit = {
     'Authorization': `Bearer ${accessToken}`,
-    'Accept-Locale': 'en_US', // Requesting units in a common format if possible (e.g., meters, km)
-    // Consider 'Accept-Language': 'en_US' as well if API supports it for units/names
+    'Accept-Locale': 'en_US', 
   };
   if (method === 'POST' && body) {
     headers['Content-Type'] = 'application/json';
@@ -253,32 +253,28 @@ export async function getSleepLogs(accessToken: string, date: string /* YYYY-MM-
   return fitbitApiRequest<FitbitSleepLogsResponse>(`/user/-/sleep/date/${date}.json`, accessToken, 'v1.2');
 }
 
-// Fetches all logged activities for a specific date
 export async function getLoggedActivitiesForDate(accessToken: string, date: string /* YYYY-MM-DD */): Promise<FitbitActivityLog[]> {
   console.log(`[FitbitService] Fetching logged activities for date: ${date}...`);
-  // The activities list endpoint might require beforeDate & afterDate, or sort & limit.
-  // Let's try with a specific date format first.
-  // A robust way is to use /activities/list.json with afterDate={date}T00:00:00&beforeDate={date}T23:59:59&sort=asc&limit=50&offset=0
-  // For simplicity, assuming the daily activity endpoint also returns a comprehensive list in its `activities` array.
-  const dailyData = await fitbitApiRequest<FitbitDailyActivityResponse>(`/user/-/activities/date/${date}.json`, accessToken, 'v1');
-  return dailyData.activities || [];
+  const endpoint = `/user/-/activities/list.json?afterDate=${date}T00:00:00&beforeDate=${date}T23:59:59&sort=asc&limit=50&offset=0`;
+  const response = await fitbitApiRequest<FitbitActivityListResponse>(endpoint, accessToken, 'v1');
+  return response.activities || [];
 }
 
-
-// This function is now more generic and will be called by specific data type server actions
-// It's kept here in case we need to fetch all types of activities for a date.
-// For specific types like "Swim", the server action will filter.
 export async function getSwimmingActivities(accessToken: string, date: string /* YYYY-MM-DD */): Promise<FitbitActivityLog[]> {
   console.log(`[FitbitService] Fetching activities for date: ${date} to find swims...`);
-  const dailyData = await fitbitApiRequest<FitbitDailyActivityResponse>(`/user/-/activities/date/${date}.json`, accessToken, 'v1');
-  if (dailyData && dailyData.activities) {
-    const swims = dailyData.activities.filter(activity => 
-        activity.name?.toLowerCase() === 'swim' || 
-        activity.activityName?.toLowerCase() === 'swim' ||
-        activity.activityTypeId === 20022 // Common Fitbit activityTypeId for Swim
+  const endpoint = `/user/-/activities/list.json?afterDate=${date}T00:00:00&beforeDate=${date}T23:59:59&sort=asc&limit=50&offset=0`;
+  const response = await fitbitApiRequest<FitbitActivityListResponse>(endpoint, accessToken, 'v1');
+  
+  if (response && response.activities) {
+    const swims = response.activities.filter(activity => 
+        (activity.activityName?.toLowerCase() === 'swim' || activity.name?.toLowerCase() === 'swim') || 
+        activity.activityId === 90022 || // Common Fitbit activityTypeId for Swim (Pool)
+        activity.activityId === 35001    // Common Fitbit activityTypeId for Swim (Open water)
     );
     console.log(`[FitbitService] Found ${swims.length} swimming activities for date ${date}.`);
     return swims;
   }
   return [];
 }
+
+    
