@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useTransition } from 'react';
+import React, { useState, useEffect, useTransition, useMemo } from 'react';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { DatePickerWithRange } from '@/components/ui/date-range-picker';
@@ -9,9 +9,33 @@ import { useToast } from '@/hooks/use-toast';
 import { getNormalizedActivitiesForDateRangeAndType } from '@/app/actions/activityActions';
 import type { NormalizedActivityFirestore } from '@/types';
 import { NormalizedActivityType } from '@/types';
-import { format, parseISO, startOfDay, endOfDay } from 'date-fns';
-import { Loader2, Footprints } from 'lucide-react'; // Using Footprints for walking
+import { format, parseISO, startOfDay, endOfDay, differenceInDays, eachDayOfInterval } from 'date-fns';
+import { Loader2, Footprints } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import {
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  Legend,
+  ResponsiveContainer,
+  Tooltip as RechartsTooltip, // Renamed to avoid conflict with Shadcn Tooltip
+} from 'recharts';
+import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+
+// Placeholder maximums for normalization (ideally make these dynamic or user-configurable)
+const MAX_AVG_DAILY_STEPS = 15000;
+const MAX_AVG_DAILY_DISTANCE_METERS = 10000; // 10km
+const MAX_AVG_DAILY_DURATION_SEC = 7200; // 2 hours
+const MAX_AVG_DAILY_SESSIONS = 3;
+
+interface RadarChartDataPoint {
+  metric: string;
+  value: number; // Normalized value (0-100)
+  actualValue: string; // Formatted actual value for tooltip
+  fullMark: number; // Max value for the axis (always 100 for normalized)
+}
 
 export default function WalkingExercisePage() {
   const { user } = useAuth();
@@ -40,7 +64,7 @@ export default function WalkingExercisePage() {
         );
 
         if (result.success && result.data) {
-          setWalkingActivities(result.data);
+          setWalkingActivities(result.data.sort((a, b) => parseISO(b.startTimeUtc).getTime() - parseISO(a.startTimeUtc).getTime()));
           if (result.data.length === 0) {
             toast({ title: 'No Data', description: 'No walking activities found in Firestore for the selected range.', variant: 'default' });
           }
@@ -64,24 +88,87 @@ export default function WalkingExercisePage() {
   }, [viewDateRange, user]);
 
   const formatDuration = (seconds?: number): string => {
-    if (seconds === undefined || seconds === null) return 'N/A';
+    if (seconds === undefined || seconds === null || isNaN(seconds)) return 'N/A';
     const h = Math.floor(seconds / 3600);
     const m = Math.floor((seconds % 3600) / 60);
     const s = Math.floor(seconds % 60);
     let str = '';
     if (h > 0) str += `${h}h `;
-    if (m > 0 || h > 0) str += `${m}m `; // Show minutes if hours are present or minutes > 0
+    if (m > 0 || h > 0) str += `${m}m `;
     str += `${s}s`;
-    return str.trim() || '0s'; // Ensure "0s" if all are zero
+    return str.trim() || '0s';
   };
 
   const formatDistance = (meters?: number): string => {
-    if (meters === undefined || meters === null) return 'N/A';
+    if (meters === undefined || meters === null || isNaN(meters)) return 'N/A';
     if (meters >= 1000) {
       return `${(meters / 1000).toFixed(2)} km`;
     }
     return `${meters.toFixed(0)} m`;
   };
+
+  const radarChartData = useMemo((): RadarChartDataPoint[] => {
+    if (!walkingActivities.length || !viewDateRange.from || !viewDateRange.to) return [];
+
+    const numberOfDaysInRange = differenceInDays(endOfDay(viewDateRange.to), startOfDay(viewDateRange.from)) + 1;
+    if (numberOfDaysInRange <= 0) return [];
+
+    let totalSteps = 0;
+    let totalDistanceMeters = 0;
+    let totalDurationMovingSec = 0;
+    const uniqueDaysWithSessions = new Set<string>();
+
+    walkingActivities.forEach(activity => {
+      totalSteps += activity.steps || 0;
+      totalDistanceMeters += activity.distanceMeters || 0;
+      totalDurationMovingSec += activity.durationMovingSec || 0;
+      uniqueDaysWithSessions.add(activity.date); // activity.date is 'YYYY-MM-DD'
+    });
+    
+    const totalSessions = walkingActivities.length;
+
+    // Calculate averages over the number of days in the selected range, not just days with activity
+    const avgDailySteps = totalSteps / numberOfDaysInRange;
+    const avgDailyDistance = totalDistanceMeters / numberOfDaysInRange;
+    const avgDailyDuration = totalDurationMovingSec / numberOfDaysInRange;
+    const avgDailySessions = totalSessions / numberOfDaysInRange;
+
+
+    return [
+      {
+        metric: 'Avg Steps/Day',
+        value: Math.min(100, (avgDailySteps / MAX_AVG_DAILY_STEPS) * 100),
+        actualValue: `${Math.round(avgDailySteps).toLocaleString()} steps`,
+        fullMark: 100,
+      },
+      {
+        metric: 'Avg Distance/Day',
+        value: Math.min(100, (avgDailyDistance / MAX_AVG_DAILY_DISTANCE_METERS) * 100),
+        actualValue: formatDistance(avgDailyDistance),
+        fullMark: 100,
+      },
+      {
+        metric: 'Avg Duration/Day',
+        value: Math.min(100, (avgDailyDuration / MAX_AVG_DAILY_DURATION_SEC) * 100),
+        actualValue: formatDuration(avgDailyDuration),
+        fullMark: 100,
+      },
+      {
+        metric: 'Avg Sessions/Day',
+        value: Math.min(100, (avgDailySessions / MAX_AVG_DAILY_SESSIONS) * 100),
+        actualValue: `${avgDailySessions.toFixed(1)} sessions`,
+        fullMark: 100,
+      },
+    ];
+  }, [walkingActivities, viewDateRange.from, viewDateRange.to]);
+
+  const chartConfig = {
+    performance: {
+      label: 'Walking Performance',
+      color: 'hsl(var(--chart-1))',
+    },
+  };
+
 
   return (
     <div className="container mx-auto py-6 px-4 md:px-6 space-y-8">
@@ -92,7 +179,7 @@ export default function WalkingExercisePage() {
             <div>
               <CardTitle className="text-3xl font-bold tracking-tight">Walking Activities</CardTitle>
               <CardDescription className="text-muted-foreground">
-                View your logged walking sessions from connected sources.
+                View and analyze your logged walking sessions from connected sources.
               </CardDescription>
             </div>
           </div>
@@ -114,9 +201,6 @@ export default function WalkingExercisePage() {
                 {isLoadingData ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : "Load Data"}
               </Button>
             </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Data is fetched from your stored activities. Sync new activities from your Profile page.
-            </p>
           </div>
         </CardContent>
       </Card>
@@ -126,6 +210,52 @@ export default function WalkingExercisePage() {
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
           <p className="ml-4 text-lg">Loading walking activities...</p>
         </div>
+      )}
+
+      {!isLoadingData && walkingActivities.length > 0 && radarChartData.length > 0 && (
+        <Card className="shadow-md rounded-lg">
+          <CardHeader>
+            <CardTitle>Walking Performance Overview</CardTitle>
+            <CardDescription>
+              Average daily metrics for the selected period ({viewDateRange.from ? format(viewDateRange.from, 'MMM d, yyyy') : ''} - {viewDateRange.to ? format(viewDateRange.to, 'MMM d, yyyy') : ''}). Values are normalized to 100.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="pb-8">
+            <ChartContainer config={chartConfig} className="mx-auto aspect-square max-h-[400px]">
+              <RadarChart data={radarChartData} margin={{ top: 20, right: 20, bottom: 20, left: 20 }}>
+                <ChartTooltip
+                  cursor={false}
+                  content={
+                    <ChartTooltipContent
+                      indicator="line"
+                      labelKey="actualValue" // Show actual value in tooltip title
+                      nameKey="metric"
+                      formatter={(value, name, props) => (
+                        <>
+                          <div className="font-medium">{props.payload.metric}</div>
+                          <div className="text-muted-foreground">
+                            {props.payload.actualValue} (Normalized: {Math.round(props.payload.value as number)}/100)
+                          </div>
+                        </>
+                      )}
+                    />
+                  }
+                />
+                <PolarGrid />
+                <PolarAngleAxis dataKey="metric" tick={{ fontSize: 12 }} />
+                <PolarRadiusAxis angle={90} domain={[0, 100]} tick={false} axisLine={false} />
+                <Radar
+                  name="Performance"
+                  dataKey="value"
+                  stroke="var(--color-performance)"
+                  fill="var(--color-performance)"
+                  fillOpacity={0.6}
+                />
+                <Legend />
+              </RadarChart>
+            </ChartContainer>
+          </CardContent>
+        </Card>
       )}
 
       {!isLoadingData && walkingActivities.length === 0 && (
@@ -149,7 +279,7 @@ export default function WalkingExercisePage() {
                 <CardHeader className="pb-2 bg-muted/30">
                   <CardTitle className="text-lg capitalize flex items-center gap-2">
                      <Footprints className="h-5 w-5 text-primary" />
-                    {activity.title || `Walk on ${format(parseISO(activity.startTimeUtc), 'PP')}`}
+                    {activity.name || `Walk on ${format(parseISO(activity.startTimeUtc), 'PP')}`}
                   </CardTitle>
                    <CardDescription className="text-xs">
                      {format(parseISO(activity.startTimeUtc), 'PPpp')} ({activity.timezone || 'UTC'})
@@ -158,12 +288,12 @@ export default function WalkingExercisePage() {
                 <CardContent className="space-y-1 text-sm pt-4">
                   <p><strong>Distance:</strong> {formatDistance(activity.distanceMeters)}</p>
                   <p><strong>Duration (Moving):</strong> {formatDuration(activity.durationMovingSec)}</p>
-                  {activity.durationElapsedSec !== activity.durationMovingSec && (
+                  {activity.durationElapsedSec !== activity.durationMovingSec && activity.durationElapsedSec && (
                      <p><strong>Duration (Total):</strong> {formatDuration(activity.durationElapsedSec)}</p>
                   )}
                   {activity.steps !== undefined && <p><strong>Steps:</strong> {activity.steps.toLocaleString()}</p>}
                   {activity.averageHeartRateBpm !== undefined && <p><strong>Avg. Heart Rate:</strong> {activity.averageHeartRateBpm.toFixed(0)} bpm</p>}
-                  {activity.calories !== undefined && <p><strong>Calories:</strong> {activity.calories.toLocaleString()}</p>}
+                  {activity.calories !== undefined && <p><strong>Calories:</strong> {activity.calories.toLocaleString()} kcal</p>}
                 </CardContent>
                 <CardFooter className="text-xs text-muted-foreground bg-muted/20 py-2 px-4 justify-between items-center">
                   <span>Source: <span className="capitalize font-medium">{activity.dataSource}</span></span>
