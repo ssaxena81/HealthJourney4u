@@ -29,16 +29,24 @@ const DEFAULT_MAX_AVG_DAILY_DISTANCE_METERS = 10000; // 10km
 const DEFAULT_MAX_AVG_DAILY_DURATION_SEC = 7200; // 2 hours
 const DEFAULT_MAX_AVG_DAILY_SESSIONS = 3;
 
+// Default minimums (conceptual, used for comparison if not set by user)
+const DEFAULT_MIN_AVG_DAILY_STEPS = 0;
+const DEFAULT_MIN_AVG_DAILY_DISTANCE_METERS = 0;
+const DEFAULT_MIN_AVG_DAILY_DURATION_SEC = 0;
+const DEFAULT_MIN_AVG_DAILY_SESSIONS = 0;
+
+
 interface RadarChartDataPoint {
   metric: string;
   value: number; // Normalized value (0-100)
   actualValue: string; // Formatted actual value for tooltip
   fullMark: number; // Max value for the axis (always 100 for normalized)
   isOverGoal?: boolean;
+  isBelowMinGoal?: boolean;
 }
 
 export default function WalkingExercisePage() {
-  const { user, userProfile } = useAuth(); // Get userProfile for radar goals
+  const { user, userProfile } = useAuth();
   const { toast } = useToast();
   const [isLoadingData, startDataFetchTransition] = useTransition();
 
@@ -50,10 +58,16 @@ export default function WalkingExercisePage() {
 
   const userGoals: WalkingRadarGoals = userProfile?.walkingRadarGoals || {};
 
-  const MAX_AVG_DAILY_STEPS = userGoals.maxDailySteps || DEFAULT_MAX_AVG_DAILY_STEPS;
-  const MAX_AVG_DAILY_DISTANCE_METERS = userGoals.maxDailyDistanceMeters || DEFAULT_MAX_AVG_DAILY_DISTANCE_METERS;
-  const MAX_AVG_DAILY_DURATION_SEC = userGoals.maxDailyDurationSec || DEFAULT_MAX_AVG_DAILY_DURATION_SEC;
-  const MAX_AVG_DAILY_SESSIONS = userGoals.maxDailySessions || DEFAULT_MAX_AVG_DAILY_SESSIONS;
+  // Use user-defined goals or fall back to defaults
+  const MAX_AVG_DAILY_STEPS = userGoals.maxDailySteps ?? DEFAULT_MAX_AVG_DAILY_STEPS;
+  const MAX_AVG_DAILY_DISTANCE_METERS = userGoals.maxDailyDistanceMeters ?? DEFAULT_MAX_AVG_DAILY_DISTANCE_METERS;
+  const MAX_AVG_DAILY_DURATION_SEC = userGoals.maxDailyDurationSec ?? DEFAULT_MAX_AVG_DAILY_DURATION_SEC;
+  const MAX_AVG_DAILY_SESSIONS = userGoals.maxDailySessions ?? DEFAULT_MAX_AVG_DAILY_SESSIONS;
+
+  const MIN_AVG_DAILY_STEPS = userGoals.minDailySteps ?? DEFAULT_MIN_AVG_DAILY_STEPS;
+  const MIN_AVG_DAILY_DISTANCE_METERS = userGoals.minDailyDistanceMeters ?? DEFAULT_MIN_AVG_DAILY_DISTANCE_METERS;
+  const MIN_AVG_DAILY_DURATION_SEC = userGoals.minDailyDurationSec ?? DEFAULT_MIN_AVG_DAILY_DURATION_SEC;
+  const MIN_AVG_DAILY_SESSIONS = userGoals.minDailySessions ?? DEFAULT_MIN_AVG_DAILY_SESSIONS;
 
 
   const fetchDataForRange = async () => {
@@ -125,12 +139,10 @@ export default function WalkingExercisePage() {
     let totalDistanceMeters = 0;
     let totalDurationMovingSec = 0;
     
-    const uniqueDaysWithSessions = new Set<string>();
     walkingActivities.forEach(activity => {
       totalSteps += activity.steps || 0;
       totalDistanceMeters += activity.distanceMeters || 0;
       totalDurationMovingSec += activity.durationMovingSec || 0;
-      uniqueDaysWithSessions.add(activity.date); 
     });
     
     const totalSessions = walkingActivities.length;
@@ -143,44 +155,50 @@ export default function WalkingExercisePage() {
     const dataPoints: RadarChartDataPoint[] = [
       {
         metric: 'Avg Steps/Day',
-        value: Math.min(100, (avgDailySteps / MAX_AVG_DAILY_STEPS) * 100),
+        value: Math.min(100, (avgDailySteps / (MAX_AVG_DAILY_STEPS || 1)) * 100), // Avoid division by zero if MAX is 0
         actualValue: `${Math.round(avgDailySteps).toLocaleString()} steps`,
         fullMark: 100,
-        isOverGoal: avgDailySteps > MAX_AVG_DAILY_STEPS && !!userGoals.maxDailySteps,
+        isOverGoal: MAX_AVG_DAILY_STEPS > 0 && avgDailySteps > MAX_AVG_DAILY_STEPS,
+        isBelowMinGoal: MIN_AVG_DAILY_STEPS > 0 && avgDailySteps < MIN_AVG_DAILY_STEPS,
       },
       {
         metric: 'Avg Distance/Day',
-        value: Math.min(100, (avgDailyDistance / MAX_AVG_DAILY_DISTANCE_METERS) * 100),
+        value: Math.min(100, (avgDailyDistance / (MAX_AVG_DAILY_DISTANCE_METERS || 1)) * 100),
         actualValue: formatDistance(avgDailyDistance),
         fullMark: 100,
-        isOverGoal: avgDailyDistance > MAX_AVG_DAILY_DISTANCE_METERS && !!userGoals.maxDailyDistanceMeters,
+        isOverGoal: MAX_AVG_DAILY_DISTANCE_METERS > 0 && avgDailyDistance > MAX_AVG_DAILY_DISTANCE_METERS,
+        isBelowMinGoal: MIN_AVG_DAILY_DISTANCE_METERS > 0 && avgDailyDistance < MIN_AVG_DAILY_DISTANCE_METERS,
       },
       {
         metric: 'Avg Duration/Day',
-        value: Math.min(100, (avgDailyDuration / MAX_AVG_DAILY_DURATION_SEC) * 100),
+        value: Math.min(100, (avgDailyDuration / (MAX_AVG_DAILY_DURATION_SEC || 1)) * 100),
         actualValue: formatDuration(avgDailyDuration),
         fullMark: 100,
-        isOverGoal: avgDailyDuration > MAX_AVG_DAILY_DURATION_SEC && !!userGoals.maxDailyDurationSec,
+        isOverGoal: MAX_AVG_DAILY_DURATION_SEC > 0 && avgDailyDuration > MAX_AVG_DAILY_DURATION_SEC,
+        isBelowMinGoal: MIN_AVG_DAILY_DURATION_SEC > 0 && avgDailyDuration < MIN_AVG_DAILY_DURATION_SEC,
       },
       {
         metric: 'Avg Sessions/Day',
-        value: Math.min(100, (avgDailySessions / MAX_AVG_DAILY_SESSIONS) * 100),
+        value: Math.min(100, (avgDailySessions / (MAX_AVG_DAILY_SESSIONS || 1)) * 100),
         actualValue: `${avgDailySessions.toFixed(1)} sessions`,
         fullMark: 100,
-        isOverGoal: avgDailySessions > MAX_AVG_DAILY_SESSIONS && !!userGoals.maxDailySessions,
+        isOverGoal: MAX_AVG_DAILY_SESSIONS > 0 && avgDailySessions > MAX_AVG_DAILY_SESSIONS,
+        isBelowMinGoal: MIN_AVG_DAILY_SESSIONS > 0 && avgDailySessions < MIN_AVG_DAILY_SESSIONS,
       },
     ];
     
     dataPoints.forEach(point => {
         if (point.isOverGoal) {
-            console.warn(`[WalkingPage] Metric "${point.metric}" (${point.actualValue}) exceeds configured goal. Consider updating goals in profile.`);
+            console.warn(`[WalkingPage] Metric "${point.metric}" (${point.actualValue}) exceeds configured max goal. Consider updating goals in profile.`);
+        }
+        if (point.isBelowMinGoal) {
+            console.warn(`[WalkingPage] Metric "${point.metric}" (${point.actualValue}) is below configured min goal. Consider updating goals in profile.`);
         }
     });
 
-
     return dataPoints;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [walkingActivities, viewDateRange.from, viewDateRange.to, userProfile]); // Depend on userProfile to re-calc if goals change
+  }, [walkingActivities, viewDateRange.from, viewDateRange.to, userProfile]);
 
   const chartConfig = {
     performance: {
@@ -193,16 +211,31 @@ export default function WalkingExercisePage() {
     return radarChartData.some(point => point.isOverGoal);
   }, [radarChartData]);
 
+  const showMinGoalNotMetToast = useMemo(() => {
+    return radarChartData.some(point => point.isBelowMinGoal);
+  }, [radarChartData]);
+
   useEffect(() => {
-    if (showGoalExceededToast && walkingActivities.length > 0) { // Only show if there's data
+    if (showGoalExceededToast && walkingActivities.length > 0) {
       toast({
         title: "Performance Update",
-        description: "One or more walking metrics exceeded your set goals for the selected period. Consider adjusting your goals in Profile > Activity Goals.",
+        description: "One or more walking metrics exceeded your set maximum goals for the selected period. Consider adjusting your goals in Profile > Activity Goals.",
         variant: "default",
         duration: 10000,
       });
     }
   }, [showGoalExceededToast, toast, walkingActivities.length]);
+
+  useEffect(() => {
+    if (showMinGoalNotMetToast && walkingActivities.length > 0) {
+      toast({
+        title: "Performance Alert",
+        description: "One or more walking metrics fell below your set minimum goals for the selected period. Consider adjusting your goals or activity level.",
+        variant: "default", // Could be 'destructive' or a custom variant for alerts
+        duration: 10000,
+      });
+    }
+  }, [showMinGoalNotMetToast, toast, walkingActivities.length]);
 
 
   return (
@@ -273,7 +306,8 @@ export default function WalkingExercisePage() {
                           <div className="font-medium">{props.payload.metric}</div>
                           <div className="text-muted-foreground">
                             {props.payload.actualValue} (Normalized: {Math.round(props.payload.value as number)}/100)
-                            {props.payload.isOverGoal && <span className="text-xs text-amber-600 ml-1">(Over Goal)</span>}
+                            {props.payload.isOverGoal && <span className="text-xs text-amber-600 ml-1">(Over Max Goal)</span>}
+                            {props.payload.isBelowMinGoal && <span className="text-xs text-orange-600 ml-1">(Below Min Goal)</span>}
                           </div>
                         </>
                       )}
@@ -346,5 +380,4 @@ export default function WalkingExercisePage() {
     </div>
   );
 }
-
-    
+```

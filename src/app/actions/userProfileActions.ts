@@ -6,12 +6,33 @@ import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
 import { doc, updateDoc } from 'firebase/firestore';
 import type { WalkingRadarGoals } from '@/types';
 
+// Schema for validating individual goal values
+const optionalPositiveNumber = z.preprocess(
+  (val) => (val === "" || val === null || val === undefined ? undefined : Number(val)),
+  z.number().nonnegative("Must be a non-negative number (0 or more).").optional().nullable()
+);
+
 const WalkingRadarGoalsSchema = z.object({
-  maxDailySteps: z.number().positive("Max daily steps must be a positive number.").optional().nullable(),
-  maxDailyDistanceMeters: z.number().positive("Max daily distance must be a positive number.").optional().nullable(),
-  maxDailyDurationSec: z.number().positive("Max daily duration must be a positive number.").optional().nullable(),
-  maxDailySessions: z.number().positive("Max daily sessions must be a positive number.").optional().nullable(),
+  maxDailySteps: optionalPositiveNumber,
+  maxDailyDistanceMeters: optionalPositiveNumber,
+  maxDailyDurationSec: optionalPositiveNumber, // Already in seconds from form
+  maxDailySessions: optionalPositiveNumber,
+  minDailySteps: optionalPositiveNumber,
+  minDailyDistanceMeters: optionalPositiveNumber,
+  minDailyDurationSec: optionalPositiveNumber, // Already in seconds from form
+  minDailySessions: optionalPositiveNumber,
+}).refine(data => { // Ensure max is greater than or equal to min if both are set
+  if (data.minDailySteps !== undefined && data.maxDailySteps !== undefined && data.minDailySteps > data.maxDailySteps) return false;
+  if (data.minDailyDistanceMeters !== undefined && data.maxDailyDistanceMeters !== undefined && data.minDailyDistanceMeters > data.maxDailyDistanceMeters) return false;
+  if (data.minDailyDurationSec !== undefined && data.maxDailyDurationSec !== undefined && data.minDailyDurationSec > data.maxDailyDurationSec) return false;
+  if (data.minDailySessions !== undefined && data.maxDailySessions !== undefined && data.minDailySessions > data.maxDailySessions) return false;
+  return true;
+}, {
+  message: "Minimum value cannot be greater than its corresponding maximum value.",
+  // Path can be more specific if needed, but a general error might be fine here
+  path: ["minDailySteps"], // Example path, specific errors for each pair would be more UX friendly
 });
+
 
 interface UpdateWalkingRadarGoalsResult {
   success: boolean;
@@ -21,7 +42,7 @@ interface UpdateWalkingRadarGoalsResult {
 }
 
 export async function updateWalkingRadarGoals(
-  values: WalkingRadarGoals
+  values: WalkingRadarGoals // Expects values already processed (e.g., duration in seconds)
 ): Promise<UpdateWalkingRadarGoalsResult> {
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
@@ -34,12 +55,17 @@ export async function updateWalkingRadarGoals(
   try {
     const validatedValues = WalkingRadarGoalsSchema.parse(values);
     
-    // Filter out null values before sending to Firestore, as Firestore doesn't like explicit nulls for missing fields (use deleteField if needed, or just omit)
-    const goalsToUpdate: Partial<WalkingRadarGoals> = {};
-    if (validatedValues.maxDailySteps != null) goalsToUpdate.maxDailySteps = validatedValues.maxDailySteps;
-    if (validatedValues.maxDailyDistanceMeters != null) goalsToUpdate.maxDailyDistanceMeters = validatedValues.maxDailyDistanceMeters;
-    if (validatedValues.maxDailyDurationSec != null) goalsToUpdate.maxDailyDurationSec = validatedValues.maxDailyDurationSec;
-    if (validatedValues.maxDailySessions != null) goalsToUpdate.maxDailySessions = validatedValues.maxDailySessions;
+    const goalsToUpdate: WalkingRadarGoals = {};
+    // Max values
+    if (validatedValues.maxDailySteps !== undefined) goalsToUpdate.maxDailySteps = validatedValues.maxDailySteps === null ? undefined : validatedValues.maxDailySteps;
+    if (validatedValues.maxDailyDistanceMeters !== undefined) goalsToUpdate.maxDailyDistanceMeters = validatedValues.maxDailyDistanceMeters === null ? undefined : validatedValues.maxDailyDistanceMeters;
+    if (validatedValues.maxDailyDurationSec !== undefined) goalsToUpdate.maxDailyDurationSec = validatedValues.maxDailyDurationSec === null ? undefined : validatedValues.maxDailyDurationSec;
+    if (validatedValues.maxDailySessions !== undefined) goalsToUpdate.maxDailySessions = validatedValues.maxDailySessions === null ? undefined : validatedValues.maxDailySessions;
+    // Min values
+    if (validatedValues.minDailySteps !== undefined) goalsToUpdate.minDailySteps = validatedValues.minDailySteps === null ? undefined : validatedValues.minDailySteps;
+    if (validatedValues.minDailyDistanceMeters !== undefined) goalsToUpdate.minDailyDistanceMeters = validatedValues.minDailyDistanceMeters === null ? undefined : validatedValues.minDailyDistanceMeters;
+    if (validatedValues.minDailyDurationSec !== undefined) goalsToUpdate.minDailyDurationSec = validatedValues.minDailyDurationSec === null ? undefined : validatedValues.minDailyDurationSec;
+    if (validatedValues.minDailySessions !== undefined) goalsToUpdate.minDailySessions = validatedValues.minDailySessions === null ? undefined : validatedValues.minDailySessions;
 
 
     if (!db || !db.app) {
@@ -49,7 +75,7 @@ export async function updateWalkingRadarGoals(
 
     const userProfileDocRef = doc(db, 'users', userId);
     await updateDoc(userProfileDocRef, {
-      walkingRadarGoals: goalsToUpdate,
+      walkingRadarGoals: goalsToUpdate, // This will overwrite the existing walkingRadarGoals object
     });
 
     console.log('[USER_PROFILE_ACTIONS] Walking radar goals updated successfully for UID:', userId);
@@ -64,5 +90,4 @@ export async function updateWalkingRadarGoals(
     return { success: false, error: String(error.message) || 'Failed to update walking goals.' };
   }
 }
-
-    
+```

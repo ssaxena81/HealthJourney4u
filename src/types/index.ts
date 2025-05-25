@@ -94,54 +94,66 @@ export interface StravaApiCallStats {
 }
 
 export interface WalkingRadarGoals {
+  // Maximums
   maxDailySteps?: number;
   maxDailyDistanceMeters?: number;
   maxDailyDurationSec?: number; // Stored in seconds
   maxDailySessions?: number;
+  // Minimums
+  minDailySteps?: number;
+  minDailyDistanceMeters?: number;
+  minDailyDurationSec?: number; // Stored in seconds
+  minDailySessions?: number;
 }
 
 export interface UserProfile {
-  id: string; // Firebase Auth UID
+  id: string; // Firebase Auth UID - This will be the document ID in Firestore
 
-  firstName?: string;
-  middleInitial?: string;
-  lastName?: string;
-  dateOfBirth?: string; // ISO 8601
-  email: string;
-  cellPhone?: string;
-  mfaMethod?: 'email' | 'sms';
-  isAgeCertified?: boolean;
+  // Part 1: Demographics
+  firstName?: string; // Mandatory during profile setup
+  middleInitial?: string; // Optional
+  lastName?: string; // Mandatory during profile setup
+  dateOfBirth?: string; // ISO 8601 format, Mandatory during profile setup
+  email: string; // Login ID, matches Auth email, effectively mandatory
+  cellPhone?: string; // Optional, but one of email/cellPhone needed for MFA
+  mfaMethod?: 'email' | 'sms'; // User's preferred/configured MFA method
+  isAgeCertified?: boolean; // User certifies they are 18 or older
 
-  lastPasswordChangeDate: string; // ISO 8601
+  // Password and Terms Management
+  lastPasswordChangeDate: string; // ISO 8601 format
   acceptedLatestTerms: boolean;
-  termsVersionAccepted?: string;
+  termsVersionAccepted?: string; // Version identifier of T&C accepted
 
+  // Subscription and Payment
   subscriptionTier: SubscriptionTier;
-  paymentDetails?: any;
+  paymentDetails?: any; // Placeholder for payment system identifiers (e.g., Stripe customer ID)
 
+  // Part 2: Fitness Connections
   connectedFitnessApps: Array<{
-    id: string;
-    name: string;
-    connectedAt: string; // ISO 8601
+    id: string; // e.g., 'fitbit', 'strava' (identifier for the service)
+    name: string; // e.g., 'Fitbit', 'Strava' (display name)
+    connectedAt: string; // ISO 8601 format - when the connection was established
   }>;
 
+  // Part 3: Diagnostics Connections
   connectedDiagnosticsServices: Array<{
-    id: string;
-    name: string;
-    connectedAt: string; // ISO 8601
+    id: string; // e.g., 'quest', 'labcorp'
+    name: string; // e.g., 'Quest Diagnostics'
+    connectedAt: string; // ISO 8601 format
   }>;
 
+  // Part 4: Insurance Connections
   connectedInsuranceProviders: Array<{
-    id: string;
-    name: string;
-    memberId: string;
-    groupId?: string;
-    connectedAt: string; // ISO 8601
+    id: string; // Identifier for the insurance provider
+    name: string; // e.g., 'United Healthcare'
+    memberId: string; // User's member ID for that insurer
+    groupId?: string; // User's group ID (optional)
+    connectedAt: string; // ISO 8601 format
   }>;
 
   fitbitApiCallStats?: FitbitApiCallStats;
   stravaApiCallStats?: StravaApiCallStats;
-  walkingRadarGoals?: WalkingRadarGoals; // New field for user-defined goals
+  walkingRadarGoals?: WalkingRadarGoals;
 }
 
 export const subscriptionTiers: SubscriptionTier[] = ['free', 'silver', 'gold', 'platinum'];
@@ -264,8 +276,7 @@ export interface FitbitSleepLogFirestore {
   dataSource: 'fitbit';
 }
 
-// Deprecated HealthEntry types - superseded by NormalizedActivityFirestore for activities
-// and specific interfaces like LipidPanelEntry for other health data types.
+// HealthEntry types (used by old timeline, potentially for manual entries before full normalization)
 export type HealthMetricTypeOld =
   | 'walking'
   | 'standing'
@@ -276,7 +287,7 @@ export type HealthMetricTypeOld =
   | 'medication'
   | 'condition';
 
-export interface LipidPanelData {
+export interface HealthLipidPanelData { // Renamed to avoid conflict
   totalCholesterol: number; // mg/dL
   ldl: number; // mg/dL
   hdl: number; // mg/dL
@@ -286,18 +297,18 @@ export interface LipidPanelData {
 export interface BaseHealthEntry {
   id: string;
   date: string; // ISO 8601 format
-  type: string; // More generic now, can be 'lipidPanel', 'appointment', 'medication', 'condition' or a NormalizedActivityType
+  type: string; 
   title: string;
   notes?: string;
   source?: 'manual' | 'quest' | 'uhc' | 'fitbit' | 'strava'; 
 }
 
-export interface LipidPanelEntry extends BaseHealthEntry {
+export interface OldLipidPanelEntry extends BaseHealthEntry { // Renamed
   type: 'lipidPanel';
-  value: LipidPanelData;
+  value: HealthLipidPanelData;
 }
 
-export interface AppointmentEntry extends BaseHealthEntry {
+export interface OldAppointmentEntry extends BaseHealthEntry { // Renamed
   type: 'appointment';
   doctor?: string;
   location?: string;
@@ -305,39 +316,37 @@ export interface AppointmentEntry extends BaseHealthEntry {
   visitNotes?: string;
 }
 
-export interface MedicationEntry extends BaseHealthEntry {
+export interface OldMedicationEntry extends BaseHealthEntry { // Renamed
   type: 'medication';
-  medicationName: string;
+  medicationName: string; 
   dosage: string;
   frequency: string;
 }
 
-export interface ConditionEntry extends BaseHealthEntry {
+export interface OldConditionEntry extends BaseHealthEntry { // Renamed
   type: 'condition';
   conditionName: string;
   diagnosisDate?: string;
   status?: 'active' | 'resolved' | 'chronic';
 }
 
-export interface SimpleValueEntry extends BaseHealthEntry {
-  type: 'pulse' | 'breathing' | 'standing'; // Example
+export interface OldSimpleValueEntry extends BaseHealthEntry { // Renamed
+  type: 'pulse' | 'breathing' | 'standing' | 'walking'; // Example
   value: number;
   unit: string;
 }
 
 
-// Combined type for health entries that are not normalized activities
+// Combined type for health entries that are not normalized activities (OLD structure)
 export type GeneralHealthEntry =
-  | LipidPanelEntry
-  | AppointmentEntry
-  | MedicationEntry
-  | ConditionEntry
-  | SimpleValueEntry;
+  | OldLipidPanelEntry
+  | OldAppointmentEntry
+  | OldMedicationEntry
+  | OldConditionEntry
+  | OldSimpleValueEntry;
 
 // For manual entry form options, distinct from NormalizedActivityType
 export const healthMetricCategoriesForManualEntry: HealthMetricTypeOld[] = [
-  // 'walking', // Should be handled by activity logging/sync
-  // 'standing', // Can be a simple value entry or derived
   'breathing',
   'pulse',
   'lipidPanel',
@@ -347,7 +356,7 @@ export const healthMetricCategoriesForManualEntry: HealthMetricTypeOld[] = [
 ];
 
 export const healthMetricDisplayNamesForManualEntry: Record<HealthMetricTypeOld, string> = {
-  walking: 'Walking', // Kept for potential future manual activity logging
+  walking: 'Walking',
   standing: 'Standing Time',
   breathing: 'Breathing Rate',
   pulse: 'Pulse Rate',
@@ -356,5 +365,4 @@ export const healthMetricDisplayNamesForManualEntry: Record<HealthMetricTypeOld,
   medication: 'Medication',
   condition: 'Condition',
 };
-
-    
+```
