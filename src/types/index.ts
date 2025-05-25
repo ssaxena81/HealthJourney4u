@@ -32,13 +32,13 @@ export const normalizedActivityTypeDisplayNames: Record<NormalizedActivityType, 
 
 
 export interface NormalizedActivityFirestore {
-  id: string; // Unique ID in our database (e.g., Firestore auto-ID or dataSource-originalId)
+  id: string; // Unique ID in our database (e.g., dataSource-originalId)
   userId: string;
-  originalId: string; // ID from the source platform (e.g., Fitbit logId, Strava activity id)
-  dataSource: 'fitbit' | 'strava' | 'apple_health' | 'manual' | string; // Extensible
+  originalId: string; // ID from the source platform (e.g., Fitbit logId, Strava activity id, Google Fit session id)
+  dataSource: 'fitbit' | 'strava' | 'google-fit' | 'apple_health' | 'manual' | string; // Extensible
   
   type: NormalizedActivityType; // Standardized type
-  name?: string; // User-defined name/title if available (e.g., Strava activity name)
+  name?: string; // User-defined name/title if available
   
   startTimeUtc: string; // ISO 8601 format (UTC)
   startTimeLocal?: string; // ISO 8601 format (local time of activity, if available)
@@ -88,7 +88,7 @@ export interface BaseHealthEntry {
   type: HealthMetricTypeTimeline;
   title: string;
   notes?: string;
-  source?: 'manual' | 'quest' | 'uhc' | 'fitbit' | 'strava'; // To represent integrations
+  source?: 'manual' | 'quest' | 'uhc' | 'fitbit' | 'strava' | 'google-fit'; // To represent integrations
 }
 
 export interface WalkingEntry extends BaseHealthEntry {
@@ -202,6 +202,17 @@ export interface StravaApiCallStats {
   activities?: StravaApiCallStatDetail;
 }
 
+export interface GoogleFitApiCallStatDetail {
+  lastCalledAt?: string; // ISO string
+  callCountToday?: number;
+}
+
+export interface GoogleFitApiCallStats {
+  sessions?: GoogleFitApiCallStatDetail; // For listing sessions
+  aggregateData?: GoogleFitApiCallStatDetail; // For fetching specific metrics like steps, distance for sessions
+}
+
+
 export interface WalkingRadarGoals {
   // Maximums
   maxDailySteps?: number | null;
@@ -253,7 +264,6 @@ export interface SwimmingRadarGoals {
 export interface SleepRadarGoals {
   targetSleepDurationHours?: number | null; // Target for sleep duration
   minSleepEfficiencyPercent?: number | null; // Minimum acceptable sleep efficiency
-  // targetRestingHeartRateDuringSleepBpm?: number | null; // Lower is better, maybe maxRHR
   minTimeInDeepSleepMinutes?: number | null; // Minimum time in deep sleep
   minTimeInRemSleepMinutes?: number | null; // Minimum time in REM sleep
 }
@@ -306,6 +316,8 @@ export interface UserProfile {
 
   fitbitApiCallStats?: FitbitApiCallStats;
   stravaApiCallStats?: StravaApiCallStats;
+  googleFitApiCallStats?: GoogleFitApiCallStats;
+
   walkingRadarGoals?: WalkingRadarGoals;
   runningRadarGoals?: RunningRadarGoals;
   hikingRadarGoals?: HikingRadarGoals;
@@ -337,6 +349,7 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Fitbit Sleep Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Fitbit Swimming Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Strava Activity Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
+  { feature: "Google Fit Activity Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
 ];
 
 export interface SelectableService {
@@ -345,12 +358,16 @@ export interface SelectableService {
 }
 
 export const mockFitnessApps: SelectableService[] = [
-  { id: 'apple_health', name: 'Apple Health' },
   { id: 'fitbit', name: 'Fitbit' },
+  { id: 'strava', name: 'Strava' },
+  { id: 'google-fit', name: 'Google Fit' },
+  { id: 'apple_health', name: 'Apple Health (Via Companion App)' },
   { id: 'nike_run_club', name: 'Nike Run Club' },
   { id: 'myfitnesspal', name: 'MyFitnessPal' },
   { id: 'fiton', name: 'FitOn Workouts' },
-  { id: 'strava', name: 'Strava' },
+  { id: 'garmin', name: 'Garmin Connect' },
+  { id: 'oura', name: 'Oura Ring' },
+  { id: 'whoop', name: 'WHOOP' },
 ];
 
 export const mockDiagnosticServices: SelectableService[] = [
