@@ -189,7 +189,7 @@ export interface FitbitApiCallStats {
   dailyActivitySummary?: FitbitApiCallStatDetail;
   heartRateTimeSeries?: FitbitApiCallStatDetail;
   sleepData?: FitbitApiCallStatDetail;
-  swimmingData?: FitbitApiCallStatDetail; // Added for swimming
+  swimmingData?: FitbitApiCallStatDetail; 
   loggedActivities?: FitbitApiCallStatDetail; 
 }
 
@@ -250,6 +250,14 @@ export interface SwimmingRadarGoals {
   minDailySessions?: number | null;
 }
 
+export interface SleepRadarGoals {
+  targetSleepDurationHours?: number | null; // Target for sleep duration
+  minSleepEfficiencyPercent?: number | null; // Minimum acceptable sleep efficiency
+  // targetRestingHeartRateDuringSleepBpm?: number | null; // Lower is better, maybe maxRHR
+  minTimeInDeepSleepMinutes?: number | null; // Minimum time in deep sleep
+  minTimeInRemSleepMinutes?: number | null; // Minimum time in REM sleep
+}
+
 
 export interface UserProfile {
   id: string; // Firebase Auth UID - This will be the document ID in Firestore
@@ -302,6 +310,7 @@ export interface UserProfile {
   runningRadarGoals?: RunningRadarGoals;
   hikingRadarGoals?: HikingRadarGoals;
   swimmingRadarGoals?: SwimmingRadarGoals;
+  sleepRadarGoals?: SleepRadarGoals;
 }
 
 export const subscriptionTiers: SubscriptionTier[] = ['free', 'silver', 'gold', 'platinum'];
@@ -393,6 +402,7 @@ export interface FitbitSleepLogFirestore {
   startTime: string; // ISO 8601
   endTime: string; // ISO 8601
   duration: number; // milliseconds
+  isMainSleep: boolean;
   minutesToFallAsleep: number;
   minutesAsleep: number;
   minutesAwake: number;
@@ -423,10 +433,3 @@ export interface FitbitSleepLogFirestore {
   lastFetched: string; // ISO string
   dataSource: 'fitbit';
 }
-
-// StravaActivityFirestore is now replaced by NormalizedActivityFirestore
-// Keep if used for a different purpose or if normalization is partial.
-
-// FitbitSwimmingActivityFirestore is now replaced by NormalizedActivityFirestore
-// Keep if used for a different purpose or if normalization is partial.
-```

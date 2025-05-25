@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
 import { doc, updateDoc } from 'firebase/firestore';
-import type { WalkingRadarGoals, RunningRadarGoals, HikingRadarGoals, SwimmingRadarGoals } from '@/types';
+import type { WalkingRadarGoals, RunningRadarGoals, HikingRadarGoals, SwimmingRadarGoals, SleepRadarGoals } from '@/types';
 
 // Schema for validating individual goal values
 const optionalPositiveNumber = z.preprocess(
@@ -324,4 +324,66 @@ export async function updateSwimmingRadarGoals(
     return { success: false, error: String(error.message) || 'Failed to update swimming goals.' };
   }
 }
-```
+
+// --- Sleep Goals ---
+const SleepRadarGoalsSchema = z.object({
+  targetSleepDurationHours: optionalPositiveNumber,
+  minSleepEfficiencyPercent: optionalPositiveNumber.refine(val => val === undefined || val === null || (val >= 0 && val <= 100), {
+    message: "Efficiency must be between 0 and 100.",
+  }),
+  minTimeInDeepSleepMinutes: optionalPositiveNumber,
+  minTimeInRemSleepMinutes: optionalPositiveNumber,
+}).superRefine((data, ctx) => {
+  // Add any cross-field validations if necessary, e.g., deep + rem <= total duration (more complex)
+});
+
+interface UpdateSleepRadarGoalsResult {
+  success: boolean;
+  error?: string;
+  details?: z.inferFlattenedErrors<typeof SleepRadarGoalsSchema>;
+  data?: SleepRadarGoals;
+}
+
+export async function updateSleepRadarGoals(
+  values: SleepRadarGoals
+): Promise<UpdateSleepRadarGoalsResult> {
+  const currentUser = firebaseAuth.currentUser;
+  if (!currentUser) {
+    return { success: false, error: 'User not authenticated.' };
+  }
+  const userId = currentUser.uid;
+
+  console.log('[USER_PROFILE_ACTIONS] Attempting to update sleep radar goals for UID:', userId, 'with values:', values);
+
+  try {
+    const validatedValues = SleepRadarGoalsSchema.parse(values);
+    
+    const goalsToUpdate: SleepRadarGoals = {
+      targetSleepDurationHours: validatedValues.targetSleepDurationHours === null ? undefined : validatedValues.targetSleepDurationHours,
+      minSleepEfficiencyPercent: validatedValues.minSleepEfficiencyPercent === null ? undefined : validatedValues.minSleepEfficiencyPercent,
+      minTimeInDeepSleepMinutes: validatedValues.minTimeInDeepSleepMinutes === null ? undefined : validatedValues.minTimeInDeepSleepMinutes,
+      minTimeInRemSleepMinutes: validatedValues.minTimeInRemSleepMinutes === null ? undefined : validatedValues.minTimeInRemSleepMinutes,
+    };
+
+    if (!db || !db.app) {
+      console.error('[USER_PROFILE_ACTIONS] Firestore not initialized for sleep goals.');
+      return { success: false, error: 'Database service unavailable.' };
+    }
+
+    const userProfileDocRef = doc(db, 'users', userId);
+    await updateDoc(userProfileDocRef, {
+      sleepRadarGoals: goalsToUpdate,
+    });
+
+    console.log('[USER_PROFILE_ACTIONS] Sleep radar goals updated successfully for UID:', userId);
+    return { success: true, data: goalsToUpdate };
+
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      console.error('[USER_PROFILE_ACTIONS] Zod validation error updating sleep radar goals:', error.flatten());
+      return { success: false, error: 'Invalid input data.', details: error.flatten() };
+    }
+    console.error('[USER_PROFILE_ACTIONS] Error updating sleep radar goals for UID:', userId, error);
+    return { success: false, error: String(error.message) || 'Failed to update sleep goals.' };
+  }
+}
