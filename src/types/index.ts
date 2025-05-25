@@ -115,6 +115,19 @@ export interface RunningRadarGoals {
   minDailySessions?: number | null;
 }
 
+export interface HikingRadarGoals {
+  // Maximums
+  maxDailyDistanceMeters?: number | null;
+  maxDailyDurationSec?: number | null;
+  maxDailySessions?: number | null;
+  maxDailyElevationGainMeters?: number | null;
+  // Minimums
+  minDailyDistanceMeters?: number | null;
+  minDailyDurationSec?: number | null;
+  minDailySessions?: number | null;
+  minDailyElevationGainMeters?: number | null;
+}
+
 
 export interface UserProfile {
   id: string; // Firebase Auth UID - This will be the document ID in Firestore
@@ -164,7 +177,8 @@ export interface UserProfile {
   fitbitApiCallStats?: FitbitApiCallStats;
   stravaApiCallStats?: StravaApiCallStats;
   walkingRadarGoals?: WalkingRadarGoals;
-  runningRadarGoals?: RunningRadarGoals; // Added running goals
+  runningRadarGoals?: RunningRadarGoals;
+  hikingRadarGoals?: HikingRadarGoals; // Added hiking goals
 }
 
 export const subscriptionTiers: SubscriptionTier[] = ['free', 'silver', 'gold', 'platinum'];
@@ -223,10 +237,10 @@ export const mockInsuranceProviders: SelectableService[] = [
 // Firestore specific data structures (examples)
 export interface FitbitActivitySummaryFirestore {
     date: string; // YYYY-MM-DD, also the document ID
-    steps: number;
-    distance: number; // In km (as per current implementation, ensure consistency)
-    caloriesOut: number;
-    activeMinutes: number;
+    steps?: number; // Made optional to align with NormalizedActivityFirestore
+    distance?: number; // In km (as per current implementation, ensure consistency)
+    caloriesOut?: number; // Made optional
+    activeMinutes?: number; // Made optional
     lastFetched: string; // ISO string
     dataSource: 'fitbit';
 }
@@ -286,3 +300,4 @@ export interface FitbitSleepLogFirestore {
   lastFetched: string; // ISO string
   dataSource: 'fitbit';
 }
+
