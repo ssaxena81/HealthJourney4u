@@ -64,6 +64,117 @@ export interface NormalizedActivityFirestore {
   lastFetched: string; // ISO 8601 string (when this record was created/last updated in our DB)
 }
 
+// --- Health Metric Types for Manual Entry & Timeline (Example) ---
+export type HealthMetricTypeTimeline =
+  | 'walking'
+  | 'standing'
+  | 'breathing'
+  | 'pulse'
+  | 'lipidPanel'
+  | 'appointment'
+  | 'medication'
+  | 'condition';
+
+export interface LipidPanelData {
+  totalCholesterol: number; // mg/dL
+  ldl: number; // mg/dL
+  hdl: number; // mg/dL
+  triglycerides: number; // mg/dL
+}
+
+export interface BaseHealthEntry {
+  id: string;
+  date: string; // ISO 8601 format
+  type: HealthMetricTypeTimeline;
+  title: string;
+  notes?: string;
+  source?: 'manual' | 'quest' | 'uhc' | 'fitbit' | 'strava'; // To represent integrations
+}
+
+export interface WalkingEntry extends BaseHealthEntry {
+  type: 'walking';
+  value: number; // steps or distance
+  unit: 'steps' | 'km' | 'miles';
+}
+
+export interface StandingEntry extends BaseHealthEntry {
+  type: 'standing';
+  value: number; // duration
+  unit: 'minutes' | 'hours';
+}
+
+export interface BreathingEntry extends BaseHealthEntry {
+  type: 'breathing';
+  value: number; // rate
+  unit: 'breaths/min';
+  quality?: string; // e.g., 'normal', 'labored'
+}
+
+export interface PulseEntry extends BaseHealthEntry {
+  type: 'pulse';
+  value: number; // bpm
+  unit: 'bpm';
+}
+
+export interface LipidPanelEntry extends BaseHealthEntry {
+  type: 'lipidPanel';
+  value: LipidPanelData;
+}
+
+export interface AppointmentEntry extends BaseHealthEntry {
+  type: 'appointment';
+  doctor?: string;
+  location?: string;
+  reason?: string;
+  visitNotes?: string; // For UHC deep dive
+}
+
+export interface MedicationEntry extends BaseHealthEntry {
+  type: 'medication';
+  medicationName: string; // Overrides title for specific use
+  dosage: string;
+  frequency: string;
+}
+
+export interface ConditionEntry extends BaseHealthEntry {
+  type: 'condition';
+  conditionName: string; // Overrides title
+  diagnosisDate?: string; // ISO 8601
+  status?: 'active' | 'resolved' | 'chronic';
+}
+
+export type HealthEntry =
+  | WalkingEntry
+  | StandingEntry
+  | BreathingEntry
+  | PulseEntry
+  | LipidPanelEntry
+  | AppointmentEntry
+  | MedicationEntry
+  | ConditionEntry;
+
+export const healthMetricCategories: HealthMetricTypeTimeline[] = [
+  'walking',
+  'standing',
+  'breathing',
+  'pulse',
+  'lipidPanel',
+  'appointment',
+  'medication',
+  'condition',
+];
+
+export const healthMetricDisplayNames: Record<HealthMetricTypeTimeline, string> = {
+  walking: 'Walking',
+  standing: 'Standing',
+  breathing: 'Breathing',
+  pulse: 'Pulse',
+  lipidPanel: 'Lipid Panel',
+  appointment: 'Appointment',
+  medication: 'Medication',
+  condition: 'Condition',
+};
+
 
 // --- User Profile and Authentication Types ---
 
@@ -78,7 +189,7 @@ export interface FitbitApiCallStats {
   dailyActivitySummary?: FitbitApiCallStatDetail;
   heartRateTimeSeries?: FitbitApiCallStatDetail;
   sleepData?: FitbitApiCallStatDetail;
-  swimmingData?: FitbitApiCallStatDetail;
+  swimmingData?: FitbitApiCallStatDetail; // Added for swimming
   loggedActivities?: FitbitApiCallStatDetail; 
 }
 
@@ -95,12 +206,12 @@ export interface WalkingRadarGoals {
   // Maximums
   maxDailySteps?: number | null;
   maxDailyDistanceMeters?: number | null;
-  maxDailyDurationSec?: number | null; // Stored in seconds
+  maxDailyDurationSec?: number | null; 
   maxDailySessions?: number | null;
   // Minimums
   minDailySteps?: number | null;
   minDailyDistanceMeters?: number | null;
-  minDailyDurationSec?: number | null; // Stored in seconds
+  minDailyDurationSec?: number | null; 
   minDailySessions?: number | null;
 }
 
@@ -126,6 +237,17 @@ export interface HikingRadarGoals {
   minDailyDurationSec?: number | null;
   minDailySessions?: number | null;
   minDailyElevationGainMeters?: number | null;
+}
+
+export interface SwimmingRadarGoals {
+  // Maximums
+  maxDailyDistanceMeters?: number | null;
+  maxDailyDurationSec?: number | null;
+  maxDailySessions?: number | null;
+  // Minimums
+  minDailyDistanceMeters?: number | null;
+  minDailyDurationSec?: number | null;
+  minDailySessions?: number | null;
 }
 
 
@@ -178,7 +300,8 @@ export interface UserProfile {
   stravaApiCallStats?: StravaApiCallStats;
   walkingRadarGoals?: WalkingRadarGoals;
   runningRadarGoals?: RunningRadarGoals;
-  hikingRadarGoals?: HikingRadarGoals; // Added hiking goals
+  hikingRadarGoals?: HikingRadarGoals;
+  swimmingRadarGoals?: SwimmingRadarGoals;
 }
 
 export const subscriptionTiers: SubscriptionTier[] = ['free', 'silver', 'gold', 'platinum'];
@@ -237,10 +360,10 @@ export const mockInsuranceProviders: SelectableService[] = [
 // Firestore specific data structures (examples)
 export interface FitbitActivitySummaryFirestore {
     date: string; // YYYY-MM-DD, also the document ID
-    steps?: number; // Made optional to align with NormalizedActivityFirestore
+    steps?: number; 
     distance?: number; // In km (as per current implementation, ensure consistency)
-    caloriesOut?: number; // Made optional
-    activeMinutes?: number; // Made optional
+    caloriesOut?: number; 
+    activeMinutes?: number; 
     lastFetched: string; // ISO string
     dataSource: 'fitbit';
 }
@@ -301,3 +424,9 @@ export interface FitbitSleepLogFirestore {
   dataSource: 'fitbit';
 }
 
+// StravaActivityFirestore is now replaced by NormalizedActivityFirestore
+// Keep if used for a different purpose or if normalization is partial.
+
+// FitbitSwimmingActivityFirestore is now replaced by NormalizedActivityFirestore
+// Keep if used for a different purpose or if normalization is partial.
+```

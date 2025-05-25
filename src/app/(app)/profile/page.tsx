@@ -10,7 +10,8 @@ import InsuranceConnections from '@/components/profile/insurance-connections';
 import ChangePasswordForm from '@/components/profile/change-password-form';
 import WalkingGoalsForm from '@/components/profile/walking-goals-form';
 import RunningGoalsForm from '@/components/profile/running-goals-form';
-import HikingGoalsForm from '@/components/profile/hiking-goals-form'; // Import new form
+import HikingGoalsForm from '@/components/profile/hiking-goals-form';
+import SwimmingGoalsForm from '@/components/profile/swimming-goals-form';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,7 +22,6 @@ import { Separator } from '@/components/ui/separator';
 export default function ProfilePage() {
   const { user, userProfile, loading, setUserProfile } = useAuth();
   const { toast } = useToast();
-  // const [isSaving, setIsSaving] = useState(false); // Individual forms now handle their own saving state
 
   if (loading || !user) { 
     return (
@@ -77,6 +77,8 @@ export default function ProfilePage() {
           <RunningGoalsForm userProfile={userProfile} onProfileUpdate={setUserProfile} />
           <Separator />
           <HikingGoalsForm userProfile={userProfile} onProfileUpdate={setUserProfile} />
+          <Separator />
+          <SwimmingGoalsForm userProfile={userProfile} onProfileUpdate={setUserProfile} />
         </TabsContent>
          <TabsContent value="security">
           <ChangePasswordForm />
@@ -87,3 +89,4 @@ export default function ProfilePage() {
   );
 }
     
+```

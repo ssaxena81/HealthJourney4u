@@ -4,7 +4,7 @@
 import { z } from 'zod';
 import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
 import { doc, updateDoc } from 'firebase/firestore';
-import type { WalkingRadarGoals, RunningRadarGoals, HikingRadarGoals } from '@/types';
+import type { WalkingRadarGoals, RunningRadarGoals, HikingRadarGoals, SwimmingRadarGoals } from '@/types';
 
 // Schema for validating individual goal values
 const optionalPositiveNumber = z.preprocess(
@@ -248,3 +248,80 @@ export async function updateHikingRadarGoals(
     return { success: false, error: String(error.message) || 'Failed to update hiking goals.' };
   }
 }
+
+
+// --- Swimming Goals ---
+const SwimmingRadarGoalsSchema = z.object({
+  maxDailyDistanceMeters: optionalPositiveNumber,
+  maxDailyDurationSec: optionalPositiveNumber,
+  maxDailySessions: optionalPositiveNumber,
+  minDailyDistanceMeters: optionalPositiveNumber,
+  minDailyDurationSec: optionalPositiveNumber,
+  minDailySessions: optionalPositiveNumber,
+}).superRefine((data, ctx) => {
+  const checkMinMax = (minVal?: number | null, maxVal?: number | null, fieldNamePrefix?: string, minPath?: keyof typeof data, maxPath?: keyof typeof data) => {
+    if (minVal !== undefined && minVal !== null && maxVal !== undefined && maxVal !== null && minVal > maxVal) {
+      const msg = `Min ${fieldNamePrefix ? fieldNamePrefix.toLowerCase() : ''} cannot be greater than Max ${fieldNamePrefix ? fieldNamePrefix.toLowerCase() : ''}.`;
+      if (minPath) ctx.addIssue({ code: z.ZodIssueCode.custom, message: msg, path: [minPath] });
+      if (maxPath) ctx.addIssue({ code: z.ZodIssueCode.custom, message: msg, path: [maxPath] });
+    }
+  };
+  checkMinMax(data.minDailyDistanceMeters, data.maxDailyDistanceMeters, "SwimmingDailyDistanceMeters", "minDailyDistanceMeters", "maxDailyDistanceMeters");
+  checkMinMax(data.minDailyDurationSec, data.maxDailyDurationSec, "SwimmingDailyDurationSec", "minDailyDurationSec", "maxDailyDurationSec");
+  checkMinMax(data.minDailySessions, data.maxDailySessions, "SwimmingDailySessions", "minDailySessions", "maxDailySessions");
+});
+
+interface UpdateSwimmingRadarGoalsResult {
+  success: boolean;
+  error?: string;
+  details?: z.inferFlattenedErrors<typeof SwimmingRadarGoalsSchema>;
+  data?: SwimmingRadarGoals;
+}
+
+export async function updateSwimmingRadarGoals(
+  values: SwimmingRadarGoals
+): Promise<UpdateSwimmingRadarGoalsResult> {
+  const currentUser = firebaseAuth.currentUser;
+  if (!currentUser) {
+    return { success: false, error: 'User not authenticated.' };
+  }
+  const userId = currentUser.uid;
+
+  console.log('[USER_PROFILE_ACTIONS] Attempting to update swimming radar goals for UID:', userId, 'with values:', values);
+
+  try {
+    const validatedValues = SwimmingRadarGoalsSchema.parse(values);
+    
+    const goalsToUpdate: SwimmingRadarGoals = {};
+    // Max values
+    goalsToUpdate.maxDailyDistanceMeters = validatedValues.maxDailyDistanceMeters === null ? undefined : validatedValues.maxDailyDistanceMeters;
+    goalsToUpdate.maxDailyDurationSec = validatedValues.maxDailyDurationSec === null ? undefined : validatedValues.maxDailyDurationSec;
+    goalsToUpdate.maxDailySessions = validatedValues.maxDailySessions === null ? undefined : validatedValues.maxDailySessions;
+    // Min values
+    goalsToUpdate.minDailyDistanceMeters = validatedValues.minDailyDistanceMeters === null ? undefined : validatedValues.minDailyDistanceMeters;
+    goalsToUpdate.minDailyDurationSec = validatedValues.minDailyDurationSec === null ? undefined : validatedValues.minDailyDurationSec;
+    goalsToUpdate.minDailySessions = validatedValues.minDailySessions === null ? undefined : validatedValues.minDailySessions;
+
+    if (!db || !db.app) {
+      console.error('[USER_PROFILE_ACTIONS] Firestore not initialized for swimming goals.');
+      return { success: false, error: 'Database service unavailable.' };
+    }
+
+    const userProfileDocRef = doc(db, 'users', userId);
+    await updateDoc(userProfileDocRef, {
+      swimmingRadarGoals: goalsToUpdate,
+    });
+
+    console.log('[USER_PROFILE_ACTIONS] Swimming radar goals updated successfully for UID:', userId);
+    return { success: true, data: goalsToUpdate };
+
+  } catch (error: any) {
+    if (error instanceof z.ZodError) {
+      console.error('[USER_PROFILE_ACTIONS] Zod validation error updating swimming radar goals:', error.flatten());
+      return { success: false, error: 'Invalid input data.', details: error.flatten() };
+    }
+    console.error('[USER_PROFILE_ACTIONS] Error updating swimming radar goals for UID:', userId, error);
+    return { success: false, error: String(error.message) || 'Failed to update swimming goals.' };
+  }
+}
+```
