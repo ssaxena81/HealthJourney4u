@@ -3,19 +3,19 @@
 
 import React, { useState, useEffect } from 'react';
 import type { UserProfile, SelectableService, SubscriptionTier } from '@/types';
-import { mockFitnessApps } from '@/types'; 
+import { mockFitnessApps } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/hooks/use-toast';
 import { XCircle, CheckCircle2, Link2, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import { finalizeFitbitConnection, finalizeStravaConnection } from '@/app/actions/auth'; // Assuming actions exist
+import { finalizeFitbitConnection, finalizeStravaConnection, finalizeGoogleFitConnection } from '@/app/actions/auth';
 import { useSearchParams, useRouter } from 'next/navigation';
 
 interface FitnessConnectionsProps {
   userProfile: UserProfile;
-  onConnectionsUpdate?: (updatedProfile: UserProfile | null) => void; // Callback to update parent state
+  onConnectionsUpdate?: (updatedProfileData: Partial<UserProfile>) => void;
 }
 
 const getMaxConnections = (tier: SubscriptionTier): number => {
@@ -23,14 +23,14 @@ const getMaxConnections = (tier: SubscriptionTier): number => {
     case 'free': return 1;
     case 'silver': return 2;
     case 'gold': return 3;
-    case 'platinum': return Infinity; 
+    case 'platinum': return Infinity;
     default: return 0;
   }
 };
 
 export default function FitnessConnections({ userProfile, onConnectionsUpdate }: FitnessConnectionsProps) {
   const { toast } = useToast();
-  const { user, setUserProfile: setAuthUserProfile } = useAuth(); // Get current user for actions
+  const { user, setUserProfile: setAuthUserProfile } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -45,36 +45,43 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
     app => !currentConnections.some(conn => conn.id === app.id)
   );
 
-  // Effect to handle OAuth callback success/error
   useEffect(() => {
     const fitbitConnected = searchParams.get('fitbit_connected');
     const fitbitError = searchParams.get('fitbit_error');
     const stravaConnected = searchParams.get('strava_connected');
     const stravaError = searchParams.get('strava_error');
+    const googleFitConnected = searchParams.get('googlefit_connected');
+    const googleFitError = searchParams.get('googlefit_error');
 
-    const handleConnectionResult = async (serviceId: string, serviceName: string, finalizeAction: (userId: string) => Promise<{success: boolean, error?: string}>) => {
+    const handleConnectionResult = async (
+        serviceId: string,
+        serviceName: string,
+        finalizeAction: (userId: string) => Promise<{success: boolean, error?: string}>
+    ) => {
       if (!user?.uid) {
         toast({ title: `Error Finalizing ${serviceName} Connection`, description: "User session not found.", variant: "destructive" });
+        router.replace('/profile', { scroll: false }); // Clean URL
         return;
       }
       setIsLoading(prev => ({ ...prev, [serviceId]: true }));
       const result = await finalizeAction(user.uid);
       if (result.success) {
         toast({ title: `${serviceName} Connected!`, description: `Successfully linked your ${serviceName} account.` });
-        if (onConnectionsUpdate) { // To update local state if component is part of larger form
-            const newConnection = { id: serviceId, name: serviceName, connectedAt: new Date().toISOString()};
-            const updatedProfile = { ...userProfile, connectedFitnessApps: [...(userProfile.connectedFitnessApps || []), newConnection]};
+        
+        const newConnectionDetails = { id: serviceId, name: serviceName, connectedAt: new Date().toISOString()};
+
+        if (onConnectionsUpdate) {
+            const updatedProfile = { ...userProfile, connectedFitnessApps: [...(userProfile.connectedFitnessApps || []), newConnectionDetails]};
             onConnectionsUpdate(updatedProfile);
         }
-        // Also update the AuthContext's userProfile if available
         if (setAuthUserProfile) {
             setAuthUserProfile(prev => {
                 if (!prev) return null;
                 const existingConnections = prev.connectedFitnessApps || [];
-                if (existingConnections.some(c => c.id === serviceId)) return prev; // Already there
+                if (existingConnections.some(c => c.id === serviceId)) return prev;
                 return {
                     ...prev,
-                    connectedFitnessApps: [...existingConnections, { id: serviceId, name: serviceName, connectedAt: new Date().toISOString() }]
+                    connectedFitnessApps: [...existingConnections, newConnectionDetails]
                 };
             });
         }
@@ -82,7 +89,7 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
         toast({ title: `Failed to Finalize ${serviceName} Connection`, description: result.error || "An unexpected error occurred.", variant: "destructive" });
       }
       setIsLoading(prev => ({ ...prev, [serviceId]: false }));
-      router.replace('/profile', { scroll: false }); // Remove query params from URL
+      router.replace('/profile', { scroll: false }); // Clean URL
     };
 
     if (fitbitConnected === 'true') {
@@ -98,6 +105,14 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
       toast({ title: "Strava Connection Failed", description: decodeURIComponent(stravaError), variant: "destructive" });
       router.replace('/profile', { scroll: false });
     }
+
+    if (googleFitConnected === 'true') {
+      handleConnectionResult('google-fit', 'Google Fit', finalizeGoogleFitConnection);
+    } else if (googleFitError) {
+      toast({ title: "Google Fit Connection Failed", description: decodeURIComponent(googleFitError), variant: "destructive" });
+      router.replace('/profile', { scroll: false });
+    }
+
   }, [searchParams, user, toast, router, onConnectionsUpdate, userProfile, setAuthUserProfile]);
 
 
@@ -107,14 +122,14 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
 
     setIsLoading(prev => ({ ...prev, [appId]: true }));
     toast({ title: `Disconnecting ${appToDisconnect.name}...` });
-    
+
     // TODO: Implement server action to revoke tokens and update user profile in DB.
-    // For now, just update client-side state.
     await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate server call
-    
+
     const updatedConnections = currentConnections.filter(conn => conn.id !== appId);
     if (onConnectionsUpdate) {
-      onConnectionsUpdate({ ...userProfile, connectedFitnessApps: updatedConnections });
+      const updatedProfilePartial: Partial<UserProfile> = { connectedFitnessApps: updatedConnections };
+      onConnectionsUpdate(updatedProfilePartial);
     }
     if (setAuthUserProfile) {
         setAuthUserProfile(prev => prev ? ({ ...prev, connectedFitnessApps: updatedConnections }) : null);
@@ -126,8 +141,12 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
   const getConnectLink = (appId: string) => {
     if (appId === 'fitbit') return '/api/auth/fitbit/connect';
     if (appId === 'strava') return '/api/auth/strava/connect';
-    return '#'; // Default or for apps not yet configured
+    if (appId === 'google-fit') return '/api/auth/googlefit/connect';
+    return '#';
   };
+
+  // Define which apps are currently implemented for connection
+  const implementedApps = ['fitbit', 'strava', 'google-fit'];
 
   return (
     <Card>
@@ -175,18 +194,19 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
                   </SelectTrigger>
                   <SelectContent>
                     {availableAppsToConnect.map(app => (
-                      <SelectItem key={app.id} value={app.id} disabled={app.id !== 'fitbit' && app.id !== 'strava' /* Disable non-implemented ones */}>
-                        {app.name} {(app.id !== 'fitbit' && app.id !== 'strava') && '(Coming Soon)'}
+                      <SelectItem key={app.id} value={app.id} disabled={!implementedApps.includes(app.id)}>
+                        {app.name} {!implementedApps.includes(app.id) && '(Coming Soon)'}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
               <Button
-                asChild={selectedAppId === 'fitbit' || selectedAppId === 'strava'} // Use asChild for link behavior
-                disabled={!selectedAppId || isLoading[selectedAppId] || (selectedAppId !== 'fitbit' && selectedAppId !== 'strava')}
+                asChild={implementedApps.includes(selectedAppId)}
+                disabled={!selectedAppId || isLoading[selectedAppId] || !implementedApps.includes(selectedAppId)}
+                className="w-full sm:w-auto"
               >
-                { (selectedAppId === 'fitbit' || selectedAppId === 'strava') ? (
+                { implementedApps.includes(selectedAppId) ? (
                     <a href={getConnectLink(selectedAppId)}>
                         {isLoading[selectedAppId] ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link2 className="mr-2 h-4 w-4" />}
                         Connect {mockFitnessApps.find(app => app.id === selectedAppId)?.name}
