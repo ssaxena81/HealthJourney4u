@@ -2,35 +2,83 @@
 'use server';
 
 import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, orderBy, limit } from 'firebase/firestore';
-import type { UserProfile, SubscriptionTier, FitbitActivitySummaryFirestore, FitbitHeartRateFirestore, FitbitSleepLogFirestore, FitbitSwimmingActivityFirestore } from '@/types';
-import { getDailyActivitySummary, getHeartRateTimeSeries, getSleepLogs, getSwimmingActivities, type FitbitHeartRateActivitiesResponse, type FitbitSleepLogsResponse, type FitbitSleepLog, type FitbitActivityLog } from '@/lib/services/fitbitService';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, orderBy } from 'firebase/firestore';
+import type { UserProfile, SubscriptionTier, FitbitActivitySummaryFirestore, FitbitHeartRateFirestore, FitbitSleepLogFirestore, NormalizedActivityFirestore, FitbitApiCallStats } from '@/types';
+import { NormalizedActivityType } from '@/types';
+import { getDailyActivitySummary, getHeartRateTimeSeries, getSleepLogs, getSwimmingActivities, getLoggedActivitiesForDate, type FitbitActivityLog } from '@/lib/services/fitbitService';
 import { getValidFitbitAccessToken, clearFitbitTokens } from '@/lib/fitbit-auth-utils';
 import { isSameDay, startOfDay, format, parseISO } from 'date-fns';
 
 interface FetchFitbitDataResult {
   success: boolean;
   message?: string;
-  data?: any; // Could be Firestore data types or count of items processed
+  data?: any;
   errorCode?: string;
 }
 
 function getRateLimitConfig(
   tier: SubscriptionTier,
-  callType: 'dailyActivitySummary' | 'heartRateTimeSeries' | 'sleepData' | 'swimmingData'
+  callType: 'dailyActivitySummary' | 'heartRateTimeSeries' | 'sleepData' | 'swimmingData' | 'loggedActivities'
 ): { limit: number; periodHours: number } {
-  // For this example, all have the same rate limits per tier.
-  // This could be differentiated if needed.
   switch (tier) {
     case 'platinum':
-      return { limit: 3, periodHours: 24 }; // Platinum gets more calls
+      return { limit: 3, periodHours: 24 };
     case 'free':
     case 'silver':
     case 'gold':
     default:
-      return { limit: 1, periodHours: 24 }; // Default limit
+      return { limit: 1, periodHours: 24 };
   }
 }
+
+// Helper to map Fitbit activity names to NormalizedActivityType
+function mapFitbitActivityNameToNormalizedType(activityName?: string): NormalizedActivityType {
+  if (!activityName) return NormalizedActivityType.Other;
+  const lowerName = activityName.toLowerCase();
+  if (lowerName.includes('walk')) return NormalizedActivityType.Walking;
+  if (lowerName.includes('run')) return NormalizedActivityType.Running;
+  if (lowerName.includes('hike')) return NormalizedActivityType.Hiking;
+  if (lowerName.includes('swim')) return NormalizedActivityType.Swimming;
+  if (lowerName.includes('bike') || lowerName.includes('cycle')) return NormalizedActivityType.Cycling;
+  if (lowerName.includes('workout') || lowerName.includes('sport') || lowerName.includes('exercise')) return NormalizedActivityType.Workout;
+  return NormalizedActivityType.Other;
+}
+
+// Helper to convert distances to meters
+function mapFitbitUnitToMeters(distance?: number, unit?: string): number | undefined {
+  if (distance === undefined || distance === null) return undefined;
+  if (!unit) { // If unit is not provided by Fitbit, we might assume a default or log warning.
+    // Fitbit's API often implies units based on Accept-Language or user settings.
+    // For user-logged activities without explicit units, this can be tricky.
+    // If distance is present but unit is unknown, it's hard to convert.
+    // Let's assume if unit is missing and distance is present, it might be in user's preferred system (e.g., km or miles)
+    // This part needs robust handling based on how Fitbit API behaves for specific activities.
+    // For now, if no unit, we cannot reliably convert.
+    console.warn(`[FitbitActions] Distance ${distance} present but unit is missing. Cannot convert to meters.`);
+    return undefined; 
+  }
+
+  const lowerUnit = unit.toLowerCase();
+  switch (lowerUnit) {
+    case 'meter':
+    case 'meters':
+      return distance;
+    case 'kilometer':
+    case 'kilometers':
+    case 'km':
+      return distance * 1000;
+    case 'mile':
+    case 'miles':
+      return distance * 1609.34;
+    case 'yard':
+    case 'yards':
+      return distance * 0.9144;
+    default:
+      console.warn(`[FitbitActions] Unknown distance unit: ${unit}. Cannot convert to meters.`);
+      return undefined;
+  }
+}
+
 
 export async function fetchAndStoreFitbitDailyActivity(
   targetDate: string // YYYY-MM-DD format
@@ -76,7 +124,7 @@ export async function fetchAndStoreFitbitDailyActivity(
         return { success: false, message: `API call limit for daily activity summary reached for your tier (${rateLimitConfig.limit} per ${rateLimitConfig.periodHours} hours). Try again later.`, errorCode: 'RATE_LIMIT_EXCEEDED' };
       }
     } else {
-      callCountToday = 0; // Reset for a new day or if no previous calls
+      callCountToday = 0;
     }
 
     const accessToken = await getValidFitbitAccessToken();
@@ -94,18 +142,25 @@ export async function fetchAndStoreFitbitDailyActivity(
         }
     } catch (error: any) {
         console.error(`[FitbitActions] Error calling fitbitService.getDailyActivitySummary for user ${userId}, date ${targetDate}:`, error);
-        if (error.status === 401) { // Fitbit API unauthorized
-            await clearFitbitTokens(); // Clear potentially invalid tokens
+        if (error.status === 401) {
+            await clearFitbitTokens();
             return { success: false, message: 'Fitbit authentication error. Your Fitbit session may have expired. Please reconnect Fitbit in your profile settings.', errorCode: 'FITBIT_AUTH_EXPIRED_POST_REFRESH' };
         }
         return { success: false, message: `Failed to fetch daily activity from Fitbit: ${String(error.message || 'Unknown API error')}`, errorCode: 'FITBIT_API_ERROR' };
     }
 
     const summary = fitbitData.summary;
+    // Fitbit API `summary.distance` is a number, unit depends on request locale or user settings.
+    // 'Accept-Locale': 'en_US' typically returns miles.
+    // For storing in Firestore, convert to a consistent unit (e.g., km or meters).
+    // Assuming getDailyActivitySummary already provides distance in a known unit (e.g. km if Accept-Locale=en_CA, or miles if en_US).
+    // For this example, let's assume it's returned in km for `fitbit_activity_summaries`.
+    // If it can vary, the `fitbitService` should normalize it or provide the unit.
+    // For now, we store it as is, assuming the service provides it in a consistent unit (e.g. km).
     const firestoreData: FitbitActivitySummaryFirestore = {
-      date: targetDate, // Storing as YYYY-MM-DD
+      date: targetDate,
       steps: summary.steps,
-      distance: summary.distance, 
+      distance: summary.distance, // Assuming this is in KM from the service
       caloriesOut: summary.caloriesOut,
       activeMinutes: (summary.fairlyActiveMinutes || 0) + (summary.veryActiveMinutes || 0),
       lastFetched: new Date().toISOString(),
@@ -136,7 +191,7 @@ export async function fetchAndStoreFitbitDailyActivity(
 }
 
 export async function getFitbitActivitySummariesForDateRange(
-  dateRange: { from: string; to: string } // YYYY-MM-DD format
+  dateRange: { from: string; to: string }
 ): Promise<{ success: boolean; data?: FitbitActivitySummaryFirestore[]; error?: string }> {
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
@@ -150,17 +205,12 @@ export async function getFitbitActivitySummariesForDateRange(
   }
 
   try {
-    // Firebase JS SDK v9 uses FieldPath.documentId() for querying by document ID
-    // However, direct string comparison on document IDs (YYYY-MM-DD) works for lexicographical range queries
-    // For more robust date range queries where IDs aren't dates, you'd store the date as a field.
-    // Here, since doc ID IS the date string, this should work.
     const firestoreQuery = query(
         collection(db, 'users', userId, 'fitbit_activity_summaries'),
         where( '__name__', '>=', dateRange.from),
         where( '__name__', '<=', dateRange.to),
-        orderBy('__name__', 'desc') // Sort by document ID (date) descending
+        orderBy('__name__', 'desc')
     );
-
 
     const querySnapshot = await getDocs(firestoreQuery);
     const summaries: FitbitActivitySummaryFirestore[] = [];
@@ -175,38 +225,25 @@ export async function getFitbitActivitySummariesForDateRange(
   }
 }
 
-
 export async function fetchAndStoreFitbitHeartRate(
-  targetDate: string, // YYYY-MM-DD format
+  targetDate: string,
   detailLevel: '1min' | '1sec' = '1min'
 ): Promise<FetchFitbitDataResult> {
   console.log(`[FitbitActions] Initiating fetchAndStoreFitbitHeartRate for date: ${targetDate}, detail: ${detailLevel}`);
-
   const currentUser = firebaseAuth.currentUser;
-  if (!currentUser) {
-    console.error('[FitbitActions] User not authenticated for fetchAndStoreFitbitHeartRate.');
-    return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
-  }
+  if (!currentUser) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   const userId = currentUser.uid;
 
-  if (!db || !db.app) {
-    console.error('[FitbitActions] Firestore not initialized for fetchAndStoreFitbitHeartRate. DB App:', db?.app);
-    return { success: false, message: 'Database service unavailable.', errorCode: 'DB_UNAVAILABLE' };
-  }
+  if (!db || !db.app) return { success: false, message: 'Database service unavailable.', errorCode: 'DB_UNAVAILABLE' };
 
   try {
     const userProfileDocRef = doc(db, 'users', userId);
     const userProfileSnap = await getDoc(userProfileDocRef);
-
-    if (!userProfileSnap.exists()) {
-      console.error(`[FitbitActions] User profile not found for UID: ${userId} in fetchAndStoreFitbitHeartRate.`);
-      return { success: false, message: 'User profile not found.', errorCode: 'PROFILE_NOT_FOUND' };
-    }
+    if (!userProfileSnap.exists()) return { success: false, message: 'User profile not found.', errorCode: 'PROFILE_NOT_FOUND' };
     const userProfile = userProfileSnap.data() as UserProfile;
 
-     if (!userProfile.connectedFitnessApps?.some(app => app.id === 'fitbit')) {
-        console.log(`[FitbitActions] Fitbit not connected for user: ${userId} for fetchAndStoreFitbitHeartRate.`);
-        return { success: false, message: 'Fitbit not connected. Please connect Fitbit in your profile.', errorCode: 'FITBIT_NOT_CONNECTED'};
+    if (!userProfile.connectedFitnessApps?.some(app => app.id === 'fitbit')) {
+        return { success: false, message: 'Fitbit not connected.', errorCode: 'FITBIT_NOT_CONNECTED'};
     }
 
     const rateLimitConfig = getRateLimitConfig(userProfile.subscriptionTier, 'heartRateTimeSeries');
@@ -215,33 +252,25 @@ export async function fetchAndStoreFitbitHeartRate(
     const todayStart = startOfDay(now);
     let callCountToday = stats?.lastCalledAt && isSameDay(new Date(stats.lastCalledAt), todayStart) ? stats.callCountToday || 0 : 0;
 
-    if (stats?.lastCalledAt && isSameDay(new Date(stats.lastCalledAt), todayStart)) {
-      if (callCountToday >= rateLimitConfig.limit) {
-        console.warn(`[FitbitActions] Heart rate rate limit exceeded for user ${userId}. Tier: ${userProfile.subscriptionTier}, Count: ${callCountToday}, Limit: ${rateLimitConfig.limit}`);
-        return { success: false, message: `API call limit for heart rate data reached for your tier (${rateLimitConfig.limit} per ${rateLimitConfig.periodHours} hours). Try again later.`, errorCode: 'RATE_LIMIT_EXCEEDED' };
-      }
-    } else {
-      callCountToday = 0; // Reset for a new day
+    if (stats?.lastCalledAt && isSameDay(new Date(stats.lastCalledAt), todayStart) && callCountToday >= rateLimitConfig.limit) {
+      return { success: false, message: `API call limit for heart rate data reached for your tier.`, errorCode: 'RATE_LIMIT_EXCEEDED' };
+    } else if (!stats?.lastCalledAt || !isSameDay(new Date(stats.lastCalledAt), todayStart)) {
+      callCountToday = 0;
     }
 
     const accessToken = await getValidFitbitAccessToken();
-    if (!accessToken) {
-      console.error('[FitbitActions] Failed to obtain valid Fitbit access token for heart rate for user:', userId);
-      return { success: false, message: 'Could not connect to Fitbit. Your session might have expired. Please try reconnecting Fitbit in your profile settings.', errorCode: 'FITBIT_AUTH_ERROR' };
-    }
+    if (!accessToken) return { success: false, message: 'Could not connect to Fitbit. Session might have expired.', errorCode: 'FITBIT_AUTH_ERROR' };
 
-    let fitbitData: FitbitHeartRateActivitiesResponse;
+    let fitbitData;
     try {
         fitbitData = await getHeartRateTimeSeries(accessToken, targetDate, detailLevel);
          if (!fitbitData || !fitbitData['activities-heart']) {
-            console.error('[FitbitActions] Fitbit API returned no heart rate data or unexpected format for date:', targetDate);
             return { success: false, message: `No heart rate data found from Fitbit for ${targetDate}.`, errorCode: 'FITBIT_NO_DATA' };
         }
     } catch (error: any) {
-        console.error(`[FitbitActions] Error calling fitbitService.getHeartRateTimeSeries for user ${userId}, date ${targetDate}:`, error);
         if (error.status === 401) {
             await clearFitbitTokens();
-            return { success: false, message: 'Fitbit authentication error. Your Fitbit session may have expired. Please reconnect Fitbit in your profile settings.', errorCode: 'FITBIT_AUTH_EXPIRED_POST_REFRESH' };
+            return { success: false, message: 'Fitbit authentication error. Please reconnect Fitbit.', errorCode: 'FITBIT_AUTH_EXPIRED_POST_REFRESH' };
         }
         return { success: false, message: `Failed to fetch heart rate data from Fitbit: ${String(error.message || 'Unknown API error')}`, errorCode: 'FITBIT_API_ERROR' };
     }
@@ -250,7 +279,7 @@ export async function fetchAndStoreFitbitHeartRate(
     const intradayData = fitbitData['activities-heart-intraday'];
 
     const firestoreData: FitbitHeartRateFirestore = {
-      date: targetDate, // Storing as YYYY-MM-DD
+      date: targetDate,
       restingHeartRate: dailyHeartSummary?.restingHeartRate,
       heartRateZones: dailyHeartSummary?.heartRateZones,
       intradaySeries: intradayData ? {
@@ -264,18 +293,13 @@ export async function fetchAndStoreFitbitHeartRate(
 
     const heartRateDocRef = doc(db, 'users', userId, 'fitbit_heart_rate', targetDate);
     await setDoc(heartRateDocRef, firestoreData, { merge: true });
-    console.log(`[FitbitActions] Fitbit heart rate data stored in Firestore for user ${userId}, date ${targetDate}.`);
 
     callCountToday++;
     const updatedStats = {
       ...(userProfile.fitbitApiCallStats || {}),
-      heartRateTimeSeries: {
-        lastCalledAt: now.toISOString(),
-        callCountToday: callCountToday,
-      },
+      heartRateTimeSeries: { lastCalledAt: now.toISOString(), callCountToday },
     };
     await updateDoc(userProfileDocRef, { fitbitApiCallStats: updatedStats });
-    console.log(`[FitbitActions] Updated heart rate API call stats for user ${userId}.`);
 
     return { success: true, message: 'Successfully fetched and stored Fitbit heart rate data.', data: firestoreData };
 
@@ -285,37 +309,24 @@ export async function fetchAndStoreFitbitHeartRate(
   }
 }
 
-
 export async function fetchAndStoreFitbitSleep(
-  targetDate: string // YYYY-MM-DD format, represents the date the sleep log ends on
+  targetDate: string
 ): Promise<FetchFitbitDataResult> {
   console.log(`[FitbitActions] Initiating fetchAndStoreFitbitSleep for date: ${targetDate}`);
-
   const currentUser = firebaseAuth.currentUser;
-  if (!currentUser) {
-    console.error('[FitbitActions] User not authenticated for fetchAndStoreFitbitSleep.');
-    return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
-  }
+  if (!currentUser) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   const userId = currentUser.uid;
 
-  if (!db || !db.app) {
-    console.error('[FitbitActions] Firestore not initialized for fetchAndStoreFitbitSleep. DB App:', db?.app);
-    return { success: false, message: 'Database service unavailable.', errorCode: 'DB_UNAVAILABLE' };
-  }
-
+  if (!db || !db.app) return { success: false, message: 'Database service unavailable.', errorCode: 'DB_UNAVAILABLE' };
+  
   try {
     const userProfileDocRef = doc(db, 'users', userId);
     const userProfileSnap = await getDoc(userProfileDocRef);
-
-    if (!userProfileSnap.exists()) {
-      console.error(`[FitbitActions] User profile not found for UID: ${userId} in fetchAndStoreFitbitSleep.`);
-      return { success: false, message: 'User profile not found.', errorCode: 'PROFILE_NOT_FOUND' };
-    }
+    if (!userProfileSnap.exists()) return { success: false, message: 'User profile not found.', errorCode: 'PROFILE_NOT_FOUND' };
     const userProfile = userProfileSnap.data() as UserProfile;
 
     if (!userProfile.connectedFitnessApps?.some(app => app.id === 'fitbit')) {
-        console.log(`[FitbitActions] Fitbit not connected for user: ${userId} for fetchAndStoreFitbitSleep.`);
-        return { success: false, message: 'Fitbit not connected. Please connect Fitbit in your profile.', errorCode: 'FITBIT_NOT_CONNECTED'};
+        return { success: false, message: 'Fitbit not connected.', errorCode: 'FITBIT_NOT_CONNECTED'};
     }
 
     const rateLimitConfig = getRateLimitConfig(userProfile.subscriptionTier, 'sleepData');
@@ -324,45 +335,35 @@ export async function fetchAndStoreFitbitSleep(
     const todayStart = startOfDay(now);
     let callCountToday = stats?.lastCalledAt && isSameDay(new Date(stats.lastCalledAt), todayStart) ? stats.callCountToday || 0 : 0;
 
-    if (stats?.lastCalledAt && isSameDay(new Date(stats.lastCalledAt), todayStart)) {
-      if (callCountToday >= rateLimitConfig.limit) {
-        console.warn(`[FitbitActions] Sleep data rate limit exceeded for user ${userId}. Tier: ${userProfile.subscriptionTier}, Count: ${callCountToday}, Limit: ${rateLimitConfig.limit}`);
-        return { success: false, message: `API call limit for sleep data reached for your tier (${rateLimitConfig.limit} per ${rateLimitConfig.periodHours} hours). Try again later.`, errorCode: 'RATE_LIMIT_EXCEEDED' };
-      }
-    } else {
-      callCountToday = 0; // Reset for a new day
+    if (stats?.lastCalledAt && isSameDay(new Date(stats.lastCalledAt), todayStart) && callCountToday >= rateLimitConfig.limit) {
+      return { success: false, message: `API call limit for sleep data reached.`, errorCode: 'RATE_LIMIT_EXCEEDED' };
+    } else if (!stats?.lastCalledAt || !isSameDay(new Date(stats.lastCalledAt), todayStart)) {
+      callCountToday = 0;
     }
 
     const accessToken = await getValidFitbitAccessToken();
-    if (!accessToken) {
-      console.error('[FitbitActions] Failed to obtain valid Fitbit access token for sleep data for user:', userId);
-      return { success: false, message: 'Could not connect to Fitbit. Your session might have expired. Please try reconnecting Fitbit in your profile settings.', errorCode: 'FITBIT_AUTH_ERROR' };
-    }
+    if (!accessToken) return { success: false, message: 'Could not connect to Fitbit.', errorCode: 'FITBIT_AUTH_ERROR' };
 
-    let fitbitResponse: FitbitSleepLogsResponse;
+    let fitbitResponse;
     try {
         fitbitResponse = await getSleepLogs(accessToken, targetDate);
-        if (!fitbitResponse || !fitbitResponse.sleep || fitbitResponse.sleep.length === 0) {
-            console.log(`[FitbitActions] Fitbit API returned no sleep data for user ${userId}, date ${targetDate}. This might be normal if no sleep was logged.`);
-            // Update API call stats even if no new data, as an API call was made.
-            callCountToday++;
-            const updatedStatsNoData = {
-              ...(userProfile.fitbitApiCallStats || {}),
-              sleepData: {
-                lastCalledAt: now.toISOString(),
-                callCountToday: callCountToday,
-              },
-            };
-            await updateDoc(userProfileDocRef, { fitbitApiCallStats: updatedStatsNoData });
-            return { success: true, message: `No sleep data found from Fitbit for ${targetDate}.`, data: [] };
-        }
     } catch (error: any) {
-        console.error(`[FitbitActions] Error calling fitbitService.getSleepLogs for user ${userId}, date ${targetDate}:`, error);
         if (error.status === 401) {
             await clearFitbitTokens();
-            return { success: false, message: 'Fitbit authentication error. Your Fitbit session may have expired. Please reconnect Fitbit in your profile settings.', errorCode: 'FITBIT_AUTH_EXPIRED_POST_REFRESH' };
+            return { success: false, message: 'Fitbit authentication error. Please reconnect Fitbit.', errorCode: 'FITBIT_AUTH_EXPIRED_POST_REFRESH' };
         }
-        return { success: false, message: `Failed to fetch sleep data from Fitbit: ${String(error.message || 'Unknown API error')}`, errorCode: 'FITBIT_API_ERROR' };
+        return { success: false, message: `Failed to fetch sleep data: ${String(error.message)}`, errorCode: 'FITBIT_API_ERROR' };
+    }
+    
+    callCountToday++; // Increment here as API call was made
+    const updatedStats = {
+      ...(userProfile.fitbitApiCallStats || {}),
+      sleepData: { lastCalledAt: now.toISOString(), callCountToday },
+    };
+    await updateDoc(userProfileDocRef, { fitbitApiCallStats: updatedStats });
+
+    if (!fitbitResponse || !fitbitResponse.sleep || fitbitResponse.sleep.length === 0) {
+        return { success: true, message: `No sleep data found from Fitbit for ${targetDate}.`, data: [] };
     }
 
     const processedSleepLogs: FitbitSleepLogFirestore[] = [];
@@ -388,62 +389,38 @@ export async function fetchAndStoreFitbitSleep(
           dataSource: 'fitbit',
         };
         processedSleepLogs.push(firestoreData);
-
-        // Store each sleep log using its logId as the document ID for uniqueness
+        // Store each sleep log using its logId for uniqueness in a subcollection for that date
         const sleepDocRef = doc(db, 'users', userId, 'fitbit_sleep', String(log.logId));
         await setDoc(sleepDocRef, firestoreData, { merge: true });
-        console.log(`[FitbitActions] Fitbit sleep log stored in Firestore for user ${userId}, logId ${log.logId}.`);
     }
-
-    callCountToday++;
-    const updatedStats = {
-      ...(userProfile.fitbitApiCallStats || {}),
-      sleepData: {
-        lastCalledAt: now.toISOString(),
-        callCountToday: callCountToday,
-      },
-    };
-    await updateDoc(userProfileDocRef, { fitbitApiCallStats: updatedStats });
-    console.log(`[FitbitActions] Updated sleep data API call stats for user ${userId}.`);
-
+    
     return { success: true, message: `Successfully fetched and stored ${processedSleepLogs.length} Fitbit sleep log(s).`, data: processedSleepLogs };
 
   } catch (error: any) {
     console.error(`[FitbitActions] Unhandled error in fetchAndStoreFitbitSleep for user ${userId}:`, error);
-    return { success: false, message: `An unexpected server error occurred: ${String(error.message || 'Unknown server error')}`, errorCode: 'UNEXPECTED_SERVER_ERROR' };
+    return { success: false, message: `An unexpected server error occurred: ${String(error.message)}`, errorCode: 'UNEXPECTED_SERVER_ERROR' };
   }
 }
+
 
 export async function fetchAndStoreFitbitSwimmingData(
   targetDate: string // YYYY-MM-DD format
 ): Promise<FetchFitbitDataResult> {
   console.log(`[FitbitActions] Initiating fetchAndStoreFitbitSwimmingData for date: ${targetDate}`);
-
   const currentUser = firebaseAuth.currentUser;
-  if (!currentUser) {
-    console.error('[FitbitActions] User not authenticated for fetchAndStoreFitbitSwimmingData.');
-    return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
-  }
+  if (!currentUser) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   const userId = currentUser.uid;
 
-  if (!db || !db.app) {
-    console.error('[FitbitActions] Firestore not initialized for fetchAndStoreFitbitSwimmingData. DB App:', db?.app);
-    return { success: false, message: 'Database service unavailable.', errorCode: 'DB_UNAVAILABLE' };
-  }
+  if (!db || !db.app) return { success: false, message: 'Database service unavailable.', errorCode: 'DB_UNAVAILABLE' };
 
   try {
     const userProfileDocRef = doc(db, 'users', userId);
     const userProfileSnap = await getDoc(userProfileDocRef);
-
-    if (!userProfileSnap.exists()) {
-      console.error(`[FitbitActions] User profile not found for UID: ${userId} in fetchAndStoreFitbitSwimmingData.`);
-      return { success: false, message: 'User profile not found.', errorCode: 'PROFILE_NOT_FOUND' };
-    }
+    if (!userProfileSnap.exists()) return { success: false, message: 'User profile not found.', errorCode: 'PROFILE_NOT_FOUND' };
     const userProfile = userProfileSnap.data() as UserProfile;
 
     if (!userProfile.connectedFitnessApps?.some(app => app.id === 'fitbit')) {
-      console.log(`[FitbitActions] Fitbit not connected for user: ${userId} for fetchAndStoreFitbitSwimmingData.`);
-      return { success: false, message: 'Fitbit not connected. Please connect Fitbit in your profile.', errorCode: 'FITBIT_NOT_CONNECTED' };
+      return { success: false, message: 'Fitbit not connected.', errorCode: 'FITBIT_NOT_CONNECTED' };
     }
 
     const rateLimitConfig = getRateLimitConfig(userProfile.subscriptionTier, 'swimmingData');
@@ -452,104 +429,86 @@ export async function fetchAndStoreFitbitSwimmingData(
     const todayStart = startOfDay(now);
     let callCountToday = stats?.lastCalledAt && isSameDay(new Date(stats.lastCalledAt), todayStart) ? stats.callCountToday || 0 : 0;
 
-    if (stats?.lastCalledAt && isSameDay(new Date(stats.lastCalledAt), todayStart)) {
-      if (callCountToday >= rateLimitConfig.limit) {
-        console.warn(`[FitbitActions] Swimming data rate limit exceeded for user ${userId}. Tier: ${userProfile.subscriptionTier}, Count: ${callCountToday}, Limit: ${rateLimitConfig.limit}`);
-        return { success: false, message: `API call limit for swimming data reached for your tier (${rateLimitConfig.limit} per ${rateLimitConfig.periodHours} hours). Try again later.`, errorCode: 'RATE_LIMIT_EXCEEDED' };
-      }
-    } else {
-      callCountToday = 0; // Reset for a new day
+    if (stats?.lastCalledAt && isSameDay(new Date(stats.lastCalledAt), todayStart) && callCountToday >= rateLimitConfig.limit) {
+      return { success: false, message: `API call limit for swimming data reached.`, errorCode: 'RATE_LIMIT_EXCEEDED' };
+    } else if (!stats?.lastCalledAt || !isSameDay(new Date(stats.lastCalledAt), todayStart)) {
+      callCountToday = 0;
     }
 
     const accessToken = await getValidFitbitAccessToken();
-    if (!accessToken) {
-      console.error('[FitbitActions] Failed to obtain valid Fitbit access token for swimming data for user:', userId);
-      return { success: false, message: 'Could not connect to Fitbit. Your session might have expired. Please try reconnecting Fitbit in your profile settings.', errorCode: 'FITBIT_AUTH_ERROR' };
-    }
+    if (!accessToken) return { success: false, message: 'Could not connect to Fitbit.', errorCode: 'FITBIT_AUTH_ERROR' };
 
     let swimmingActivities: FitbitActivityLog[];
     try {
-      swimmingActivities = await getSwimmingActivities(accessToken, targetDate);
-      if (!swimmingActivities || swimmingActivities.length === 0) {
-        console.log(`[FitbitActions] No swimming activities found from Fitbit for user ${userId}, date ${targetDate}.`);
-         // Update API call stats even if no new data.
-        callCountToday++;
-        const updatedStatsNoData = {
-          ...(userProfile.fitbitApiCallStats || {}),
-          swimmingData: {
-            lastCalledAt: now.toISOString(),
-            callCountToday: callCountToday,
-          },
-        };
-        await updateDoc(userProfileDocRef, { fitbitApiCallStats: updatedStatsNoData });
-        return { success: true, message: `No swimming data found from Fitbit for ${targetDate}.`, data: [] };
-      }
+      swimmingActivities = await getSwimmingActivities(accessToken, targetDate); // Uses fitbitService
     } catch (error: any) {
-      console.error(`[FitbitActions] Error calling fitbitService.getSwimmingActivities for user ${userId}, date ${targetDate}:`, error);
       if (error.status === 401) {
         await clearFitbitTokens();
-        return { success: false, message: 'Fitbit authentication error. Your Fitbit session may have expired. Please reconnect Fitbit in your profile settings.', errorCode: 'FITBIT_AUTH_EXPIRED_POST_REFRESH' };
+        return { success: false, message: 'Fitbit authentication error. Please reconnect Fitbit.', errorCode: 'FITBIT_AUTH_EXPIRED_POST_REFRESH' };
       }
-      return { success: false, message: `Failed to fetch swimming data from Fitbit: ${String(error.message || 'Unknown API error')}`, errorCode: 'FITBIT_API_ERROR' };
+      return { success: false, message: `Failed to fetch swimming activities: ${String(error.message)}`, errorCode: 'FITBIT_API_ERROR' };
     }
 
-    const processedSwims: FitbitSwimmingActivityFirestore[] = [];
-    for (const swim of swimmingActivities) {
-      // Combine startDate (YYYY-MM-DD) and startTime (HH:MM) to create a full ISO string for startTime
-      // Fitbit API's activity startTime is local to the user. For consistency in DB, we could store as UTC.
-      // However, parseISO assumes the input is ISO8601. If startTime is just "HH:MM", we need to combine it carefully.
-      // A robust solution considers the activity's timezone. For now, a simpler approach:
-      let fullStartTimeISO = swim.startTime; // Assume it's already ISO or can be parsed.
-      if (swim.startDate && swim.startTime && !swim.startTime.includes('T')) { // Basic check if it's just HH:MM
-         // Attempt to parse by combining. This assumes the user's local timezone for startTime.
-         // For global apps, full timezone handling is needed.
-         try {
-            const activityDateTime = parseISO(`${swim.startDate}T${swim.startTime}`); // This will be local time of server if no TZ
-            fullStartTimeISO = activityDateTime.toISOString(); // Convert to UTC ISO string
-         } catch(parseErr) {
-            console.warn(`[FitbitActions] Could not parse startDate ${swim.startDate} and startTime ${swim.startTime} for swim log ${swim.logId}. Storing original startTime.`, parseErr);
-            fullStartTimeISO = `${swim.startDate}T${swim.startTime}`; // Fallback
-         }
-      }
-
-
-      const firestoreData: FitbitSwimmingActivityFirestore = {
-        logId: swim.logId,
-        activityName: swim.name, // Should be "Swim"
-        startTime: fullStartTimeISO, 
-        duration: swim.duration,
-        calories: swim.calories,
-        distance: swim.distance,
-        distanceUnit: swim.distanceUnit as FitbitSwimmingActivityFirestore['distanceUnit'],
-        pace: swim.pace,
-        lastFetched: new Date().toISOString(),
-        dataSource: 'fitbit',
-      };
-      processedSwims.push(firestoreData);
-
-      const swimDocRef = doc(db, 'users', userId, 'fitbit_swimming_activities', String(swim.logId));
-      await setDoc(swimDocRef, firestoreData, { merge: true });
-      console.log(`[FitbitActions] Fitbit swimming activity stored in Firestore for user ${userId}, logId ${swim.logId}.`);
-    }
-
-    callCountToday++;
+    callCountToday++; // Increment here as API call was made
     const updatedStats = {
       ...(userProfile.fitbitApiCallStats || {}),
-      swimmingData: {
-        lastCalledAt: now.toISOString(),
-        callCountToday: callCountToday,
-      },
+      swimmingData: { lastCalledAt: now.toISOString(), callCountToday },
     };
     await updateDoc(userProfileDocRef, { fitbitApiCallStats: updatedStats });
-    console.log(`[FitbitActions] Updated swimming data API call stats for user ${userId}.`);
+
+    if (!swimmingActivities || swimmingActivities.length === 0) {
+      return { success: true, message: `No swimming data found from Fitbit for ${targetDate}.`, data: [] };
+    }
+
+    const processedSwims: NormalizedActivityFirestore[] = [];
+    for (const swim of swimmingActivities) {
+      try {
+        const activityDate = swim.startDate; // YYYY-MM-DD
+        let fullStartTimeISO = `${activityDate}T${swim.startTime}`; // Combine date and time
+        try {
+            // Attempt to parse and reformat to ensure it's a valid ISO string, ideally UTC
+            // Fitbit startTime is local. For UTC, timezone info would be needed from user profile or activity.
+            // For now, assuming parseISO can handle it or we store as local+offset if available.
+            fullStartTimeISO = parseISO(fullStartTimeISO).toISOString();
+        } catch (parseErr) {
+            console.warn(`[FitbitActions] Could not parse combined datetime ${activityDate}T${swim.startTime} for swim log ${swim.logId}. Using as is. Error: ${parseErr}`);
+            // Fallback to using the combined string if parsing fails, might not be ideal for DB queries
+        }
+
+        const distanceMeters = mapFitbitUnitToMeters(swim.distance, swim.distanceUnit); // Use the helper
+
+        const normalizedSwim: NormalizedActivityFirestore = {
+          id: `fitbit-${swim.logId}`,
+          userId: userId,
+          originalId: String(swim.logId),
+          dataSource: 'fitbit',
+          type: NormalizedActivityType.Swimming,
+          name: swim.name || 'Swim',
+          startTimeUtc: fullStartTimeISO, // This assumes the parsed time is UTC or close enough. Proper timezone handling is complex.
+          startTimeLocal: `${activityDate}T${swim.startTime}`, // Store original local time
+          // timezone: userProfile.timezone, // If available from user profile
+          durationMovingSec: swim.duration ? swim.duration / 1000 : undefined, // Convert ms to s
+          durationElapsedSec: swim.duration ? swim.duration / 1000 : undefined, // Fitbit usually provides one duration for logged activities
+          distanceMeters: distanceMeters,
+          calories: swim.calories,
+          averageHeartRateBpm: swim.averageHeartRate,
+          date: activityDate,
+          lastFetched: new Date().toISOString(),
+        };
+        processedSwims.push(normalizedSwim);
+
+        const activityDocRef = doc(db, 'users', userId, 'activities', normalizedSwim.id);
+        await setDoc(activityDocRef, normalizedSwim, { merge: true });
+      } catch (transformError: any) {
+        console.error(`[FitbitActions] Error transforming Fitbit swim log ${swim.logId}: ${transformError.message}. Skipping this record.`);
+        // Optionally, store erroneous records in a separate "error" collection for review
+      }
+    }
 
     return { success: true, message: `Successfully fetched and stored ${processedSwims.length} Fitbit swimming activities.`, data: processedSwims };
 
   } catch (error: any) {
     console.error(`[FitbitActions] Unhandled error in fetchAndStoreFitbitSwimmingData for user ${userId}:`, error);
-    return { success: false, message: `An unexpected server error occurred: ${String(error.message || 'Unknown server error')}`, errorCode: 'UNEXPECTED_SERVER_ERROR' };
+    return { success: false, message: `An unexpected server error occurred: ${String(error.message)}`, errorCode: 'UNEXPECTED_SERVER_ERROR' };
   }
 }
-
-
-    

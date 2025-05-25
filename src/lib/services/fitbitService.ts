@@ -1,3 +1,4 @@
+
 // src/lib/services/fitbitService.ts
 
 /**
@@ -6,7 +7,8 @@
  * These functions assume a valid OAuth 2.0 access token for the user has been obtained.
  */
 
-const FITBIT_API_BASE_URL = 'https://api.fitbit.com/1.2'; // Using version 1.2 for sleep, /1/ for others
+const FITBIT_API_BASE_URL_V1 = 'https://api.fitbit.com/1';
+const FITBIT_API_BASE_URL_V1_2 = 'https://api.fitbit.com/1.2'; // For sleep and some newer endpoints
 
 // --- Response Interfaces ---
 export interface FitbitUserProfileResponse {
@@ -24,13 +26,12 @@ export interface FitbitUserProfileResponse {
     weight: number;
     strideLengthWalking: number;
     strideLengthRunning: number;
-    // ... many other fields available
   };
 }
 
 export interface FitbitActivitySummary {
   steps: number;
-  distance: number; // This is typically a sum of distances from all activities for the day
+  distance: number; // This represents a sum of distances. The unit can vary.
   caloriesOut: number;
   fairlyActiveMinutes: number;
   lightlyActiveMinutes: number;
@@ -39,7 +40,7 @@ export interface FitbitActivitySummary {
 }
 
 export interface FitbitDailyActivityResponse {
-  activities: any[]; // Detailed list of activities for the day (can include swims)
+  activities: FitbitActivityLog[]; // Detailed list of activities for the day
   goals: any;
   summary: FitbitActivitySummary;
 }
@@ -52,12 +53,12 @@ export interface FitbitHeartRateDataPoint {
 export interface FitbitHeartRateIntradaySeries {
   dataset: FitbitHeartRateDataPoint[];
   datasetInterval: number;
-  datasetType: string; // e.g., "minute"
+  datasetType: string;
 }
 
 export interface FitbitHeartRateActivitiesResponse {
   'activities-heart': Array<{
-    dateTime: string; // Date of the summary
+    dateTime: string;
     value: {
       restingHeartRate?: number;
       heartRateZones: Array<{
@@ -69,10 +70,9 @@ export interface FitbitHeartRateActivitiesResponse {
       }>;
     };
   }>;
-  'activities-heart-intraday'?: FitbitHeartRateIntradaySeries; // Make intraday optional
+  'activities-heart-intraday'?: FitbitHeartRateIntradaySeries;
 }
 
-// --- Sleep Log Types from Fitbit API ---
 export interface FitbitSleepStageSummary {
   count: number;
   minutes: number;
@@ -84,37 +84,36 @@ export interface FitbitSleepLevelsSummary {
   light?: FitbitSleepStageSummary;
   rem?: FitbitSleepStageSummary;
   wake?: FitbitSleepStageSummary;
-  // For classic sleep
   asleep?: FitbitSleepStageSummary;
   awake?: FitbitSleepStageSummary;
   restless?: FitbitSleepStageSummary;
 }
 
 export interface FitbitSleepLevelData {
-  dateTime: string; // ISO 8601 timestamp
+  dateTime: string;
   level: 'deep' | 'light' | 'rem' | 'wake' | 'asleep' | 'awake' | 'restless';
   seconds: number;
 }
 
 export interface FitbitSleepLog {
   logId: number;
-  dateOfSleep: string; // YYYY-MM-DD
-  startTime: string; // ISO 8601
-  endTime: string; // ISO 8601
+  dateOfSleep: string;
+  startTime: string;
+  endTime: string;
   duration: number; // milliseconds
   isMainSleep: boolean;
   efficiency: number;
   minutesToFallAsleep: number;
   minutesAsleep: number;
   minutesAwake: number;
-  minutesAfterWakeup?: number; // Often 0 for main sleep
+  minutesAfterWakeup?: number;
   timeInBed: number;
   type: 'stages' | 'classic';
-  infoCode?: number; // Optional: https://dev.fitbit.com/build/reference/web-api/sleep/get-sleep-log-by-date/#InfoCode-Values
+  infoCode?: number;
   levels?: {
     summary: FitbitSleepLevelsSummary;
     data: FitbitSleepLevelData[];
-    shortData?: FitbitSleepLevelData[]; // Usually for naps or very short sleep
+    shortData?: FitbitSleepLevelData[];
   };
 }
 
@@ -136,29 +135,38 @@ export interface FitbitSleepLogsResponse {
   };
 }
 
-// --- Activity Log Types from Fitbit API ---
 export interface FitbitActivityLog {
-  activityId: number;
+  activityId: number; // ID of the activity type (e.g., 90013 for Walk)
   activityParentId?: number;
-  activityParentName?: string; // e.g., "Running", "Swimming"
+  activityParentName?: string;
   calories: number;
   description?: string;
-  distance?: number; // Unit depends on user settings, might need conversion
-  distanceUnit?: string; // e.g., "Meter", "Kilometer", "Mile", "Yard"
+  distance?: number; // Distance of the activity. Unit depends on Accept-Language header or user's unit system.
+  distanceUnit?: string; // Often NOT explicitly provided in this log; inferred from user settings or Accept-Language.
   duration: number; // milliseconds
   hasGps?: boolean;
   isFavorite?: boolean;
   lastModified: string; // ISO 8601
-  logId: number;
-  name: string; // e.g., "Swim", "Walk"
+  logId: number; // Unique ID for this specific log entry
+  name: string; // e.g., "Walk", "Run", "Swim"
   startDate: string; // YYYY-MM-DD
-  startTime: string; // HH:MM
-  steps?: number; // Present for walking, running, etc.
-  // Swim-specific, may or may not be present
-  poolLength?: number;
-  poolLengthUnit?: string;
-  pace?: number; // seconds per 100m or 100yd for swimming
-  // ... other fields like averageHeartRate, source, etc.
+  startTime: string; // HH:MM (local time)
+  steps?: number;
+  logType?: 'manual' | 'auto_detected' | 'mobile_run';
+  // Swim specific if available
+  pace?: number; // seconds per 100m or 100yd
+  speed?: number; // This is often redundant if pace is given, or one derives the other
+  // Heart rate during activity
+  averageHeartRate?: number;
+  heartRateLink?: string; // Link to get heart rate time series for the activity
+  // Other fields
+  source?: {
+    id: string;
+    name: string;
+    type: string;
+    url: string;
+  };
+  [key: string]: any; // For any other fields
 }
 
 export interface FitbitActivityListResponse {
@@ -168,23 +176,22 @@ export interface FitbitActivityListResponse {
     afterDate?: string;
     limit?: number;
     next?: string;
-    offset?: number;
+    offset?: string;
     previous?: string;
     sort?: string;
   };
 }
 
-// --- Helper for making API requests ---
-async function fitbitApiRequest<T>(endpoint: string, accessToken: string, method: 'GET' | 'POST' = 'GET', body?: any): Promise<T> {
-  // Use FITBIT_API_BASE_URL (1.2) for sleep, /1/ for others.
-  // A more robust solution might pass the base URL or version.
-  const base = endpoint.includes('/sleep/') ? FITBIT_API_BASE_URL : 'https://api.fitbit.com/1';
+
+async function fitbitApiRequest<T>(endpoint: string, accessToken: string, apiVersion: 'v1' | 'v1.2' = 'v1', method: 'GET' | 'POST' = 'GET', body?: any): Promise<T> {
+  const base = apiVersion === 'v1.2' ? FITBIT_API_BASE_URL_V1_2 : FITBIT_API_BASE_URL_V1;
   const url = `${base}${endpoint}`;
   console.log(`[FitbitService] Making API Request: ${method} ${url}`);
 
   const headers: HeadersInit = {
     'Authorization': `Bearer ${accessToken}`,
-    'Accept-Locale': 'en_US', // Optional: specify locale for distance units, etc.
+    'Accept-Locale': 'en_US', // Requesting units in a common format if possible (e.g., meters, km)
+    // Consider 'Accept-Language': 'en_US' as well if API supports it for units/names
   };
   if (method === 'POST' && body) {
     headers['Content-Type'] = 'application/json';
@@ -201,34 +208,31 @@ async function fitbitApiRequest<T>(endpoint: string, accessToken: string, method
     try {
       errorData = await response.json();
     } catch (e) {
-      errorData = { message: response.statusText, status: response.status };
+      errorData = { message: response.statusText };
     }
-    console.error('[FitbitService] API Error Response Status:', response.status);
+    console.error('[FitbitService] API Error Response Status:', response.status, 'URL:', url);
     console.error('[FitbitService] API Error Response Body:', errorData);
-
-    const errorMessage = (errorData as any).errors?.[0]?.message || (errorData as any).message || `Fitbit API request failed: ${response.statusText}`;
+    const errorMessage = (errorData as any).errors?.[0]?.message || (errorData as any).message || `Fitbit API request failed with status ${response.status}`;
     const errorToThrow = new Error(errorMessage);
-    (errorToThrow as any).status = response.status; // Attach status to error
-    (errorToThrow as any).details = errorData; // Attach full error details
+    (errorToThrow as any).status = response.status;
+    (errorToThrow as any).details = errorData;
     throw errorToThrow;
   }
 
-  if (response.status === 204) { // No Content
-    return {} as T; // Or handle as appropriate (e.g., return null or an empty array)
+  if (response.status === 204) {
+    return {} as T;
   }
-
   return response.json() as Promise<T>;
 }
 
-
 export async function getFitbitUserProfile(accessToken: string): Promise<FitbitUserProfileResponse> {
   console.log(`[FitbitService] Fetching user profile...`);
-  return fitbitApiRequest<FitbitUserProfileResponse>('/user/-/profile.json', accessToken);
+  return fitbitApiRequest<FitbitUserProfileResponse>('/user/-/profile.json', accessToken, 'v1');
 }
 
 export async function getDailyActivitySummary(accessToken: string, date: string /* YYYY-MM-DD */): Promise<FitbitDailyActivityResponse> {
   console.log(`[FitbitService] Fetching daily activity for date: ${date}...`);
-  return fitbitApiRequest<FitbitDailyActivityResponse>(`/user/-/activities/date/${date}.json`, accessToken);
+  return fitbitApiRequest<FitbitDailyActivityResponse>(`/user/-/activities/date/${date}.json`, accessToken, 'v1');
 }
 
 export async function getHeartRateTimeSeries(
@@ -239,32 +243,42 @@ export async function getHeartRateTimeSeries(
   console.log(`[FitbitService] Fetching heart rate for date: ${date}, detail: ${detailLevel}...`);
   return fitbitApiRequest<FitbitHeartRateActivitiesResponse>(
     `/user/-/activities/heart/date/${date}/1d/${detailLevel}.json`,
-    accessToken
+    accessToken,
+    'v1'
   );
 }
 
 export async function getSleepLogs(accessToken: string, date: string /* YYYY-MM-DD */): Promise<FitbitSleepLogsResponse> {
   console.log(`[FitbitService] Fetching sleep logs for date: ${date}...`);
-  return fitbitApiRequest<FitbitSleepLogsResponse>(`/user/-/sleep/date/${date}.json`, accessToken);
+  return fitbitApiRequest<FitbitSleepLogsResponse>(`/user/-/sleep/date/${date}.json`, accessToken, 'v1.2');
 }
 
+// Fetches all logged activities for a specific date
+export async function getLoggedActivitiesForDate(accessToken: string, date: string /* YYYY-MM-DD */): Promise<FitbitActivityLog[]> {
+  console.log(`[FitbitService] Fetching logged activities for date: ${date}...`);
+  // The activities list endpoint might require beforeDate & afterDate, or sort & limit.
+  // Let's try with a specific date format first.
+  // A robust way is to use /activities/list.json with afterDate={date}T00:00:00&beforeDate={date}T23:59:59&sort=asc&limit=50&offset=0
+  // For simplicity, assuming the daily activity endpoint also returns a comprehensive list in its `activities` array.
+  const dailyData = await fitbitApiRequest<FitbitDailyActivityResponse>(`/user/-/activities/date/${date}.json`, accessToken, 'v1');
+  return dailyData.activities || [];
+}
+
+
+// This function is now more generic and will be called by specific data type server actions
+// It's kept here in case we need to fetch all types of activities for a date.
+// For specific types like "Swim", the server action will filter.
 export async function getSwimmingActivities(accessToken: string, date: string /* YYYY-MM-DD */): Promise<FitbitActivityLog[]> {
   console.log(`[FitbitService] Fetching activities for date: ${date} to find swims...`);
-  // The activities list endpoint is typically /1/user/-/activities/list.json
-  // It requires a `beforeDate`, `afterDate`, `sort`, and `limit`.
-  // To get activities for a specific date, we set beforeDate to the target date, and afterDate to the day after, limit to a reasonable number.
-  // Or, more simply, we can filter by `date` but the API docs are a bit unclear on direct date filter for list.
-  // Let's assume we fetch for a specific date and filter client-side, or adjust if API allows direct filtering.
-  // For now, a simpler approach for a single date. The Fitbit API usually provides activities for a single date if `/date/${date}.json` is used with `activities` endpoint.
-  // However, the most common way is to get a list and filter.
-  // For a specific date: /1/user/-/activities/date/{date}.json already gives activities in `activities` array.
-  // Let's use the daily activity endpoint which includes an 'activities' array.
-
-  const dailyData = await fitbitApiRequest<FitbitDailyActivityResponse>(`/user/-/activities/date/${date}.json`, accessToken);
+  const dailyData = await fitbitApiRequest<FitbitDailyActivityResponse>(`/user/-/activities/date/${date}.json`, accessToken, 'v1');
   if (dailyData && dailyData.activities) {
-    const swims = dailyData.activities.filter(activity => activity.name === 'Swim' || activity.activityName === 'Swim' || activity.activityTypeId === 20022); // activityTypeId for Swim is 20022
+    const swims = dailyData.activities.filter(activity => 
+        activity.name?.toLowerCase() === 'swim' || 
+        activity.activityName?.toLowerCase() === 'swim' ||
+        activity.activityTypeId === 20022 // Common Fitbit activityTypeId for Swim
+    );
     console.log(`[FitbitService] Found ${swims.length} swimming activities for date ${date}.`);
-    return swims as FitbitActivityLog[]; // Cast, assuming structure aligns
+    return swims;
   }
   return [];
 }

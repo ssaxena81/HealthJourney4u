@@ -11,15 +11,16 @@ export const passwordSchema = z.string()
 
 export type HealthMetricCategory = 'vital' | 'lab' | 'activity' | 'event' | 'medication' | 'condition';
 
-export type HealthMetricType =
-  | 'walking'
-  | 'standing'
-  | 'breathing'
-  | 'pulse'
-  | 'lipidPanel'
-  | 'appointment'
-  | 'medication'
-  | 'condition';
+// Deprecating HealthMetricType in favor of more specific types or direct use of NormalizedActivityType
+// export type HealthMetricType =
+//   | 'walking'
+//   | 'standing'
+//   | 'breathing'
+//   | 'pulse'
+//   | 'lipidPanel'
+//   | 'appointment'
+//   | 'medication'
+//   | 'condition';
 
 export interface LipidPanelData {
   totalCholesterol: number; // mg/dL
@@ -28,40 +29,17 @@ export interface LipidPanelData {
   triglycerides: number; // mg/dL
 }
 
+// Keeping BaseHealthEntry for non-activity types that might still be manually entered or from other specific sources
 export interface BaseHealthEntry {
   id: string;
   date: string; // ISO 8601 format
-  type: HealthMetricType;
+  type: string; // More generic now, can be 'lipidPanel', 'appointment', 'medication', 'condition' or a NormalizedActivityType
   title: string;
   notes?: string;
-  source?: 'manual' | 'quest' | 'uhc' | 'fitbit' | 'strava';
+  source?: 'manual' | 'quest' | 'uhc' | 'fitbit' | 'strava'; // Added fitbit & strava generally
 }
 
-export interface WalkingEntry extends BaseHealthEntry {
-  type: 'walking';
-  value: number; // steps or distance
-  unit: 'steps' | 'km' | 'miles';
-}
-
-export interface StandingEntry extends BaseHealthEntry {
-  type: 'standing';
-  value: number; // duration
-  unit: 'minutes' | 'hours';
-}
-
-export interface BreathingEntry extends BaseHealthEntry {
-  type: 'breathing';
-  value: number; // rate
-  unit: 'breaths/min';
-  quality?: string; // e.g., 'normal', 'labored'
-}
-
-export interface PulseEntry extends BaseHealthEntry {
-  type: 'pulse';
-  value: number; // bpm
-  unit: 'bpm';
-}
-
+// Specific entry types for non-activity data (if needed, or can be merged into a generic one with value object)
 export interface LipidPanelEntry extends BaseHealthEntry {
   type: 'lipidPanel';
   value: LipidPanelData;
@@ -72,34 +50,93 @@ export interface AppointmentEntry extends BaseHealthEntry {
   doctor?: string;
   location?: string;
   reason?: string;
-  visitNotes?: string; // For UHC deep dive
+  visitNotes?: string;
 }
 
 export interface MedicationEntry extends BaseHealthEntry {
   type: 'medication';
-  medicationName: string; // Overrides title for specific use
+  medicationName: string;
   dosage: string;
   frequency: string;
 }
 
 export interface ConditionEntry extends BaseHealthEntry {
   type: 'condition';
-  conditionName: string; // Overrides title
-  diagnosisDate?: string; // ISO 8601
+  conditionName: string;
+  diagnosisDate?: string;
   status?: 'active' | 'resolved' | 'chronic';
 }
 
-export type HealthEntry =
-  | WalkingEntry
-  | StandingEntry
-  | BreathingEntry
-  | PulseEntry
-  | LipidPanelEntry
-  | AppointmentEntry
-  | MedicationEntry
-  | ConditionEntry;
+// For manual entries that were simple like pulse, breathing - these might become NormalizedActivity if applicable or stay simple
+export interface SimpleValueEntry extends BaseHealthEntry {
+  type: 'pulse' | 'breathing' | 'standing'; // Example
+  value: number;
+  unit: string;
+}
 
-export const healthMetricCategories: HealthMetricType[] = [
+
+// --- Standardized Activity Data Types ---
+export enum NormalizedActivityType {
+  Walking = 'walking',
+  Running = 'running',
+  Hiking = 'hiking',
+  Swimming = 'swimming',
+  Cycling = 'cycling',
+  Workout = 'workout', // General workout category
+  Other = 'other',
+}
+
+export const normalizedActivityTypeDisplayNames: Record<NormalizedActivityType, string> = {
+  [NormalizedActivityType.Walking]: 'Walking',
+  [NormalizedActivityType.Running]: 'Running',
+  [NormalizedActivityType.Hiking]: 'Hiking',
+  [NormalizedActivityType.Swimming]: 'Swimming',
+  [NormalizedActivityType.Cycling]: 'Cycling',
+  [NormalizedActivityType.Workout]: 'Workout',
+  [NormalizedActivityType.Other]: 'Other Activity',
+};
+
+
+export interface NormalizedActivityFirestore {
+  id: string; // Unique ID in our database (e.g., Firestore auto-ID or dataSource-originalId)
+  userId: string;
+  originalId: string; // ID from the source platform (e.g., Fitbit logId, Strava activity id)
+  dataSource: 'fitbit' | 'strava' | 'apple_health' | 'manual' | string; // Extensible
+  
+  type: NormalizedActivityType; // Standardized type
+  name?: string; // User-defined name/title if available (e.g., Strava activity name)
+  
+  startTimeUtc: string; // ISO 8601 format (UTC)
+  startTimeLocal?: string; // ISO 8601 format (local time of activity, if available)
+  timezone?: string; // e.g., "America/Los_Angeles" (if available)
+  
+  durationMovingSec?: number; // Active duration in seconds
+  durationElapsedSec?: number; // Total duration in seconds (including pauses)
+  
+  distanceMeters?: number; // Distance in meters
+  calories?: number;
+  steps?: number; // Optional, mainly for step-based activities
+  
+  averageHeartRateBpm?: number; // Optional
+  maxHeartRateBpm?: number; // Optional
+  
+  elevationGainMeters?: number; // Optional
+  
+  mapPolyline?: string; // Optional, for map display (summary polyline)
+  
+  // For easy daily grouping/querying, derived from startTimeLocal or startTimeUtc
+  date: string; // YYYY-MM-DD format 
+  
+  lastFetched: string; // ISO 8601 string (when this record was created/last updated in our DB)
+  
+  // Source-specific raw data snippet, optional, for debugging or future re-processing
+  // Be mindful of size if storing large raw objects.
+  // rawDataSnippet?: Record<string, any>; 
+}
+
+
+// Deprecated list, NormalizedActivityType should be used
+export const healthMetricCategoriesOld: string[] = [
   'walking',
   'standing',
   'breathing',
@@ -110,7 +147,8 @@ export const healthMetricCategories: HealthMetricType[] = [
   'condition',
 ];
 
-export const healthMetricDisplayNames: Record<HealthMetricType, string> = {
+// Deprecated map, use normalizedActivityTypeDisplayNames
+export const healthMetricDisplayNamesOld: Record<string, string> = {
   walking: 'Walking',
   standing: 'Standing',
   breathing: 'Breathing',
@@ -120,6 +158,7 @@ export const healthMetricDisplayNames: Record<HealthMetricType, string> = {
   medication: 'Medication',
   condition: 'Condition',
 };
+
 
 // --- User Profile and Authentication Types ---
 
@@ -135,6 +174,8 @@ export interface FitbitApiCallStats {
   heartRateTimeSeries?: FitbitApiCallStatDetail;
   sleepData?: FitbitApiCallStatDetail;
   swimmingData?: FitbitApiCallStatDetail;
+  // Potentially a general 'activities' if we fetch other logged activities from Fitbit
+  loggedActivities?: FitbitApiCallStatDetail; 
 }
 
 export interface StravaApiCallStatDetail {
@@ -144,55 +185,47 @@ export interface StravaApiCallStatDetail {
 
 export interface StravaApiCallStats {
   activities?: StravaApiCallStatDetail;
-  // Add other Strava endpoints here if they need separate rate limiting
 }
 
 export interface UserProfile {
-  id: string; // Firebase Auth UID - This will be the document ID in Firestore
+  id: string; // Firebase Auth UID
 
-  // Part 1: Demographics
-  firstName?: string; // Mandatory during profile setup
-  middleInitial?: string; // Optional
-  lastName?: string; // Mandatory during profile setup
-  dateOfBirth?: string; // ISO 8601 format, Mandatory during profile setup
-  email: string; // Login ID, matches Auth email, effectively mandatory
-  cellPhone?: string; // Optional, but one of email/cellPhone needed for MFA
-  mfaMethod?: 'email' | 'sms'; // User's preferred/configured MFA method
-  isAgeCertified?: boolean; // User certifies they are 18 or older
+  firstName?: string;
+  middleInitial?: string;
+  lastName?: string;
+  dateOfBirth?: string; // ISO 8601
+  email: string;
+  cellPhone?: string;
+  mfaMethod?: 'email' | 'sms';
+  isAgeCertified?: boolean;
 
-  // Password and Terms Management
-  lastPasswordChangeDate: string; // ISO 8601 format
+  lastPasswordChangeDate: string; // ISO 8601
   acceptedLatestTerms: boolean;
-  termsVersionAccepted?: string; // Version identifier of T&C accepted
+  termsVersionAccepted?: string;
 
-  // Subscription and Payment
   subscriptionTier: SubscriptionTier;
-  paymentDetails?: any; // Placeholder for payment system identifiers (e.g., Stripe customer ID)
+  paymentDetails?: any;
 
-  // Part 2: Fitness Connections
   connectedFitnessApps: Array<{
-    id: string; // e.g., 'fitbit', 'strava' (identifier for the service)
-    name: string; // e.g., 'Fitbit', 'Strava' (display name)
-    connectedAt: string; // ISO 8601 format - when the connection was established
+    id: string;
+    name: string;
+    connectedAt: string; // ISO 8601
   }>;
 
-  // Part 3: Diagnostics Connections
   connectedDiagnosticsServices: Array<{
-    id: string; // e.g., 'quest', 'labcorp'
-    name: string; // e.g., 'Quest Diagnostics'
-    connectedAt: string; // ISO 8601 format
+    id: string;
+    name: string;
+    connectedAt: string; // ISO 8601
   }>;
 
-  // Part 4: Insurance Connections
   connectedInsuranceProviders: Array<{
-    id: string; // Identifier for the insurance provider
-    name: string; // e.g., 'United Healthcare'
-    memberId: string; // User's member ID for that insurer
-    groupId?: string; // User's group ID (optional)
-    connectedAt: string; // ISO 8601 format
+    id: string;
+    name: string;
+    memberId: string;
+    groupId?: string;
+    connectedAt: string; // ISO 8601
   }>;
 
-  // API Call Statistics for Rate Limiting
   fitbitApiCallStats?: FitbitApiCallStats;
   stravaApiCallStats?: StravaApiCallStats;
 }
@@ -207,7 +240,6 @@ export interface TierFeatureComparison {
   platinum: string | boolean;
 }
 
-// Example data for "Compare Plans"
 export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Fitness App Connections", free: "1", silver: "2", gold: "3", platinum: "All" },
   { feature: "Diagnostic Service Connections", free: "None", silver: "None", gold: "1", platinum: "All" },
@@ -220,11 +252,10 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Fitbit Daily Summary Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Fitbit Heart Rate Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Fitbit Sleep Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
-  { feature: "Fitbit Swimming Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
+  { feature: "Fitbit Swimming Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" }, // Or general "Logged Activities"
   { feature: "Strava Activity Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
 ];
 
-// For admin-managed dropdowns (mocked for now)
 export interface SelectableService {
   id: string;
   name: string;
@@ -256,9 +287,9 @@ export const mockInsuranceProviders: SelectableService[] = [
 export interface FitbitActivitySummaryFirestore {
     date: string; // YYYY-MM-DD, also the document ID
     steps: number;
-    distance: number; // In km or miles, be consistent
+    distance: number; // In km (as per current implementation, ensure consistency)
     caloriesOut: number;
-    activeMinutes: number; // Sum of fairlyActiveMinutes and veryActiveMinutes
+    activeMinutes: number;
     lastFetched: string; // ISO string
     dataSource: 'fitbit';
 }
@@ -274,9 +305,9 @@ export interface FitbitHeartRateFirestore {
     caloriesOut?: number;
   }>;
   intradaySeries?: {
-    dataset: Array<{ time: string; value: number }>; // time in HH:MM:SS
-    datasetInterval: number; // e.g., 1 for 1 minute
-    datasetType: string; // e.g., "minute"
+    dataset: Array<{ time: string; value: number }>;
+    datasetInterval: number;
+    datasetType: string;
   };
   lastFetched: string; // ISO string
   dataSource: 'fitbit';
@@ -284,30 +315,30 @@ export interface FitbitHeartRateFirestore {
 
 export interface FitbitSleepLogFirestore {
   dateOfSleep: string; // YYYY-MM-DD
-  logId: number; // Fitbit's unique ID for this sleep log, use as document ID in subcollection
+  logId: number; // Use as document ID in fitbit_sleep subcollection
   startTime: string; // ISO 8601
   endTime: string; // ISO 8601
-  duration: number; // Total duration in milliseconds
+  duration: number; // milliseconds
   minutesToFallAsleep: number;
   minutesAsleep: number;
   minutesAwake: number;
   timeInBed: number;
-  efficiency: number; // Sleep efficiency score (0-100)
-  type: 'stages' | 'classic'; // Type of sleep log
+  efficiency: number;
+  type: 'stages' | 'classic';
   levels?: {
     summary: {
       deep?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
       light?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
       rem?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
       wake?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
-      asleep?: { count: number; minutes: number }; // For classic
-      awake?: { count: number; minutes: number }; // For classic
-      restless?: { count: number; minutes: number }; // For classic
+      asleep?: { count: number; minutes: number };
+      awake?: { count: number; minutes: number };
+      restless?: { count: number; minutes: number };
     };
     data: Array<{
-      dateTime: string; // ISO 8601 timestamp of the level
+      dateTime: string;
       level: 'deep' | 'light' | 'rem' | 'wake' | 'asleep' | 'awake' | 'restless';
-      seconds: number; // Duration of this stage in seconds
+      seconds: number;
     }>;
     shortData?: Array<{
         dateTime: string;
@@ -318,39 +349,37 @@ export interface FitbitSleepLogFirestore {
   lastFetched: string; // ISO string
   dataSource: 'fitbit';
 }
+// FitbitSwimmingActivityFirestore is now superseded by NormalizedActivityFirestore
+// export interface FitbitSwimmingActivityFirestore {
+//   logId: number;
+//   activityName: string;
+//   startTime: string;
+//   duration: number;
+//   calories: number;
+//   distance?: number;
+//   distanceUnit?: 'Meter' | 'Yard' | 'Kilometer' | 'Mile';
+//   pace?: number;
+//   lastFetched: string;
+//   dataSource: 'fitbit';
+// }
 
-export interface FitbitSwimmingActivityFirestore {
-  logId: number; // Fitbit's unique activity log ID, use as document ID in subcollection
-  activityName: string; // Should be "Swim"
-  startTime: string; // ISO 8601 (original startTime from activity log is HH:MM, needs to be combined with startDate)
-  duration: number; // milliseconds
-  calories: number;
-  distance?: number; // meters or yards, if available
-  distanceUnit?: 'Meter' | 'Yard' | 'Kilometer' | 'Mile'; // if available
-  pace?: number; // seconds per 100m or 100yd, if available
-  lastFetched: string; // ISO string
-  dataSource: 'fitbit';
-}
-
-export interface StravaActivityFirestore {
-  id: number; // Strava activity ID, use as document ID in subcollection
-  type: 'Walk' | 'Run' | 'Hike' | 'Swim' | string; // Strava activity type
-  name: string;
-  distance: number; // In meters
-  movingTime: number; // In seconds
-  elapsedTime: number; // In seconds
-  totalElevationGain?: number; // In meters
-  startDate: string; // ISO 8601 format (UTC)
-  startDateLocal: string; // ISO 8601 format (local time)
-  timezone?: string; // e.g. "(GMT-08:00) America/Los_Angeles"
-  mapPolyline?: string; // Summary polyline for the map
-  averageSpeed?: number; // m/s
-  maxSpeed?: number; // m/s
-  averageHeartrate?: number; // bpm
-  maxHeartrate?: number; // bpm
-  calories?: number;
-  lastFetched: string; // ISO string
-  dataSource: 'strava';
-}
-
-    
+// StravaActivityFirestore is now superseded by NormalizedActivityFirestore
+// export interface StravaActivityFirestore {
+//   id: number;
+//   type: 'Walk' | 'Run' | 'Hike' | 'Swim' | string;
+//   name: string;
+//   distance: number;
+//   movingTime: number;
+//   elapsedTime: number;
+//   totalElevationGain?: number;
+//   startDate: string;
+//   startDateLocal: string;
+//   timezone?: string;
+//   mapPolyline?: string;
+//   averageSpeed?: number;
+//   maxSpeed?: number;
+//   averageHeartrate?: number;
+//   calories?: number;
+//   lastFetched: string;
+//   dataSource: 'strava';
+// }
