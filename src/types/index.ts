@@ -58,13 +58,13 @@ export interface NormalizedActivityFirestore {
   
   mapPolyline?: string;
   
-  date: string; // YYYY-MM-DD format 
+  date: string; // YYYY-MM-DD format (derived from startTimeLocal or startTimeUtc)
   lastFetched: string; // ISO 8601 string
 }
 
 
 // --- Health Metric Types for Manual Entry & Timeline (Example) ---
-export type HealthMetricTypeTimeline =
+export type HealthMetricType = // Renamed from HealthMetricTypeTimeline for clarity
   | 'walking'
   | 'standing'
   | 'breathing'
@@ -84,7 +84,7 @@ export interface LipidPanelData {
 export interface BaseHealthEntry {
   id: string;
   date: string; // ISO 8601 format
-  type: HealthMetricTypeTimeline;
+  type: HealthMetricType;
   title: string;
   notes?: string;
   source?: 'manual' | 'quest' | 'uhc' | 'fitbit' | 'strava' | 'google-fit';
@@ -152,7 +152,7 @@ export type HealthEntry =
   | MedicationEntry
   | ConditionEntry;
 
-export const healthMetricCategories: HealthMetricTypeTimeline[] = [
+export const healthMetricCategories: HealthMetricType[] = [
   'walking',
   'standing',
   'breathing',
@@ -163,7 +163,7 @@ export const healthMetricCategories: HealthMetricTypeTimeline[] = [
   'condition',
 ];
 
-export const healthMetricDisplayNames: Record<HealthMetricTypeTimeline, string> = {
+export const healthMetricDisplayNames: Record<HealthMetricType, string> = {
   walking: 'Walking',
   standing: 'Standing',
   breathing: 'Breathing',
@@ -265,32 +265,50 @@ export const DashboardMetricId = {
   AVG_SLEEP_DURATION: 'avgSleepDuration',
   AVG_ACTIVE_MINUTES: 'avgActiveMinutes',
   RESTING_HEART_RATE: 'restingHeartRate',
-  AVG_WORKOUT_DURATION: 'avgWorkoutDuration', // Example: average duration of 'workout' type activities
-  TOTAL_WORKOUTS: 'totalWorkouts',         // Example: count of 'workout' type activities in period
-  AVG_HEART_RATE_VARIABILITY: 'avgHRV',      // Example: if HRV data becomes available
+  AVG_WORKOUT_DURATION: 'avgWorkoutDuration', 
+  TOTAL_WORKOUTS: 'totalWorkouts',        
+  // AVG_HEART_RATE_VARIABILITY: 'avgHRV', // Example if HRV becomes available
 } as const;
 
 export type DashboardMetricIdValue = typeof DashboardMetricId[keyof typeof DashboardMetricId];
 
 export interface DashboardMetricConfig {
   id: DashboardMetricIdValue;
-  label: string; // Display label for UI (checkbox, chart axis)
-  unit?: string; // Unit for display (e.g., 'steps', 'hours', 'bpm')
-  defaultMaxValue: number; // Default max for radar chart normalization if no user goal
-  // We might add a function here later like:
-  // calculateValue: (userId: string, dateRange: {from: string, to: string}) => Promise<number | undefined>;
+  label: string; 
+  unit?: string; 
+  defaultMaxValue: number; 
 }
 
 export const AVAILABLE_DASHBOARD_METRICS: DashboardMetricConfig[] = [
   { id: DashboardMetricId.AVG_DAILY_STEPS, label: 'Average Daily Steps', unit: 'steps', defaultMaxValue: 15000 },
   { id: DashboardMetricId.AVG_SLEEP_DURATION, label: 'Average Sleep Duration', unit: 'hours', defaultMaxValue: 10 },
   { id: DashboardMetricId.AVG_ACTIVE_MINUTES, label: 'Average Active Minutes', unit: 'min', defaultMaxValue: 120 },
-  { id: DashboardMetricId.RESTING_HEART_RATE, label: 'Average Resting Heart Rate', unit: 'bpm', defaultMaxValue: 100 }, // Assuming higher is 'worse' for normalization, or we take (max - value)
+  { id: DashboardMetricId.RESTING_HEART_RATE, label: 'Average Resting Heart Rate', unit: 'bpm', defaultMaxValue: 100 }, 
   { id: DashboardMetricId.AVG_WORKOUT_DURATION, label: 'Average Workout Duration', unit: 'min', defaultMaxValue: 90 },
   { id: DashboardMetricId.TOTAL_WORKOUTS, label: 'Total Workouts in Period', unit: 'sessions', defaultMaxValue: 10 },
   // { id: DashboardMetricId.AVG_HEART_RATE_VARIABILITY, label: 'Avg. Heart Rate Variability', unit: 'ms', defaultMaxValue: 100 },
 ];
 // --- End Dashboard Metric Selection Types ---
+
+// --- Radar Chart Data Point Type ---
+export interface RadarDataPoint { // For the main dashboard radar chart
+  metric: string; // The display name of the metric (e.g., "Avg Daily Steps")
+  value: number; // Normalized value (0-100) for the radar chart
+  actualFormattedValue: string; // Actual value with unit (e.g., "7500 steps") for tooltip
+  fullMark: number; // Usually 100 for normalized radar charts
+}
+
+export interface PerformanceRadarChartDataPoint { // For individual exercise/sleep pages
+  metric: string;
+  minGoalNormalized?: number; // Normalized min goal (0-100)
+  actualNormalized: number;   // Normalized actual performance (0-100)
+  maxGoalNormalized: number;   // Normalized max goal (typically 100)
+  minGoalFormatted?: string;  // Formatted min goal for tooltip (e.g., "5000 steps")
+  actualFormatted: string;    // Formatted actual value for tooltip
+  maxGoalFormatted?: string;  // Formatted max goal for tooltip
+  isOverGoal?: boolean;       // If actual > maxGoal
+  isBelowMinGoal?: boolean;   // If actual < minGoal
+}
 
 
 export interface UserProfile {
@@ -303,6 +321,7 @@ export interface UserProfile {
   email: string; 
   cellPhone?: string; 
   mfaMethod?: 'email' | 'sms'; 
+  mfaCodeAttempt?: { code: string; expiresAt: string; }; // For temporary MFA code storage
   isAgeCertified?: boolean; 
 
   lastPasswordChangeDate: string; 
@@ -341,7 +360,7 @@ export interface UserProfile {
   hikingRadarGoals?: HikingRadarGoals;
   swimmingRadarGoals?: SwimmingRadarGoals;
   sleepRadarGoals?: SleepRadarGoals;
-  dashboardRadarMetrics?: DashboardMetricIdValue[]; // Stores IDs of selected metrics
+  dashboardRadarMetrics?: DashboardMetricIdValue[]; 
 }
 
 export const subscriptionTiers: SubscriptionTier[] = ['free', 'silver', 'gold', 'platinum'];
@@ -379,9 +398,13 @@ export interface SelectableService {
 }
 
 export const mockFitnessApps: SelectableService[] = [
+  // { id: 'apple_health', name: 'Apple Health' }, // Requires native companion app
   { id: 'fitbit', name: 'Fitbit' },
   { id: 'strava', name: 'Strava' },
   { id: 'google-fit', name: 'Google Fit' },
+  // { id: 'nike_run_club', name: 'Nike Run Club' }, // Add when ready for integration
+  // { id: 'myfitnesspal', name: 'MyFitnessPal' }, // Add when ready
+  // { id: 'fiton', name: 'FitOn Workouts' }, // Add when ready
 ];
 
 export const mockDiagnosticServices: SelectableService[] = [
@@ -401,7 +424,7 @@ export const mockInsuranceProviders: SelectableService[] = [
 export interface FitbitActivitySummaryFirestore {
     date: string; // YYYY-MM-DD, also the document ID
     steps?: number; 
-    distance?: number; 
+    distance?: number; // km
     caloriesOut?: number; 
     activeMinutes?: number; 
     lastFetched: string; // ISO string
@@ -467,6 +490,6 @@ export interface FitbitSleepLogFirestore {
 
 export interface StravaActivityFirestore extends Omit<NormalizedActivityFirestore, 'dataSource' | 'id' | 'userId'> {
   dataSource: 'strava';
-  // Strava specific fields can be added if needed, but mostly covered by NormalizedActivityFirestore
 }
     
+```
