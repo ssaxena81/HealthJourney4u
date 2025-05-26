@@ -1,9 +1,10 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { UserProfile, SelectableService, SubscriptionTier } from '@/types';
-import { mockDiagnosticServices } from '@/types'; // Using mock data
+// TODO: This should eventually be fetched dynamically via an admin config action
+import { mockDiagnosticServices } from '@/types'; 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -14,7 +15,7 @@ import ClickwrapAgreementDialog from '@/components/ui/clickwrap-agreement-dialog
 
 interface DiagnosticsConnectionsProps {
   userProfile: UserProfile;
-  onConnectionsUpdate?: (updatedProfile: UserProfile | null) => void;
+  onConnectionsUpdate?: (updatedProfile: Partial<UserProfile>) => void;
 }
 
 const getMaxConnectionsDiagnostics = (tier: SubscriptionTier): number => {
@@ -27,12 +28,12 @@ const getMaxConnectionsDiagnostics = (tier: SubscriptionTier): number => {
   }
 };
 
-const QUEST_DIAGNOSTICS_ID = 'quest'; // Assuming 'quest' is the ID for Quest Diagnostics
+const QUEST_DIAGNOSTICS_ID = 'quest'; 
 
 const questAgreementText: string[] = [
-  "Effective Date: 25th May, 2025",
+  "Effective Date: [Current Date]",
   "1. Authorization to Access Health Information",
-  "By proceeding, you authorize HealthJourney4u (\"we,\" \"our,\" \"us\") to access and retrieve your Protected Health Information (PHI) from Quest Diagnostics through secure API integrations.",
+  "By proceeding, you authorize [Your Company Name] (\"we,\" \"our,\" \"us\") to access and retrieve your Protected Health Information (PHI) from Quest Diagnostics through secure API integrations.",
   "This information may include:",
   "- Lab test results",
   "- Diagnostic reports",
@@ -55,11 +56,11 @@ const questAgreementText: string[] = [
   "5. Withdrawal of Consent",
   "You may revoke this access at any time by:",
   "- Disconnecting Quest Diagnostics in your account settings, or",
-  "- Contacting our support team at support@example.com", // Replace with your actual support email
+  "- Contacting our support team at support@example.com",
   "Upon revocation, we will immediately stop retrieving your data from Quest and remove any stored data (if previously authorized) in accordance with our data deletion policy.",
   "6. Liability Disclaimer",
   "You understand and agree that:",
-  "- Your Company Name is not responsible for the accuracy, completeness, or timeliness of the information provided by Quest Diagnostics.", // Replace with your actual company name
+  "- [Your Company Name] is not responsible for the accuracy, completeness, or timeliness of the information provided by Quest Diagnostics.",
   "- Any medical interpretation or action based on the retrieved data is solely your responsibility or that of your licensed healthcare provider.",
   "- We are not liable for data access errors, outages, or delays from Quest Diagnostics' systems or APIs.",
   "7. Acceptance",
@@ -76,23 +77,36 @@ export default function DiagnosticsConnections({ userProfile, onConnectionsUpdat
   const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
   const [isQuestAgreementModalOpen, setQuestAgreementModalOpen] = useState(false);
   const [serviceToConnect, setServiceToConnect] = useState<SelectableService | null>(null);
+  const [availableServices, setAvailableServices] = useState<SelectableService[]>(mockDiagnosticServices); // Using mock for now
+
+  // TODO: Fetch availableDiagnosticServices from a server action:
+  // useEffect(() => {
+  //   async function fetchServices() {
+  //     const result = await getConnectableServicesConfig();
+  //     if (result.success && result.data) {
+  //       setAvailableServices(result.data.diagnosticServices);
+  //     } else {
+  //       toast({ title: "Error", description: "Could not load list of diagnostic services.", variant: "destructive" });
+  //     }
+  //   }
+  //   fetchServices();
+  // }, [toast]);
 
   const currentConnections = userProfile.connectedDiagnosticsServices || [];
   const maxConnections = getMaxConnectionsDiagnostics(userProfile.subscriptionTier);
   const canAddMore = currentConnections.length < maxConnections;
   const tierAllowsConnection = maxConnections > 0;
 
-  const availableServicesToConnect = mockDiagnosticServices.filter(
+  const availableServicesToConnect = availableServices.filter(
     service => !currentConnections.some(conn => conn.id === service.id)
   );
   
   const attemptConnection = async (service: SelectableService) => {
-    // This function contains the original connection logic
     setIsLoading(prev => ({ ...prev, [service.id]: true }));
-    toast({ title: `Attempting to connect to ${service.name}...`, description: "Real-time credential validation would occur now." });
+    toast({ title: `Attempting to connect to ${service.name}...`, description: "Real-time credential validation placeholder." });
 
     // Simulate API call for credential validation
-    // TODO: Replace with actual OAuth flow or API call logic
+    // TODO: Replace with actual OAuth flow or API call logic specific to the service
     await new Promise(resolve => setTimeout(resolve, 2500));
     const success = Math.random() > 0.25; // Simulate success
 
@@ -104,15 +118,15 @@ export default function DiagnosticsConnections({ userProfile, onConnectionsUpdat
       }
       toast({ title: `${service.name} Connected!`, description: "Successfully linked." });
     } else {
-      toast({ title: `Failed to Connect ${service.name}`, description: "Connection failed. Please check credentials and try again.", variant: "destructive" });
+      toast({ title: `Failed to Connect ${service.name}`, description: "Connection failed. Please check credentials or try again later.", variant: "destructive" });
     }
     setIsLoading(prev => ({ ...prev, [service.id]: false }));
     setSelectedServiceId('');
-    setServiceToConnect(null); // Reset service to connect
+    setServiceToConnect(null); 
   };
 
   const handleConnectClick = () => {
-    const service = mockDiagnosticServices.find(s => s.id === selectedServiceId);
+    const service = availableServices.find(s => s.id === selectedServiceId);
     if (!service) return;
 
     if (!tierAllowsConnection) {
@@ -124,12 +138,11 @@ export default function DiagnosticsConnections({ userProfile, onConnectionsUpdat
       return;
     }
     
-    setServiceToConnect(service); // Store the service we intend to connect
+    setServiceToConnect(service);
 
     if (service.id === QUEST_DIAGNOSTICS_ID) {
       setQuestAgreementModalOpen(true);
     } else {
-      // For other services, connect directly (or implement their specific modals if needed)
       attemptConnection(service);
     }
   };
@@ -138,7 +151,7 @@ export default function DiagnosticsConnections({ userProfile, onConnectionsUpdat
     if (serviceToConnect && serviceToConnect.id === QUEST_DIAGNOSTICS_ID) {
       attemptConnection(serviceToConnect);
     }
-    setQuestAgreementModalOpen(false); // Close modal regardless
+    setQuestAgreementModalOpen(false);
   };
 
 
@@ -146,7 +159,7 @@ export default function DiagnosticsConnections({ userProfile, onConnectionsUpdat
     const serviceToDisconnect = currentConnections.find(c => c.id === serviceId);
     if (!serviceToDisconnect) return;
     setIsLoading(prev => ({ ...prev, [serviceId]: true }));
-    // TODO: Server action to revoke access
+    // TODO: Server action to revoke access and update user profile in DB
     await new Promise(resolve => setTimeout(resolve, 1000));
     const updatedConnections = currentConnections.filter(conn => conn.id !== serviceId);
     if (onConnectionsUpdate) {
@@ -156,7 +169,7 @@ export default function DiagnosticsConnections({ userProfile, onConnectionsUpdat
     setIsLoading(prev => ({ ...prev, [serviceId]: false }));
   };
 
-  if (!tierAllowsConnection && userProfile.subscriptionTier !== 'platinum' && userProfile.subscriptionTier !== 'gold') { // Gold and Platinum can connect at least one
+  if (!tierAllowsConnection && userProfile.subscriptionTier !== 'gold' && userProfile.subscriptionTier !== 'platinum') { 
     return (
       <Card>
         <CardHeader>
@@ -164,10 +177,9 @@ export default function DiagnosticsConnections({ userProfile, onConnectionsUpdat
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground">
-            Connecting to diagnostic services like Quest or LabCorp is available on Gold and Platinum plans.
+            Connecting to diagnostic services is available on Gold and Platinum plans.
             Consider upgrading your plan to access this feature.
           </p>
-          {/* TODO: Add an "Upgrade Plan" button here */}
         </CardContent>
       </Card>
     );

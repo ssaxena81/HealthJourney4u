@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import type { UserProfile, SelectableService, SubscriptionTier } from '@/types';
+// TODO: This should eventually be fetched dynamically via an admin config action
 import { mockFitnessApps } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -36,12 +37,26 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
 
   const [selectedAppId, setSelectedAppId] = useState<string>('');
   const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
+  const [availableApps, setAvailableApps] = useState<SelectableService[]>(mockFitnessApps); // Using mock for now
+
+  // TODO: Fetch availableFitnessApps from a server action:
+  // useEffect(() => {
+  //   async function fetchApps() {
+  //     const result = await getConnectableServicesConfig();
+  //     if (result.success && result.data) {
+  //       setAvailableApps(result.data.fitnessApps);
+  //     } else {
+  //       toast({ title: "Error", description: "Could not load list of fitness apps.", variant: "destructive" });
+  //     }
+  //   }
+  //   fetchApps();
+  // }, [toast]);
 
   const currentConnections = userProfile.connectedFitnessApps || [];
   const maxConnections = getMaxConnections(userProfile.subscriptionTier);
   const canAddMore = currentConnections.length < maxConnections;
 
-  const availableAppsToConnect = mockFitnessApps.filter(
+  const availableAppsToConnect = availableApps.filter(
     app => !currentConnections.some(conn => conn.id === app.id)
   );
 
@@ -71,14 +86,16 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
         const newConnectionDetails = { id: serviceId, name: serviceName, connectedAt: new Date().toISOString()};
 
         if (onConnectionsUpdate) {
-            const updatedProfile = { ...userProfile, connectedFitnessApps: [...(userProfile.connectedFitnessApps || []), newConnectionDetails]};
-            onConnectionsUpdate(updatedProfile);
+            const updatedProfilePartial: Partial<UserProfile> = { 
+                connectedFitnessApps: [...(userProfile.connectedFitnessApps || []).filter(c => c.id !== serviceId), newConnectionDetails]
+            };
+            onConnectionsUpdate(updatedProfilePartial);
         }
         if (setAuthUserProfile) {
             setAuthUserProfile(prev => {
                 if (!prev) return null;
                 const existingConnections = prev.connectedFitnessApps || [];
-                if (existingConnections.some(c => c.id === serviceId)) return prev;
+                if (existingConnections.some(c => c.id === serviceId)) return prev; // Already present
                 return {
                     ...prev,
                     connectedFitnessApps: [...existingConnections, newConnectionDetails]
@@ -89,7 +106,7 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
         toast({ title: `Failed to Finalize ${serviceName} Connection`, description: result.error || "An unexpected error occurred.", variant: "destructive" });
       }
       setIsLoading(prev => ({ ...prev, [serviceId]: false }));
-      router.replace('/profile', { scroll: false }); // Clean URL
+      router.replace('/profile', { scroll: false }); 
     };
 
     if (fitbitConnected === 'true') {
@@ -112,8 +129,8 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
       toast({ title: "Google Fit Connection Failed", description: decodeURIComponent(googleFitError), variant: "destructive" });
       router.replace('/profile', { scroll: false });
     }
-
-  }, [searchParams, user, toast, router, onConnectionsUpdate, userProfile, setAuthUserProfile]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams, user?.uid, toast, router, onConnectionsUpdate, setAuthUserProfile]);
 
 
   const handleDisconnect = async (appId: string) => {
@@ -123,7 +140,8 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
     setIsLoading(prev => ({ ...prev, [appId]: true }));
     toast({ title: `Disconnecting ${appToDisconnect.name}...` });
 
-    // TODO: Implement server action to revoke tokens and update user profile in DB.
+    // TODO: Implement server action to revoke tokens from Fitbit/Strava/Google Fit and update user profile in DB.
+    // For now, we just update the local state and call onConnectionsUpdate.
     await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate server call
 
     const updatedConnections = currentConnections.filter(conn => conn.id !== appId);
@@ -142,10 +160,9 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
     if (appId === 'fitbit') return '/api/auth/fitbit/connect';
     if (appId === 'strava') return '/api/auth/strava/connect';
     if (appId === 'google-fit') return '/api/auth/googlefit/connect';
-    return '#';
+    return '#'; // Fallback for unimplemented apps
   };
 
-  // Define which apps are currently implemented for connection
   const implementedApps = ['fitbit', 'strava', 'google-fit'];
 
   return (
@@ -205,9 +222,15 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
                 asChild={implementedApps.includes(selectedAppId)}
                 disabled={!selectedAppId || isLoading[selectedAppId] || !implementedApps.includes(selectedAppId)}
                 className="w-full sm:w-auto"
+                onClick={() => {
+                  // Logic for non-anchor button (if not using asChild)
+                  if (!implementedApps.includes(selectedAppId)) {
+                    toast({title: "Coming Soon", description: `${mockFitnessApps.find(a => a.id === selectedAppId)?.name || 'This app'} integration is not yet available.`});
+                  }
+                }}
               >
                 { implementedApps.includes(selectedAppId) ? (
-                    <a href={getConnectLink(selectedAppId)}>
+                    <a href={getConnectLink(selectedAppId)} onClick={() => setIsLoading(prev => ({...prev, [selectedAppId]: true}))}>
                         {isLoading[selectedAppId] ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link2 className="mr-2 h-4 w-4" />}
                         Connect {mockFitnessApps.find(app => app.id === selectedAppId)?.name}
                     </a>
@@ -228,3 +251,4 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
     </Card>
   );
 }
+

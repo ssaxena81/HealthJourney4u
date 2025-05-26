@@ -35,7 +35,7 @@ export interface NormalizedActivityFirestore {
   id: string; // Unique ID in our database (e.g., dataSource-originalId)
   userId: string;
   originalId: string; // ID from the source platform
-  dataSource: 'fitbit' | 'strava' | 'google-fit' | 'apple_health' | 'manual' | string;
+  dataSource: 'fitbit' | 'strava' | 'google-fit' | 'apple_health' | 'manual' | string; // Added google-fit
   
   type: NormalizedActivityType;
   name?: string; // User-defined name/title if available
@@ -125,7 +125,7 @@ export interface AppointmentEntry extends BaseHealthEntry {
   doctor?: string;
   location?: string;
   reason?: string;
-  visitNotes?: string;
+  visitNotes?: string; // For UHC deep dive
 }
 
 export interface MedicationEntry extends BaseHealthEntry {
@@ -267,7 +267,6 @@ export const DashboardMetricId = {
   RESTING_HEART_RATE: 'restingHeartRate',
   AVG_WORKOUT_DURATION: 'avgWorkoutDuration', 
   TOTAL_WORKOUTS: 'totalWorkouts',        
-  // AVG_HEART_RATE_VARIABILITY: 'avgHRV', // Example if HRV becomes available
 } as const;
 
 export type DashboardMetricIdValue = typeof DashboardMetricId[keyof typeof DashboardMetricId];
@@ -300,14 +299,14 @@ export interface RadarDataPoint { // For the main dashboard radar chart
 // For individual exercise/sleep pages
 export interface PerformanceRadarChartDataPoint {
   metric: string;
-  minGoalNormalized?: number; // Normalized min goal (0-100)
-  actualNormalized: number;   // Normalized actual performance (0-100)
-  maxGoalNormalized: number;   // Normalized max goal (typically 100)
-  minGoalFormatted?: string;  // Formatted min goal for tooltip (e.g., "5000 steps")
-  actualFormatted: string;    // Formatted actual value for tooltip
-  maxGoalFormatted?: string;  // Formatted max goal for tooltip
-  isOverGoal?: boolean;       // If actual > maxGoal
-  isBelowMinGoal?: boolean;   // If actual < minGoal
+  minGoalNormalized?: number;
+  actualNormalized: number;  
+  maxGoalNormalized: number;  
+  minGoalFormatted?: string;  
+  actualFormatted: string;    
+  maxGoalFormatted?: string;  
+  isOverGoal?: boolean;       
+  isBelowMinGoal?: boolean;   
 }
 
 
@@ -323,7 +322,7 @@ export interface UserProfile {
   cellPhone?: string; 
   mfaMethod?: 'email' | 'sms'; 
   mfaCodeAttempt?: { code: string; expiresAt: string; };
-  passwordResetCodeAttempt?: { code: string; expiresAt: string; }; // For forgot password
+  passwordResetCodeAttempt?: { code: string; expiresAt: string; }; 
   isAgeCertified?: boolean; 
 
   lastPasswordChangeDate: string; 
@@ -392,7 +391,7 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Strava Activity Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Google Fit Session Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Google Fit Metric Aggregation", free: "5/day", silver: "5/day", gold: "10/day", platinum: "20/day" },
-  { feature: "Sync Connected Apps", free: "Auto (1/24h) + Manual (respects individual limits)", silver: "Auto (1/24h) + Manual (respects individual limits)", gold: "Auto (1/24h) + Manual (respects individual limits)", platinum: "Auto (1/24h) + Manual (respects individual limits)" },
+  { feature: "Sync Connected Apps", free: "Auto (1/24h) + Manual", silver: "Auto (1/24h) + Manual", gold: "Auto (1/24h) + Manual", platinum: "Auto (1/24h) + Manual" },
 ];
 
 export interface SelectableService {
@@ -400,18 +399,26 @@ export interface SelectableService {
   name: string;
 }
 
+// TODO: These mock lists should eventually be fetched from an admin-managed configuration (e.g., Firestore).
 export const mockFitnessApps: SelectableService[] = [
   { id: 'fitbit', name: 'Fitbit' },
   { id: 'strava', name: 'Strava' },
   { id: 'google-fit', name: 'Google Fit' },
+  // { id: 'apple_health', name: 'Apple Health (Requires Companion App)' },
+  // { id: 'samsung_health', name: 'Samsung Health' },
+  // { id: 'oura', name: 'Oura Ring' },
+  // { id: 'whoop', name: 'WHOOP' },
+  // { id: 'garmin', name: 'Garmin Connect' },
 ];
 
+// TODO: These mock lists should eventually be fetched from an admin-managed configuration (e.g., Firestore).
 export const mockDiagnosticServices: SelectableService[] = [
   { id: 'quest', name: 'Quest Diagnostics' },
   { id: 'labcorp', name: 'LabCorp of America' },
   { id: 'sonic', name: 'Sonic Healthcare' },
 ];
 
+// TODO: These mock lists should eventually be fetched from an admin-managed configuration (e.g., Firestore).
 export const mockInsuranceProviders: SelectableService[] = [
   { id: 'uhc', name: 'United Healthcare' },
   { id: 'aetna', name: 'Aetna' },
@@ -487,9 +494,18 @@ export interface FitbitSleepLogFirestore {
   dataSource: 'fitbit';
 }
 
-// StravaActivityFirestore was removed as we are using NormalizedActivityFirestore
-// It's good practice to keep types centralized and normalized.
+// --- Admin Configuration Types ---
+export interface ConnectableServicesConfig {
+  fitnessApps: SelectableService[];
+  diagnosticServices: SelectableService[];
+  insuranceProviders: SelectableService[];
+  lastUpdated?: string; // ISO Timestamp
+}
 
-// GoogleFitActivityFirestore was removed for the same reason.
-// NormalizedActivityFirestore serves as the common structure.
+export interface TermsAndConditionsConfig {
+  currentVersion: string;
+  text: string;
+  publishedAt?: string; // ISO Timestamp
+}
+
     

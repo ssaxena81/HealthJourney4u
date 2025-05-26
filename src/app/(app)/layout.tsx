@@ -12,11 +12,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import type { UserProfile } from '@/types';
 import { updateUserTermsAcceptance } from '@/app/actions/auth';
-import { syncAllConnectedData } from '@/app/actions/syncActions'; // Import the new sync action
+import { syncAllConnectedData } from '@/app/actions/syncActions'; 
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
 import { isAfter, subHours } from 'date-fns';
 
+// TODO: This LATEST_TERMS_AND_CONDITIONS and LATEST_TERMS_VERSION should eventually be fetched
+// from Firestore using a server action like `getTermsAndConditionsConfig()` from `src/app/actions/adminConfigActions.ts`.
+// For now, it's hardcoded here to keep the T&C modal functional.
 const LATEST_TERMS_AND_CONDITIONS = `
 Last Updated: [Current Date]
 
@@ -92,7 +95,7 @@ Before connecting your insurance or medical accounts (e.g., UnitedHealthcare, La
 19. Limitations on Medical Data Storage
 We do not store raw lab results, clinical notes, or full medical records unless explicitly authorized by you. If authorized, data is encrypted and only retained as needed for your selected services.
 `;
-const LATEST_TERMS_VERSION = "1.0";
+const LATEST_TERMS_VERSION = "1.0"; // This should also be fetched dynamically with the terms text.
 
 export default function AuthenticatedAppLayout({
   children,
@@ -114,32 +117,37 @@ export default function AuthenticatedAppLayout({
   useEffect(() => {
     const checkAndTriggerAutoSync = async () => {
       if (user && userProfile && userProfile.connectedFitnessApps && userProfile.connectedFitnessApps.length > 0) {
-        let shouldSync = true;
+        let shouldSync = true; // Default to sync
         const twentyFourHoursAgo = subHours(new Date(), 24);
+        let mostRecentRelevantSync: Date | null = null;
 
         // Check Fitbit primary sync timestamp
         if (userProfile.connectedFitnessApps.some(app => app.id === 'fitbit') && userProfile.fitbitApiCallStats?.dailyActivitySummary?.lastCalledAt) {
-          if (isAfter(new Date(userProfile.fitbitApiCallStats.dailyActivitySummary.lastCalledAt), twentyFourHoursAgo)) {
-            shouldSync = false;
-            console.log('[AutoSync] Fitbit daily activity synced recently, skipping auto-sync for it.');
-          }
+            const lastFitbitSync = new Date(userProfile.fitbitApiCallStats.dailyActivitySummary.lastCalledAt);
+            if (!mostRecentRelevantSync || isAfter(lastFitbitSync, mostRecentRelevantSync)) {
+                mostRecentRelevantSync = lastFitbitSync;
+            }
         }
         // Check Strava primary sync timestamp
         if (userProfile.connectedFitnessApps.some(app => app.id === 'strava') && userProfile.stravaApiCallStats?.activities?.lastCalledAt) {
-          if (isAfter(new Date(userProfile.stravaApiCallStats.activities.lastCalledAt), twentyFourHoursAgo)) {
-            shouldSync = false;
-            console.log('[AutoSync] Strava activities synced recently, skipping auto-sync for it.');
-          }
+            const lastStravaSync = new Date(userProfile.stravaApiCallStats.activities.lastCalledAt);
+             if (!mostRecentRelevantSync || isAfter(lastStravaSync, mostRecentRelevantSync)) {
+                mostRecentRelevantSync = lastStravaSync;
+            }
         }
         // Check Google Fit primary sync timestamp
         if (userProfile.connectedFitnessApps.some(app => app.id === 'google-fit') && userProfile.googleFitApiCallStats?.sessions?.lastCalledAt) {
-          if (isAfter(new Date(userProfile.googleFitApiCallStats.sessions.lastCalledAt), twentyFourHoursAgo)) {
-            shouldSync = false;
-            console.log('[AutoSync] Google Fit sessions synced recently, skipping auto-sync for it.');
-          }
+             const lastGoogleFitSync = new Date(userProfile.googleFitApiCallStats.sessions.lastCalledAt);
+             if (!mostRecentRelevantSync || isAfter(lastGoogleFitSync, mostRecentRelevantSync)) {
+                mostRecentRelevantSync = lastGoogleFitSync;
+            }
         }
         
-        // Add more checks for other services if needed
+        if (mostRecentRelevantSync && isAfter(mostRecentRelevantSync, twentyFourHoursAgo)) {
+            shouldSync = false;
+            console.log('[AutoSync] Data for at least one connected service synced recently, skipping general auto-sync.');
+        }
+
 
         if (shouldSync) {
           console.log('[AutoSync] Triggering automatic data sync.');
@@ -148,8 +156,7 @@ export default function AuthenticatedAppLayout({
             description: "Refreshing data from your connected apps in the background...",
             duration: 5000,
           });
-          // Call the main sync handler, but perhaps with less verbose toasting on success
-          await handleSyncAllData(true); // Pass a flag for silent success
+          await handleSyncAllData(true); 
         } else {
           console.log('[AutoSync] Auto-sync not needed, data is recent.');
         }
@@ -160,7 +167,7 @@ export default function AuthenticatedAppLayout({
       checkAndTriggerAutoSync();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userProfile, isLoading, user]); // Rerun if userProfile or loading state changes
+  }, [userProfile, isLoading, user]); 
 
 
   useEffect(() => {
@@ -168,21 +175,26 @@ export default function AuthenticatedAppLayout({
       if (!user) {
         router.replace('/login');
       } else if (user && !userProfile && !profileLoading) {
+        // If user exists but profile is still loading or missing, redirect to /profile to complete setup
+        // This helps ensure profile data (like T&C acceptance) is available before rendering main content
         router.replace('/profile'); 
       } else if (user && userProfile) {
+        // Check password expiry
         if (userProfile.lastPasswordChangeDate) {
           const lastChange = new Date(userProfile.lastPasswordChangeDate);
           const daysSinceChange = (new Date().getTime() - lastChange.getTime()) / (1000 * 3600 * 24);
           if (daysSinceChange >= 90) {
             router.replace('/reset-password-required');
-            return; 
+            return; // Important to return to prevent T&C check if password reset is required
           }
         } else {
+          // If lastPasswordChangeDate is missing for some reason, treat as expired for security
           console.warn("User profile missing lastPasswordChangeDate, redirecting to password reset.");
           router.replace('/reset-password-required');
           return;
         }
 
+        // Check T&C acceptance
         if (!userProfile.acceptedLatestTerms || userProfile.termsVersionAccepted !== LATEST_TERMS_VERSION) {
           setShowTermsModal(true);
         }
@@ -192,7 +204,8 @@ export default function AuthenticatedAppLayout({
 
   const handleScrollTerms = (event: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
-    if (scrollHeight - scrollTop <= clientHeight + 10) {
+    // Adding a small buffer (e.g., 5-10px) can help with fractional pixel values
+    if (scrollHeight - scrollTop <= clientHeight + 10) { 
       setTermsScrolledToEnd(true);
     }
   };
@@ -207,11 +220,11 @@ export default function AuthenticatedAppLayout({
           setUserProfile(prev => prev ? ({ ...prev, acceptedLatestTerms: true, termsVersionAccepted: LATEST_TERMS_VERSION }) : null);
         }
         setShowTermsModal(false);
-        setTermsScrolledToEnd(false);
-        setTermsAcceptedCheckbox(false);
+        setTermsScrolledToEnd(false); // Reset for potential future display
+        setTermsAcceptedCheckbox(false); // Reset checkbox
         toast({ title: "Terms Accepted", description: "Thank you for accepting the terms." });
       } else {
-        console.error("Failed to update terms acceptance:", result.error);
+        console.error("Failed to update terms acceptance:", result.error, result.errorCode);
         toast({ title: "Error", description: result.error || "Could not save terms acceptance. Please try again.", variant: "destructive" });
       }
     } catch (error) {
@@ -228,7 +241,7 @@ export default function AuthenticatedAppLayout({
         toast({
           title: "Syncing Data...",
           description: "Attempting to fetch latest data from all connected apps.",
-          duration: 8000,
+          duration: 8000, 
         });
       }
       
@@ -263,11 +276,11 @@ export default function AuthenticatedAppLayout({
                 </ul>
               </div>
             ),
-            duration: 15000,
+            duration: 15000, // Longer duration for more complex message
             variant: "default", 
           });
-        } else if (!isAutoSync) {
-          toast({ title: "No Services Synced", description: "No services were attempted or an issue occurred." });
+        } else if (!isAutoSync && result.results.length === 0) { // If no services were attempted to sync
+          toast({ title: "No Services Synced", description: "No connected services were available to sync at this time." });
         }
       } else {
         toast({
@@ -276,8 +289,6 @@ export default function AuthenticatedAppLayout({
           variant: "destructive",
         });
       }
-      // Optionally, trigger a re-fetch of profile to update API call stats for UI
-      // This might be implicitly handled by how individual sync actions update profile.
     });
   };
 
@@ -290,6 +301,7 @@ export default function AuthenticatedAppLayout({
     );
   }
 
+  // If user is not logged in but somehow this layout is reached, redirect (should be caught by useEffect too)
   if (!user) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -298,6 +310,8 @@ export default function AuthenticatedAppLayout({
     );
   }
   
+  // If user is logged in but profile isn't loaded yet or is missing (and we are not in profileLoading state anymore)
+  // This case should ideally be handled by the redirect to /profile in the useEffect
   if (user && !userProfile && !profileLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center">
@@ -311,8 +325,9 @@ export default function AuthenticatedAppLayout({
   if (showTermsModal) {
     return (
       <Dialog open={showTermsModal} onOpenChange={(open) => {
+        // Prevent closing the dialog by clicking outside or pressing Esc if terms are not accepted
         if (!open && (!termsAcceptedCheckbox || !userProfile?.acceptedLatestTerms)) {
-          return;
+          return; // Do not allow close if terms not accepted
         }
         setShowTermsModal(open);
       }}>
@@ -324,6 +339,7 @@ export default function AuthenticatedAppLayout({
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="flex-grow border rounded-md p-4 text-sm whitespace-pre-wrap" onScroll={handleScrollTerms}>
+            {/* Using <pre> preserves whitespace and line breaks from the template literal */}
             <pre className="font-sans">{LATEST_TERMS_AND_CONDITIONS}</pre>
           </ScrollArea>
           <div className="items-top flex space-x-2 pt-4">
@@ -349,6 +365,7 @@ export default function AuthenticatedAppLayout({
     );
   }
 
+  // Only render AppLayoutClient if user, profile exist, and T&C are accepted (or modal is not shown)
   return (
       <AppLayoutClient onSyncAllClick={handleSyncAllData}>
         {children}

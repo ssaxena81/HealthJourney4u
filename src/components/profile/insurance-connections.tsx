@@ -1,9 +1,10 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import type { UserProfile, SelectableService, SubscriptionTier } from '@/types';
-import { mockInsuranceProviders } from '@/types'; // Using mock data
+// TODO: This should eventually be fetched dynamically via an admin config action
+import { mockInsuranceProviders } from '@/types'; 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -14,7 +15,7 @@ import { XCircle, CheckCircle2, Link2, Loader2 } from 'lucide-react';
 
 interface InsuranceConnectionsProps {
   userProfile: UserProfile;
-  onConnectionsUpdate?: (updatedProfile: UserProfile | null) => void;
+  onConnectionsUpdate?: (updatedProfile: Partial<UserProfile>) => void;
 }
 
 const getMaxConnectionsInsurance = (tier: SubscriptionTier): number => {
@@ -36,13 +37,28 @@ interface InsuranceFormData {
 export default function InsuranceConnections({ userProfile, onConnectionsUpdate }: InsuranceConnectionsProps) {
   const { toast } = useToast();
   const [formData, setFormData] = useState<Partial<InsuranceFormData>>({});
-  const [isLoading, setIsLoading] = useState<Record<string, boolean>>({}); // Loading state per provider for connection/disconnection
+  const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
+  const [availableProviders, setAvailableProviders] = useState<SelectableService[]>(mockInsuranceProviders); // Using mock for now
+
+  // TODO: Fetch availableInsuranceProviders from a server action:
+  // useEffect(() => {
+  //   async function fetchProviders() {
+  //     const result = await getConnectableServicesConfig(); // Assuming this action exists
+  //     if (result.success && result.data) {
+  //       setAvailableProviders(result.data.insuranceProviders);
+  //     } else {
+  //       toast({ title: "Error", description: "Could not load list of insurance providers.", variant: "destructive" });
+  //     }
+  //   }
+  //   fetchProviders();
+  // }, [toast]);
+
 
   const currentConnections = userProfile.connectedInsuranceProviders || [];
   const maxConnections = getMaxConnectionsInsurance(userProfile.subscriptionTier);
   const canAddMore = currentConnections.length < maxConnections;
 
-  const availableProvidersToConnect = mockInsuranceProviders.filter(
+  const availableProvidersToConnect = availableProviders.filter(
     provider => !currentConnections.some(conn => conn.id === provider.id)
   );
 
@@ -60,11 +76,11 @@ export default function InsuranceConnections({ userProfile, onConnectionsUpdate 
       return;
     }
 
-    const provider = mockInsuranceProviders.find(p => p.id === formData.providerId);
+    const provider = availableProviders.find(p => p.id === formData.providerId);
     if (!provider) return;
 
     setIsLoading(prev => ({ ...prev, [provider.id]: true }));
-    toast({ title: `Connecting to ${provider.name}...`, description: "Verifying your insurance details." });
+    toast({ title: `Connecting to ${provider.name}...`, description: "Verifying your insurance details. (Placeholder)" });
 
     // Simulate API call for credential validation
     // TODO: Implement server action for actual API call and data pull attempt
@@ -80,12 +96,12 @@ export default function InsuranceConnections({ userProfile, onConnectionsUpdate 
         connectedAt: new Date().toISOString() 
       };
       const updatedConnections = [...currentConnections, newConnection];
-      // TODO: Call server action to update user profile in DB
+      
       if (onConnectionsUpdate) {
         onConnectionsUpdate({ ...userProfile, connectedInsuranceProviders: updatedConnections });
       }
       toast({ title: `${provider.name} Connected!`, description: "Successfully linked your insurance." });
-      setFormData({}); // Reset form
+      setFormData({}); 
     } else {
       toast({ title: `Failed to Connect ${provider.name}`, description: "Connection failed. Please check your Member ID and Group ID, then try again.", variant: "destructive" });
     }
@@ -97,7 +113,7 @@ export default function InsuranceConnections({ userProfile, onConnectionsUpdate 
     if (!providerToDisconnect) return;
 
     setIsLoading(prev => ({ ...prev, [providerId]: true }));
-    // TODO: Server action to remove connection details
+    // TODO: Server action to remove connection details and update user profile in DB
     await new Promise(resolve => setTimeout(resolve, 1000));
     const updatedConnections = currentConnections.filter(conn => conn.id !== providerId);
     if (onConnectionsUpdate) {
@@ -201,3 +217,4 @@ export default function InsuranceConnections({ userProfile, onConnectionsUpdate 
     </Card>
   );
 }
+
