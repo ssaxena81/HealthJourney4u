@@ -46,36 +46,36 @@ export default function LoginForm() {
     console.log('[LOGIN_FORM_SUBMIT_START] Submitting login form with values:', values);
     startTransition(async () => {
       const result = await loginUser(values);
-      console.log('[LOGIN_FORM_SUBMIT_RESULT] Received result from loginUser action:', result);
+      console.log('[LOGIN_FORM_SUBMIT_RESULT] Received result from loginUser action:', JSON.stringify(result, null, 2));
 
       if (result.success) {
+        console.log('[LOGIN_FORM_SUCCESS] Login action reported success.');
         toast({
           title: 'Login Successful!',
           description: 'Welcome back.',
         });
         if (result.userProfile && setAuthUserProfile) {
-          console.log('[LOGIN_FORM_SUCCESS] Setting user profile in AuthContext.');
+          console.log('[LOGIN_FORM_SUCCESS] Setting user profile in AuthContext:', result.userProfile);
           setAuthUserProfile(result.userProfile);
         } else {
           console.warn('[LOGIN_FORM_SUCCESS] No userProfile in result or setAuthUserProfile not available.');
         }
         
-        // The onAuthStateChanged listener in AuthProvider should update the user object.
-        // The userProfile is now set directly.
-
         if (result.passwordExpired) {
           console.log('[LOGIN_FORM_SUCCESS] Password expired, redirecting to /reset-password-required.');
           router.push('/reset-password-required');
         } else {
-          console.log('[LOGIN_FORM_SUCCESS] Login successful, redirecting to / (dashboard).');
-          // AppLayout in (app) group will handle T&C modal if result.termsNotAccepted is true
+          // AppLayout in (app) group will handle T&C modal if result.termsNotAccepted is true (handled by AuthenticatedAppLayout)
+          // The main dashboard page is now '/' for authenticated users.
+          console.log('[LOGIN_FORM_SUCCESS] Login successful and password not expired. Redirecting to "/".');
           router.push('/'); 
         }
       } else {
-        console.log('[LOGIN_FORM_FAILURE] Login failed. Result:', result);
+        console.log('[LOGIN_FORM_FAILURE] Login action reported failure. Result:', result);
         if (result.requiresMfa) {
           setRequiresMfa(true);
           setError(result.error || "MFA code required. Please check your device.");
+           console.log('[LOGIN_FORM_MFA_REQUIRED] MFA is required. Prompting for code.');
         } else {
           setRequiresMfa(false);
           setError(result.error || 'An unknown error occurred.');
@@ -84,6 +84,7 @@ export default function LoginForm() {
             description: result.error || 'Please check your credentials.',
             variant: 'destructive',
           });
+           console.log('[LOGIN_FORM_ERROR] Login failed with error:', result.error, 'Code:', result.errorCode);
         }
       }
     });
@@ -160,7 +161,7 @@ export default function LoginForm() {
             <p className="text-sm text-destructive mt-1">{form.formState.errors.mfaCode.message}</p>
           )}
            <p className="text-xs text-muted-foreground">
-            Check your registered email or phone for the MFA code.
+            Check your registered email or phone for the MFA code (or server console for simulation).
           </p>
         </div>
       )}
