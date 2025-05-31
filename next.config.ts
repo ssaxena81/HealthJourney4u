@@ -19,13 +19,13 @@ const nextConfig: NextConfig = {
       },
     ],
   },
-  // experimental: {
-  //   allowedDevOrigins: [
-  //       'http://localhost:8081', // Example: A local mobile app simulator or another dev server
+  experimental: {
+     allowedDevOrigins: [
+         'http://localhost:9003', // Example: A local mobile app simulator or another dev server
   //       'https://my-other-dev-app.com', // Example: A specific cloud-based dev tool
   //       // Add more origins as needed
-  //   ],
-  // },
+     ],
+ },
 };
 
 export default nextConfig;

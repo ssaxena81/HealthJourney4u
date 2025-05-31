@@ -26,7 +26,7 @@ type LoginFormValues = z.infer<typeof loginFormSchema>;
 export default function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
-  const { setUserProfile: setAuthUserProfile } = useAuth(); 
+  const { setUserProfile: setAuthUserProfile, checkAuthState } = useAuth();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -54,22 +54,24 @@ export default function LoginForm() {
           title: 'Login Successful!',
           description: 'Welcome back.',
         });
+
+        // It's important to ensure the AuthProvider's state is up-to-date.
+        // loginUser might return userProfile, which can be used to prime AuthContext,
+        // but onAuthStateChanged is the ultimate source of truth for the `user` object.
         if (result.userProfile && setAuthUserProfile) {
-          console.log('[LOGIN_FORM_SUCCESS] Setting user profile in AuthContext:', result.userProfile);
+          console.log('[LOGIN_FORM_SUCCESS] Setting user profile in AuthContext from login action:', result.userProfile);
           setAuthUserProfile(result.userProfile);
         } else {
-          console.warn('[LOGIN_FORM_SUCCESS] No userProfile in result or setAuthUserProfile not available.');
+           // If profile not returned by login action, trigger a re-check to fetch it
+           await checkAuthState();
         }
         
-        if (result.passwordExpired) {
-          console.log('[LOGIN_FORM_SUCCESS] Password expired, redirecting to /reset-password-required.');
-          router.push('/reset-password-required');
-        } else {
-          // AppLayout in (app) group will handle T&C modal if result.termsNotAccepted is true (handled by AuthenticatedAppLayout)
-          // The main dashboard page is now '/' for authenticated users.
-          console.log('[LOGIN_FORM_SUCCESS] Login successful and password not expired. Redirecting to "/".');
-          router.push('/'); 
-        }
+        // Always redirect to the authenticated app root.
+        // AuthenticatedAppLayout will handle further checks (profile, T&C, password expiry).
+        console.log('[LOGIN_FORM_SUCCESS] Redirecting to "/".');
+        router.push('/');
+        router.refresh(); // Force a refresh to ensure layout re-evaluates with new auth state
+
       } else {
         console.log('[LOGIN_FORM_FAILURE] Login action reported failure. Result:', result);
         if (result.requiresMfa) {
