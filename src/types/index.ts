@@ -404,26 +404,25 @@ export interface SelectableService {
   name: string;
 }
 
-// TODO: These mock lists should eventually be fetched from an admin-managed configuration (e.g., Firestore).
 export const mockFitnessApps: SelectableService[] = [
   { id: 'fitbit', name: 'Fitbit' },
   { id: 'strava', name: 'Strava' },
   { id: 'google-fit', name: 'Google Fit' },
-  // { id: 'apple_health', name: 'Apple Health (Requires Companion App)' },
-  // { id: 'samsung_health', name: 'Samsung Health' },
-  // { id: 'oura', name: 'Oura Ring' },
-  // { id: 'whoop', name: 'WHOOP' },
-  // { id: 'garmin', name: 'Garmin Connect' },
+  { id: 'garmin', name: 'Garmin Connect' },
+  { id: 'oura', name: 'Oura Ring' },
+  { id: 'whoop', name: 'WHOOP' },
+  { id: 'polar', name: 'Polar Flow' },
+  { id: 'withings', name: 'Withings Health Mate' },
+  { id: 'apple_health', name: 'Apple Health (Companion App Needed)' },
+  { id: 'samsung_health', name: 'Samsung Health (Platform Integration)' },
 ];
 
-// TODO: These mock lists should eventually be fetched from an admin-managed configuration (e.g., Firestore).
 export const mockDiagnosticServices: SelectableService[] = [
   { id: 'quest', name: 'Quest Diagnostics' },
   { id: 'labcorp', name: 'LabCorp of America' },
   { id: 'sonic', name: 'Sonic Healthcare' },
 ];
 
-// TODO: These mock lists should eventually be fetched from an admin-managed configuration (e.g., Firestore).
 export const mockInsuranceProviders: SelectableService[] = [
   { id: 'uhc', name: 'United Healthcare' },
   { id: 'aetna', name: 'Aetna' },
@@ -512,5 +511,3 @@ export interface TermsAndConditionsConfig {
   text: string;
   publishedAt?: string; // ISO Timestamp
 }
-
-    
