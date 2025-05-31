@@ -35,7 +35,7 @@ export interface NormalizedActivityFirestore {
   id: string; // Unique ID in our database (e.g., dataSource-originalId)
   userId: string;
   originalId: string; // ID from the source platform
-  dataSource: 'fitbit' | 'strava' | 'google-fit' | 'apple_health' | 'manual' | string; // Added google-fit
+  dataSource: 'fitbit' | 'strava' | 'google-fit' | 'apple_health' | 'manual' | 'withings' | string; 
   
   type: NormalizedActivityType;
   name?: string; // User-defined name/title if available
@@ -64,7 +64,7 @@ export interface NormalizedActivityFirestore {
 
 
 // --- Health Metric Types for Manual Entry & Timeline (Example) ---
-export type HealthMetricType = // Renamed from HealthMetricTypeTimeline for clarity
+export type HealthMetricType = 
   | 'walking'
   | 'standing'
   | 'breathing'
@@ -87,7 +87,7 @@ export interface BaseHealthEntry {
   type: HealthMetricType;
   title: string;
   notes?: string;
-  source?: 'manual' | 'quest' | 'uhc' | 'fitbit' | 'strava' | 'google-fit';
+  source?: 'manual' | 'quest' | 'uhc' | 'fitbit' | 'strava' | 'google-fit' | 'withings';
 }
 
 export interface WalkingEntry extends BaseHealthEntry {
@@ -125,19 +125,19 @@ export interface AppointmentEntry extends BaseHealthEntry {
   doctor?: string;
   location?: string;
   reason?: string;
-  visitNotes?: string; // For UHC deep dive
+  visitNotes?: string; 
 }
 
 export interface MedicationEntry extends BaseHealthEntry {
   type: 'medication';
-  medicationName: string; // Overrides title for specific use
+  medicationName: string; 
   dosage: string;
   frequency: string;
 }
 
 export interface ConditionEntry extends BaseHealthEntry {
   type: 'condition';
-  conditionName: string; // Overrides title
+  conditionName: string; 
   diagnosisDate?: string; // ISO 8601
   status?: 'active' | 'resolved' | 'chronic';
 }
@@ -207,8 +207,18 @@ export interface GoogleFitApiCallStatDetail {
 }
 
 export interface GoogleFitApiCallStats {
-  sessions?: GoogleFitApiCallStatDetail; // For listing sessions
-  aggregateData?: GoogleFitApiCallStatDetail; // For fetching specific metrics like steps, distance for sessions
+  sessions?: GoogleFitApiCallStatDetail; 
+  aggregateData?: GoogleFitApiCallStatDetail; 
+}
+
+export interface WithingsApiCallStatDetail {
+  lastCalledAt?: string; // ISO string
+  callCountToday?: number;
+}
+export interface WithingsApiCallStats {
+  measurements?: WithingsApiCallStatDetail; // For things like weight, heart rate
+  activity?: WithingsApiCallStatDetail;    // For activities
+  sleep?: WithingsApiCallStatDetail;       // For sleep data
 }
 
 
@@ -289,14 +299,13 @@ export const AVAILABLE_DASHBOARD_METRICS: DashboardMetricConfig[] = [
 // --- End Dashboard Metric Selection Types ---
 
 // --- Radar Chart Data Point Type ---
-export interface RadarDataPoint { // For the main dashboard radar chart
-  metric: string; // The display name of the metric (e.g., "Avg Daily Steps")
-  value: number; // Normalized value (0-100) for the radar chart
-  actualFormattedValue: string; // Actual value with unit (e.g., "7500 steps") for tooltip
-  fullMark: number; // Usually 100 for normalized radar charts
+export interface RadarDataPoint { 
+  metric: string; 
+  value: number; 
+  actualFormattedValue: string; 
+  fullMark: number; 
 }
 
-// For individual exercise/sleep pages
 export interface PerformanceRadarChartDataPoint {
   metric: string;
   minGoalNormalized?: number;
@@ -312,8 +321,6 @@ export interface PerformanceRadarChartDataPoint {
 
 export interface UserProfile {
   id: string; 
-
-  // Part 1: Demographics
   firstName?: string; 
   middleInitial?: string; 
   lastName?: string; 
@@ -355,11 +362,13 @@ export interface UserProfile {
   fitbitApiCallStats?: FitbitApiCallStats;
   stravaApiCallStats?: StravaApiCallStats;
   googleFitApiCallStats?: GoogleFitApiCallStats;
+  withingsApiCallStats?: WithingsApiCallStats; // Added for Withings
 
-  // Last successful sync timestamps
-  fitbitLastSuccessfulSync?: string; // ISO Date string (YYYY-MM-DD)
-  stravaLastSyncTimestamp?: number; // Unix timestamp (seconds) for 'after' param
-  googleFitLastSuccessfulSync?: string; // ISO DateTime string for 'startTime'
+  fitbitLastSuccessfulSync?: string; 
+  stravaLastSyncTimestamp?: number; 
+  googleFitLastSuccessfulSync?: string; 
+  withingsLastSuccessfulSync?: string; // Added for Withings
+  withingsUserId?: string; // Store Withings specific user ID
 
   walkingRadarGoals?: WalkingRadarGoals;
   runningRadarGoals?: RunningRadarGoals;
@@ -396,6 +405,7 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Strava Activity Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Google Fit Session Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Google Fit Metric Aggregation", free: "5/day", silver: "5/day", gold: "10/day", platinum: "20/day" },
+  { feature: "Withings Data Fetch (Activity, Sleep, Measurements)", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" }, // Placeholder for Withings
   { feature: "Sync Connected Apps", free: "Auto (1/24h) + Manual", silver: "Auto (1/24h) + Manual", gold: "Auto (1/24h) + Manual", platinum: "Auto (1/24h) + Manual" },
 ];
 
@@ -408,11 +418,11 @@ export const mockFitnessApps: SelectableService[] = [
   { id: 'fitbit', name: 'Fitbit' },
   { id: 'strava', name: 'Strava' },
   { id: 'google-fit', name: 'Google Fit' },
+  { id: 'withings', name: 'Withings' },
   { id: 'garmin', name: 'Garmin Connect' },
   { id: 'oura', name: 'Oura Ring' },
   { id: 'whoop', name: 'WHOOP' },
   { id: 'polar', name: 'Polar Flow' },
-  { id: 'withings', name: 'Withings Health Mate' },
   { id: 'apple_health', name: 'Apple Health (Companion App Needed)' },
   { id: 'samsung_health', name: 'Samsung Health (Platform Integration)' },
 ];
@@ -432,7 +442,7 @@ export const mockInsuranceProviders: SelectableService[] = [
 
 // Firestore specific data structures (examples)
 export interface FitbitActivitySummaryFirestore {
-    date: string; // YYYY-MM-DD, also the document ID
+    date: string; 
     steps?: number; 
     distance?: number; // km
     caloriesOut?: number; 
@@ -442,7 +452,7 @@ export interface FitbitActivitySummaryFirestore {
 }
 
 export interface FitbitHeartRateFirestore {
-  date: string; // YYYY-MM-DD, also the document ID
+  date: string; 
   restingHeartRate?: number;
   heartRateZones?: Array<{
     name: string;
