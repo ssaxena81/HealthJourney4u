@@ -117,35 +117,51 @@ export default function AuthenticatedAppLayout({
   useEffect(() => {
     const checkAndTriggerAutoSync = async () => {
       if (user && userProfile && userProfile.connectedFitnessApps && userProfile.connectedFitnessApps.length > 0) {
-        let shouldSync = true; // Default to sync
+        let shouldSync = true; 
         const twentyFourHoursAgo = subHours(new Date(), 24);
-        let mostRecentRelevantSync: Date | null = null;
-
-        // Check Fitbit primary sync timestamp
-        if (userProfile.connectedFitnessApps.some(app => app.id === 'fitbit') && userProfile.fitbitApiCallStats?.dailyActivitySummary?.lastCalledAt) {
-            const lastFitbitSync = new Date(userProfile.fitbitApiCallStats.dailyActivitySummary.lastCalledAt);
-            if (!mostRecentRelevantSync || isAfter(lastFitbitSync, mostRecentRelevantSync)) {
-                mostRecentRelevantSync = lastFitbitSync;
-            }
-        }
-        // Check Strava primary sync timestamp
-        if (userProfile.connectedFitnessApps.some(app => app.id === 'strava') && userProfile.stravaApiCallStats?.activities?.lastCalledAt) {
-            const lastStravaSync = new Date(userProfile.stravaApiCallStats.activities.lastCalledAt);
-             if (!mostRecentRelevantSync || isAfter(lastStravaSync, mostRecentRelevantSync)) {
-                mostRecentRelevantSync = lastStravaSync;
-            }
-        }
-        // Check Google Fit primary sync timestamp
-        if (userProfile.connectedFitnessApps.some(app => app.id === 'google-fit') && userProfile.googleFitApiCallStats?.sessions?.lastCalledAt) {
-             const lastGoogleFitSync = new Date(userProfile.googleFitApiCallStats.sessions.lastCalledAt);
-             if (!mostRecentRelevantSync || isAfter(lastGoogleFitSync, mostRecentRelevantSync)) {
-                mostRecentRelevantSync = lastGoogleFitSync;
-            }
-        }
         
-        if (mostRecentRelevantSync && isAfter(mostRecentRelevantSync, twentyFourHoursAgo)) {
+        // More robust check: Consider last successful sync timestamps if available
+        let mostRecentOverallSync: Date | null = null;
+        if (userProfile.fitbitLastSuccessfulSync) {
+            const lastFitbitSyncDate = parseISO(userProfile.fitbitLastSuccessfulSync);
+             if (!mostRecentOverallSync || isAfter(lastFitbitSyncDate, mostRecentOverallSync)) {
+                mostRecentOverallSync = lastFitbitSyncDate;
+            }
+        }
+        if (userProfile.stravaLastSyncTimestamp) {
+            const lastStravaSyncDate = new Date(userProfile.stravaLastSyncTimestamp * 1000);
+            if (!mostRecentOverallSync || isAfter(lastStravaSyncDate, mostRecentOverallSync)) {
+                mostRecentOverallSync = lastStravaSyncDate;
+            }
+        }
+        if (userProfile.googleFitLastSuccessfulSync) {
+            const lastGoogleFitSyncDate = parseISO(userProfile.googleFitLastSuccessfulSync);
+             if (!mostRecentOverallSync || isAfter(lastGoogleFitSyncDate, mostRecentOverallSync)) {
+                mostRecentOverallSync = lastGoogleFitSyncDate;
+            }
+        }
+
+        if (mostRecentOverallSync && isAfter(mostRecentOverallSync, twentyFourHoursAgo)) {
             shouldSync = false;
-            console.log('[AutoSync] Data for at least one connected service synced recently, skipping general auto-sync.');
+            console.log('[AutoSync] Data for at least one connected service synced recently via specific sync timestamps, skipping general auto-sync.');
+        } else if (!mostRecentOverallSync) { // Fallback to API call stats if specific sync timestamps are missing
+            let mostRecentApiCall: Date | null = null;
+            if (userProfile.fitbitApiCallStats?.dailyActivitySummary?.lastCalledAt) {
+                const lastFitbitApi = new Date(userProfile.fitbitApiCallStats.dailyActivitySummary.lastCalledAt);
+                 if (!mostRecentApiCall || isAfter(lastFitbitApi, mostRecentApiCall)) mostRecentApiCall = lastFitbitApi;
+            }
+            if (userProfile.stravaApiCallStats?.activities?.lastCalledAt) {
+                 const lastStravaApi = new Date(userProfile.stravaApiCallStats.activities.lastCalledAt);
+                 if (!mostRecentApiCall || isAfter(lastStravaApi, mostRecentApiCall)) mostRecentApiCall = lastStravaApi;
+            }
+            if (userProfile.googleFitApiCallStats?.sessions?.lastCalledAt) {
+                const lastGoogleFitApi = new Date(userProfile.googleFitApiCallStats.sessions.lastCalledAt);
+                if (!mostRecentApiCall || isAfter(lastGoogleFitApi, mostRecentApiCall)) mostRecentApiCall = lastGoogleFitApi;
+            }
+            if (mostRecentApiCall && isAfter(mostRecentApiCall, twentyFourHoursAgo)) {
+                 shouldSync = false;
+                 console.log('[AutoSync] Data for at least one connected service API called recently, skipping general auto-sync.');
+            }
         }
 
 
@@ -246,16 +262,26 @@ export default function AuthenticatedAppLayout({
       }
       
       const result = await syncAllConnectedData();
+      let authErrorServiceName: string | null = null;
 
       if (result.success) {
         let allIndividualSyncsSucceeded = true;
         let messages: string[] = [];
         result.results.forEach(res => {
           if (res.success) {
-            messages.push(`${res.service}: Synced ${res.activitiesProcessed ?? 'data'}.`);
+            if (res.activitiesProcessed && res.activitiesProcessed > 0) {
+                messages.push(`${res.service}: Synced ${res.activitiesProcessed} item(s).`);
+            } else if (res.message && res.message.includes("No new") ) { // Specific check for "No new activities"
+                 messages.push(`${res.service}: No new data found.`);
+            } else {
+                messages.push(`${res.service}: Synced successfully.`);
+            }
           } else {
             allIndividualSyncsSucceeded = false;
             messages.push(`${res.service}: ${res.message || 'Failed'}`);
+            if (res.errorCode?.includes('AUTH_ERROR') || res.errorCode?.includes('AUTH_EXPIRED')) {
+                authErrorServiceName = res.service.split(' ')[0]; // e.g., "Fitbit" from "Fitbit Daily Activity"
+            }
           }
         });
 
@@ -267,25 +293,36 @@ export default function AuthenticatedAppLayout({
           }
         } else if (result.results.length > 0) {
           toast({
-            title: "Sync Partially Complete",
+            title: authErrorServiceName ? `${authErrorServiceName} Re-authentication Needed` : "Sync Partially Complete",
             description: (
               <div>
-                <p>Some services could not be synced:</p>
-                <ul className="list-disc list-inside text-xs mt-1">
-                  {messages.filter(m => m.includes('Failed') || m.includes('Rate limit') || m.includes('Error')).map((msg, i) => <li key={i}>{msg}</li>)}
-                </ul>
+                {authErrorServiceName ? (
+                  <p>Your connection with {authErrorServiceName} has expired. Please go to your Profile to reconnect.</p>
+                ) : (
+                  <p>Some services could not be synced or had issues:</p>
+                )}
+                {!authErrorServiceName && messages.filter(m => !m.includes('successfully') && !m.includes('No new data found')).length > 0 && (
+                  <ul className="list-disc list-inside text-xs mt-1">
+                    {messages.filter(m => !m.includes('successfully') && !m.includes('No new data found')).map((msg, i) => <li key={i}>{msg}</li>)}
+                  </ul>
+                )}
               </div>
             ),
-            duration: 15000, // Longer duration for more complex message
-            variant: "default", 
+            duration: authErrorServiceName ? 15000 : 10000,
+            variant: authErrorServiceName ? "destructive" : "default", 
+            action: authErrorServiceName ? (
+                <Button variant="outline" size="sm" onClick={() => router.push('/profile')}>
+                    Go to Profile
+                </Button>
+            ) : undefined,
           });
-        } else if (!isAutoSync && result.results.length === 0) { // If no services were attempted to sync
+        } else if (!isAutoSync && result.results.length === 0) {
           toast({ title: "No Services Synced", description: "No connected services were available to sync at this time." });
         }
-      } else {
+      } else { // General failure of syncAllConnectedData itself
         toast({
-          title: "Sync Failed",
-          description: result.error || "Could not sync data from apps.",
+          title: "Sync Orchestration Failed",
+          description: result.error || "Could not sync data from apps due to a system error.",
           variant: "destructive",
         });
       }

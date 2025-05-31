@@ -356,6 +356,11 @@ export interface UserProfile {
   stravaApiCallStats?: StravaApiCallStats;
   googleFitApiCallStats?: GoogleFitApiCallStats;
 
+  // Last successful sync timestamps
+  fitbitLastSuccessfulSync?: string; // ISO Date string (YYYY-MM-DD)
+  stravaLastSyncTimestamp?: number; // Unix timestamp (seconds) for 'after' param
+  googleFitLastSuccessfulSync?: string; // ISO DateTime string for 'startTime'
+
   walkingRadarGoals?: WalkingRadarGoals;
   runningRadarGoals?: RunningRadarGoals;
   hikingRadarGoals?: HikingRadarGoals;

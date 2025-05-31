@@ -13,7 +13,7 @@ import { z } from 'zod';
 import type { UserProfile, SubscriptionTier } from '@/types';
 import { passwordSchema } from '@/types';
 import { doc, setDoc, getDoc, updateDoc, Timestamp, collection, query, where, getDocs } from 'firebase/firestore';
-import { differenceInYears } from 'date-fns';
+import { differenceInYears, format } from 'date-fns';
 
 
 // --- Sign Up Schemas ---
@@ -683,17 +683,17 @@ export async function finalizeFitbitConnection(userId: string): Promise<{success
         }
         const userProfile = userProfileSnap.data() as UserProfile;
         const existingConnections = userProfile.connectedFitnessApps || [];
+        const now = new Date();
+        const todayDateString = format(now, 'yyyy-MM-dd');
 
-        if (existingConnections.some(app => app.id === 'fitbit')) {
-            console.log("[FINALIZE_FITBIT_ALREADY_CONNECTED] Fitbit already marked as connected for UID:", userId);
-            return { success: true };
-        }
-
-        const updatedConnections = [...existingConnections, { id: 'fitbit', name: 'Fitbit', connectedAt: new Date().toISOString() }];
+        const connectionUpdateData: Partial<UserProfile> = {
+            connectedFitnessApps: [...existingConnections.filter(app => app.id !== 'fitbit'), { id: 'fitbit', name: 'Fitbit', connectedAt: now.toISOString() }],
+            fitbitLastSuccessfulSync: todayDateString, // Initialize last sync date
+        };
         
         console.log("[FINALIZE_FITBIT_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId);
-        await updateDoc(userProfileDocRef, { connectedFitnessApps: updatedConnections });
-        console.log("[FINALIZE_FITBIT_FIRESTORE_UPDATE_SUCCESS] Firestore updated with Fitbit connection for UID:", userId);
+        await updateDoc(userProfileDocRef, connectionUpdateData);
+        console.log("[FINALIZE_FITBIT_FIRESTORE_UPDATE_SUCCESS] Firestore updated with Fitbit connection and initial sync date for UID:", userId);
         return { success: true };
 
     } catch (error: any) {
@@ -720,16 +720,16 @@ export async function finalizeStravaConnection(userId: string): Promise<{success
         }
         const userProfile = userProfileSnap.data() as UserProfile;
         const existingConnections = userProfile.connectedFitnessApps || [];
+        const now = new Date();
 
-        if (existingConnections.some(app => app.id === 'strava')) {
-             console.log("[FINALIZE_STRAVA_ALREADY_CONNECTED] Strava already marked as connected for UID:", userId);
-            return { success: true };
-        }
-        const updatedConnections = [...existingConnections, { id: 'strava', name: 'Strava', connectedAt: new Date().toISOString() }];
+        const connectionUpdateData: Partial<UserProfile> = {
+             connectedFitnessApps: [...existingConnections.filter(app => app.id !== 'strava'), { id: 'strava', name: 'Strava', connectedAt: now.toISOString() }],
+             stravaLastSyncTimestamp: Math.floor(now.getTime() / 1000), // Initialize last sync to current time (Unix timestamp)
+        };
         
         console.log("[FINALIZE_STRAVA_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId);
-        await updateDoc(userProfileDocRef, { connectedFitnessApps: updatedConnections });
-        console.log("[FINALIZE_STRAVA_FIRESTORE_UPDATE_SUCCESS] Firestore updated with Strava connection for UID:", userId);
+        await updateDoc(userProfileDocRef, connectionUpdateData);
+        console.log("[FINALIZE_STRAVA_FIRESTORE_UPDATE_SUCCESS] Firestore updated with Strava connection and initial sync timestamp for UID:", userId);
         return { success: true };
     } catch (error: any) {
         console.error("[FINALIZE_STRAVA_RAW_ERROR] Raw error finalizing Strava connection for UID:", userId, "Error:", error);
@@ -755,16 +755,16 @@ export async function finalizeGoogleFitConnection(userId: string): Promise<{succ
         }
         const userProfile = userProfileSnap.data() as UserProfile;
         const existingConnections = userProfile.connectedFitnessApps || [];
+        const now = new Date();
 
-        if (existingConnections.some(app => app.id === 'google-fit')) {
-            console.log("[FINALIZE_GOOGLE_FIT_ALREADY_CONNECTED] Google Fit already marked as connected for UID:", userId);
-            return { success: true };
-        }
-        const updatedConnections = [...existingConnections, { id: 'google-fit', name: 'Google Fit', connectedAt: new Date().toISOString() }];
+        const connectionUpdateData: Partial<UserProfile> = {
+            connectedFitnessApps: [...existingConnections.filter(app => app.id !== 'google-fit'), { id: 'google-fit', name: 'Google Fit', connectedAt: now.toISOString() }],
+            googleFitLastSuccessfulSync: now.toISOString(), // Initialize last sync to current ISO datetime
+        };
         
         console.log("[FINALIZE_GOOGLE_FIT_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId);
-        await updateDoc(userProfileDocRef, { connectedFitnessApps: updatedConnections });
-        console.log("[FINALIZE_GOOGLE_FIT_FIRESTORE_UPDATE_SUCCESS] Firestore updated with Google Fit connection for UID:", userId);
+        await updateDoc(userProfileDocRef, connectionUpdateData);
+        console.log("[FINALIZE_GOOGLE_FIT_FIRESTORE_UPDATE_SUCCESS] Firestore updated with Google Fit connection and initial sync date for UID:", userId);
         return { success: true };
     } catch (error: any) {
         console.error("[FINALIZE_GOOGLE_FIT_RAW_ERROR] Raw error finalizing Google Fit connection for UID:", userId, "Error:", error);
