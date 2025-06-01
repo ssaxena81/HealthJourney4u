@@ -12,7 +12,6 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Log the config that is being read AT THE TIME OF MODULE EXECUTION
 const effectiveConfigForLog = { ...firebaseConfig };
 console.log(
   '[clientApp.ts] Firebase Config being used at module load:',
@@ -23,7 +22,6 @@ console.log(
   )
 );
 
-// Specific check for projectId early on
 if (!firebaseConfig.projectId) {
   console.error(
     '[clientApp.ts] CRITICAL FIREBASE CONFIG ERROR: NEXT_PUBLIC_FIREBASE_PROJECT_ID is missing or undefined. Firestore (and potentially other services) will NOT work.'
@@ -37,14 +35,14 @@ let db: Firestore | null = null;
 const allConfigKeysPresent =
   firebaseConfig.apiKey &&
   firebaseConfig.authDomain &&
-  firebaseConfig.projectId &&
+  firebaseConfig.projectId && // Crucial check
   firebaseConfig.storageBucket &&
   firebaseConfig.messagingSenderId &&
   firebaseConfig.appId;
 
 if (!allConfigKeysPresent) {
   console.error(
-    '[clientApp.ts] CRITICAL FIREBASE CONFIG ERROR: One or more NEXT_PUBLIC_FIREBASE_... environment variables are missing or undefined. Firebase services (Auth, Firestore) will NOT work correctly.'
+    '[clientApp.ts] CRITICAL FIREBASE CONFIG ERROR: One or more NEXT_PUBLIC_FIREBASE_... environment variables are missing or undefined. Firebase services will NOT work correctly.'
   );
   (Object.keys(firebaseConfig) as Array<keyof typeof firebaseConfig>).forEach((key) => {
     if (!firebaseConfig[key]) {
@@ -52,54 +50,67 @@ if (!allConfigKeysPresent) {
       console.warn(`[clientApp.ts] Missing Firebase config key: ${key} (expected as ${envVarName})`);
     }
   });
-  if (!firebaseConfig.projectId) {
-    console.warn(`[clientApp.ts] Specifically, NEXT_PUBLIC_FIREBASE_PROJECT_ID is missing, which is vital for Firestore.`);
-  }
 } else {
   if (!getApps().length) {
     try {
       console.log("[clientApp.ts] Initializing new Firebase app with provided configuration.");
       firebaseApp = initializeApp(firebaseConfig);
-      console.log("[clientApp.ts] Firebase initializeApp SUCCEEDED.");
+      console.log("[clientApp.ts] Firebase initializeApp SUCCEEDED. App Name:", firebaseApp.name);
     } catch (initError: any) {
       console.error("[clientApp.ts] Firebase initializeApp FAILED:", initError.message, initError.stack);
-      firebaseApp = null;
+      firebaseApp = null; // Ensure it's null on failure
     }
   } else {
     console.log("[clientApp.ts] Getting existing Firebase app.");
     firebaseApp = getApp();
+    console.log("[clientApp.ts] Existing Firebase app obtained. App Name:", firebaseApp.name);
   }
 
   if (firebaseApp) {
+    // Initialize Auth
     try {
       console.log("[clientApp.ts] Attempting to get Auth instance...");
       auth = getAuth(firebaseApp);
       console.log("[clientApp.ts] Auth instance obtained successfully from getAuth.");
     } catch (authError: any) {
       console.error("[clientApp.ts] getAuth FAILED with an exception:", authError.message, authError.stack);
-      auth = null;
+      auth = null; // Ensure it's null on failure
     }
 
+    // Initialize Firestore
     try {
       console.log('[clientApp.ts] Attempting to get Firestore instance...');
-      db = getFirestore(firebaseApp);
-      if (!(db && typeof db.collection === 'function')) {
+      const firestoreInstance = getFirestore(firebaseApp); // Attempt to get Firestore instance
+
+      if (!firestoreInstance) {
+        console.error(
+          `[clientApp.ts] getFirestore() returned null or undefined for projectId ('${effectiveConfigForLog.projectId || 'NOT FOUND IN CONFIG'}'). This is highly unusual. Firestore operations will fail. Setting db to null.`
+        );
+        db = null;
+      } else if (typeof firestoreInstance.collection !== 'function') {
         console.error(
           `[clientApp.ts] getFirestore did NOT return a valid Firestore instance. ` +
           `This usually means the Firestore API is not enabled for your project OR, more commonly, ` +
           `the NEXT_PUBLIC_FIREBASE_PROJECT_ID ('${effectiveConfigForLog.projectId || 'NOT FOUND IN CONFIG'}') ` +
-          `is missing, incorrect, or not accessible. Firestore operations will fail. Forcing db to null.`
+          `is missing, incorrect, or not accessible OR the database has not been created in the Firebase console. Firestore operations will fail. Forcing db to null.`
         );
-        db = null; // Explicitly null
+        // Log keys of the "invalid" db object to understand what kind of object it is
+        try {
+            console.log('[clientApp.ts] Keys of invalid object from getFirestore:', Object.keys(firestoreInstance));
+        } catch (e) {
+            console.log('[clientApp.ts] Could not get keys of invalid object from getFirestore:', firestoreInstance);
+        }
+        db = null; // Explicitly nullify if it's not a valid Firestore instance
       } else {
-        console.log('[clientApp.ts] Firestore instance obtained successfully from getFirestore.');
+        db = firestoreInstance; // Assign to module-scoped db only if valid
+        console.log("[clientApp.ts] Firestore instance obtained successfully from getFirestore AND seems valid.");
       }
     } catch (dbError: any) {
       console.error('[clientApp.ts] getFirestore FAILED with an exception:', dbError.message, dbError.stack);
-      db = null;
+      db = null; // Ensure it's null on failure
     }
   } else {
-    console.error("[clientApp.ts] firebaseApp is not valid (likely due to missing config or initializeApp failure). Cannot initialize Auth and Firestore. Using nulls.");
+    console.error("[clientApp.ts] firebaseApp is not valid (likely due to missing config or initializeApp failure). Cannot initialize Auth and Firestore. Setting them to null.");
     auth = null;
     db = null;
   }
