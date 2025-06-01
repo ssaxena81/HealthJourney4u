@@ -3,6 +3,15 @@ import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 
+// Log the imported getFirestore function itself
+console.log("[clientApp.ts] Typeof imported 'getFirestore':", typeof getFirestore);
+if (typeof getFirestore === 'function') {
+  console.log("[clientApp.ts] Imported 'getFirestore.name':", getFirestore.name); // Should be 'getFirestore'
+} else {
+  console.error("[clientApp.ts] CRITICAL: Imported 'getFirestore' is NOT a function at the module level. This is a major issue with imports or module resolution.");
+}
+
+
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
   authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
@@ -59,7 +68,7 @@ if (!allConfigKeysPresent) {
       console.log("[clientApp.ts] Firebase initializeApp SUCCEEDED. App Name:", firebaseApp.name);
     } catch (initError: any) {
       console.error("[clientApp.ts] Firebase initializeApp FAILED:", initError.message, initError.stack);
-      firebaseApp = null; 
+      firebaseApp = null;
     }
   } else {
     console.log("[clientApp.ts] Getting existing Firebase app.");
@@ -69,45 +78,56 @@ if (!allConfigKeysPresent) {
 
   if (firebaseApp && typeof firebaseApp.name === 'string' && firebaseApp.options?.apiKey) {
     console.log("[clientApp.ts] firebaseApp seems valid (has name and apiKey). Proceeding to initialize Auth and Firestore.");
+
     // Initialize Auth
     try {
       console.log("[clientApp.ts] Attempting to get Auth instance from firebaseApp:", firebaseApp.name);
-      auth = getAuth(firebaseApp);
-      console.log("[clientApp.ts] getAuth call completed. Auth object type:", typeof auth, ". Auth object itself:", auth);
-      if (auth && typeof auth.onAuthStateChanged === 'function') {
+      const authInstance = getAuth(firebaseApp);
+      console.log("[clientApp.ts] getAuth call completed. Auth object type:", typeof authInstance, ". Auth object itself:", authInstance);
+      if (authInstance && typeof authInstance.onAuthStateChanged === 'function') {
+        auth = authInstance;
         console.log("[clientApp.ts] Auth instance obtained successfully and seems valid (has onAuthStateChanged).");
       } else {
-        console.error("[clientApp.ts] getAuth returned an INVALID or incomplete Auth object. Forcing auth to null. Auth object received:", auth);
+        console.error("[clientApp.ts] getAuth returned an INVALID or incomplete Auth object. Forcing auth to null. Auth object received:", authInstance);
         auth = null;
       }
     } catch (authError: any) {
       console.error("[clientApp.ts] getAuth FAILED with an exception:", authError.message, authError.stack);
-      auth = null; 
+      auth = null;
     }
 
     // Initialize Firestore
     try {
       console.log("[clientApp.ts] Attempting to get Firestore instance from firebaseApp:", firebaseApp.name);
-      const firestoreInstance = getFirestore(firebaseApp);
-      console.log("[clientApp.ts] getFirestore call completed. Firestore object type:", typeof firestoreInstance, ". Firestore object itself:", firestoreInstance);
-      
-      if (firestoreInstance && typeof firestoreInstance.collection === 'function') {
-        db = firestoreInstance;
-        console.log("[clientApp.ts] Firestore instance obtained successfully and seems valid (has collection method).");
-      } else {
-        console.error(
-          `[clientApp.ts] getFirestore did NOT return a valid Firestore instance (e.g., missing 'collection' method), for projectId ('${effectiveConfigForLog.projectId || 'NOT FOUND IN CONFIG'}'). ` +
-          `This often indicates Firestore API not enabled, database not created in native mode, or projectId issue. ` +
-          `Firestore operations will fail. Forcing db to null.`
-        );
-        if (firestoreInstance) {
-          try {
-            console.log('[clientApp.ts] Keys of invalid object from getFirestore:', Object.keys(firestoreInstance));
-          } catch (e) {
-            console.log('[clientApp.ts] Could not get keys of invalid object from getFirestore:', firestoreInstance);
-          }
-        }
+      console.log("[clientApp.ts] Verifying 'getFirestore' function before call. Type:", typeof getFirestore, ". Name:", (getFirestore as any).name);
+      if (typeof getFirestore !== 'function' || (getFirestore as any).name !== 'getFirestore') {
+        console.error("[clientApp.ts] CRITICAL: imported 'getFirestore' is NOT the expected function! Name is:", (getFirestore as any).name, "Type is:", typeof getFirestore, ". This is likely the root cause of Firestore issues. Check for import conflicts or module resolution problems.");
         db = null;
+      } else {
+        const firestoreInstance = getFirestore(firebaseApp);
+        console.log("[clientApp.ts] getFirestore call completed. Firestore object type:", typeof firestoreInstance);
+        console.log("[clientApp.ts] Firestore object itself:", firestoreInstance);
+
+        if (firestoreInstance && typeof firestoreInstance.collection === 'function') {
+          db = firestoreInstance;
+          console.log("[clientApp.ts] Firestore instance obtained successfully and seems valid (has collection method).");
+        } else {
+          console.error(
+            `[clientApp.ts] getFirestore did NOT return a valid Firestore instance. ` +
+            `This usually means the Firestore API is not enabled for your project OR, more commonly, ` +
+            `the NEXT_PUBLIC_FIREBASE_PROJECT_ID ('${effectiveConfigForLog.projectId || 'NOT FOUND IN CONFIG'}') ` +
+            `is missing, incorrect, or not accessible, or the Firestore database hasn't been created in the Firebase console. ` +
+            `Firestore operations will fail. Forcing db to null.`
+          );
+          if (firestoreInstance) {
+            try {
+              console.log('[clientApp.ts] Keys of invalid object from getFirestore:', Object.keys(firestoreInstance));
+            } catch (e) {
+              console.log('[clientApp.ts] Could not get keys of invalid object from getFirestore:', firestoreInstance);
+            }
+          }
+          db = null;
+        }
       }
     } catch (dbError: any) {
       console.error('[clientApp.ts] getFirestore FAILED with an exception:', dbError.message, dbError.stack);
@@ -123,8 +143,8 @@ if (!allConfigKeysPresent) {
 // Final validation logs
 console.log("[clientApp.ts] Final Auth instance check before export. Is auth object present?", !!auth);
 if (auth) {
-    console.log("[clientApp.ts] Final Auth object has fetchSignInMethodsForEmail property:", Object.prototype.hasOwnProperty.call(auth, 'fetchSignInMethodsForEmail'), "and it is a function:", typeof auth.fetchSignInMethodsForEmail === 'function');
     console.log("[clientApp.ts] Final Auth object has onAuthStateChanged property:", Object.prototype.hasOwnProperty.call(auth, 'onAuthStateChanged'), "and it is a function:", typeof auth.onAuthStateChanged === 'function');
+    console.log("[clientApp.ts] Final Auth object has fetchSignInMethodsForEmail property:", Object.prototype.hasOwnProperty.call(auth, 'fetchSignInMethodsForEmail'), "and it is a function:", typeof auth.fetchSignInMethodsForEmail === 'function');
 }
 
 console.log("[clientApp.ts] Final Firestore instance check before export. Is db object present?", !!db);
@@ -132,8 +152,8 @@ if (db) {
     console.log("[clientApp.ts] Final db object has collection property:", Object.prototype.hasOwnProperty.call(db, 'collection'), "and it is a function:", typeof db.collection === 'function');
 }
 
-if (!(auth && typeof auth.fetchSignInMethodsForEmail === 'function' && typeof auth.onAuthStateChanged === 'function')) {
-    console.error("[clientApp.ts] FINAL CRITICAL CHECK: Firebase Auth object is NOT correctly initialized or is NULL. Auth operations WILL fail.");
+if (!(auth && typeof auth.onAuthStateChanged === 'function' && typeof auth.fetchSignInMethodsForEmail === 'function')) {
+    console.warn("[clientApp.ts] FINAL WARNING: Firebase Auth object is NOT correctly initialized or is NULL. Auth operations MAY fail or be unreliable.");
 }
 if (!(db && typeof db.collection === 'function')) {
     console.error("[clientApp.ts] FINAL CRITICAL CHECK: Firebase Firestore object is NOT correctly initialized or is NULL. Firestore operations WILL fail.");
