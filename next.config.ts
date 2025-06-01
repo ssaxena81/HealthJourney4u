@@ -2,30 +2,28 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  typescript: {
-    // ignoreBuildErrors: true, // We removed this temporarily for debugging
-  },
-  eslint: {
-    // ignoreDuringBuilds: true, // We removed this temporarily for debugging
-  },
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'placehold.co',
-        port: '',
-        pathname: '/**',
-      },
-    ],
-  },
-  experimental: {
-     allowedDevOrigins: [
-         'http://localhost:9002', // Example: A local mobile app simulator or another dev server
-  //       'https://my-other-dev-app.com', // Example: A specific cloud-based dev tool
-  //       // Add more origins as needed
-     ],
- },
+  // All previous configurations are temporarily removed for diagnostics.
+  // typescript: {
+  //   ignoreBuildErrors: true,
+  // },
+  // eslint: {
+  //   ignoreDuringBuilds: true,
+  // },
+  // images: {
+  //   remotePatterns: [
+  //     {
+  //       protocol: 'https',
+  //       hostname: 'placehold.co',
+  //       port: '',
+  //       pathname: '/**',
+  //     },
+  //   ],
+  // },
+  // experimental: {
+  //    allowedDevOrigins: [
+  //        'http://localhost:9003', // Changed port to match package.json
+  //    ],
+  //},
 };
 
 export default nextConfig;
