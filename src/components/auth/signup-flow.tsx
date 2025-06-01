@@ -60,21 +60,26 @@ export default function SignUpFlow() {
 
   const handleStep1Submit = (values: Step1Values) => {
     setError(null);
+    console.log('[SignUpFlow handleStep1Submit] Checking email:', values.email);
     startTransition(async () => {
       const result = await checkEmailAvailability({ email: values.email });
+      console.log('[SignUpFlow handleStep1Submit] Server action result from checkEmailAvailability:', result);
       if (result.available) {
         setEmail(values.email);
         setCurrentStep(2);
+        toast({ title: 'Email Available', description: 'Please proceed to the next step.' });
       } else {
-        setError(result.error || 'This email is already registered or invalid.');
-        step1Form.setError('email', { type: 'manual', message: result.error || 'This email is already registered or invalid.' });
-        toast({ title: 'Email Check Failed', description: result.error || 'This email is already registered or invalid.', variant: 'destructive' });
+        const errorMessage = result.error || 'This email is already registered or invalid.';
+        setError(errorMessage);
+        step1Form.setError('email', { type: 'manual', message: errorMessage });
+        toast({ title: 'Email Check Failed', description: errorMessage, variant: 'destructive' });
       }
     });
   };
 
   const handleStep2Submit = (values: Step2Values) => {
     setError(null);
+    console.log('[SignUpFlow handleStep2Submit] Submitting Step 2 with email:', email, 'and values:', values);
     startTransition(async () => {
       const result = await signUpUser({
         email: email,
@@ -82,32 +87,37 @@ export default function SignUpFlow() {
         confirmPassword: values.confirmPassword,
         subscriptionTier: values.subscriptionTier,
       });
+      
+      console.log('[SignUpFlow handleStep2Submit] Server action result from signUpUser:', result);
 
-      if (result.success && result.userId) { // Check for userId as well
+      if (result.success && result.userId) { 
         toast({
           title: 'Account Created!',
           description: 'You have successfully signed up. Please complete your profile.',
         });
         
-        // AuthContext will be updated by onAuthStateChanged listener after signup.
-        // Explicitly calling checkAuthState() and setUserProfile might not be strictly necessary
-        // if onAuthStateChanged handles it quickly, but can ensure state is updated before redirect.
         await checkAuthState(); 
 
         router.push('/profile'); 
       } else {
-        setError(result.error || 'An unknown error occurred.');
+        const displayError = result.error || 'An unknown error occurred during sign up.';
+        const displayErrorCode = result.errorCode ? ` (Code: ${result.errorCode})` : '';
+        
+        console.error(`[SignUpFlow] Sign up failed. Error: ${displayError}, Code: ${result.errorCode}, Details:`, result.details);
+        setError(`${displayError}${displayErrorCode}`);
         toast({
           title: 'Sign Up Failed',
-          description: result.error || 'Please try again.',
+          description: `${displayError}${displayErrorCode}`,
           variant: 'destructive',
         });
+
         if (result.details?.fieldErrors?.password) {
             step2Form.setError('password', { type: 'manual', message: (result.details.fieldErrors.password as string[]).join(', ') });
         }
         if (result.details?.fieldErrors?.confirmPassword) {
             step2Form.setError('confirmPassword', { type: 'manual', message: (result.details.fieldErrors.confirmPassword as string[]).join(', ') });
         }
+        // If there's a general errorCode related to Firebase config, it will be in the main error message.
       }
     });
   };
@@ -195,7 +205,7 @@ export default function SignUpFlow() {
           <div className="space-y-2">
             <div className="flex justify-between items-center">
                 <Label htmlFor="subscriptionTier">Subscription Plan</Label>
-                <ComparePlansDialog trigger={<Button variant="link" type="button" size="sm" className="p-0 h-auto text-xs">Compare Plans</Button>} />
+                {/* <ComparePlansDialog trigger={<Button variant="link" type="button" size="sm" className="p-0 h-auto text-xs">Compare Plans</Button>} /> */}
             </div>
             <Controller
               name="subscriptionTier"

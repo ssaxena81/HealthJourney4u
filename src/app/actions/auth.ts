@@ -46,8 +46,8 @@ export async function checkEmailAvailability(values: z.infer<typeof CheckEmailIn
     const validatedValues = CheckEmailInputSchema.parse(values);
     console.log("[CHECK_EMAIL_AVAILABILITY_VALIDATED] Email validated by Zod:", validatedValues.email);
 
-    if (!firebaseAuth || !firebaseAuth.app) {
-        console.warn("[CHECK_EMAIL_AVAILABILITY_FIREBASE_NOT_READY] Firebase Auth not properly initialized. DB App:", db?.app);
+    if (!firebaseAuth || !firebaseAuth.app || typeof firebaseAuth.fetchSignInMethodsForEmail !== 'function') {
+        console.warn("[CHECK_EMAIL_AVAILABILITY_FIREBASE_NOT_READY] Firebase Auth not properly initialized. Auth object:", firebaseAuth);
         return { available: false, error: "Email verification service is temporarily unavailable. Please ensure Firebase is configured correctly.", errorCode: 'AUTH_SERVICE_UNAVAILABLE' };
     }
     console.log("[CHECK_EMAIL_AVAILABILITY_FIREBASE_READY] Firebase Auth instance seems okay.");
@@ -80,16 +80,31 @@ export async function checkEmailAvailability(values: z.infer<typeof CheckEmailIn
 
 export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema>): Promise<SignUpResult> {
   console.log("[SIGNUP_ACTION_START] signUpUser action initiated with email:", values.email, "tier:", values.subscriptionTier);
+
+  // Explicit check for Firebase services readiness within the server action
+  if (!firebaseAuth || !firebaseAuth.app || typeof firebaseAuth.createUserWithEmailAndPassword !== 'function') {
+    console.error("[SIGNUP_ACTION_CRITICAL_FAILURE] Firebase Auth service appears uninitialized or misconfigured on the server for signUpUser. firebaseAuth:", firebaseAuth);
+    return {
+      success: false,
+      error: "Critical server error: Authentication service is not ready. Please contact support.",
+      errorCode: 'SERVER_FIREBASE_AUTH_INIT_FAILURE'
+    };
+  }
+  if (!db || !db.app || typeof doc !== 'function' || typeof setDoc !== 'function') {
+    console.error("[SIGNUP_ACTION_CRITICAL_FAILURE] Firestore service (db) appears uninitialized or misconfigured on the server for signUpUser. db:", db);
+    // Account might be created in Auth but profile won't be saved. This is a serious state.
+    // For now, we'll prevent Auth creation if DB is also not ready.
+    return {
+      success: false,
+      error: "Critical server error: Database service is not ready. Profile cannot be saved. Please contact support.",
+      errorCode: 'SERVER_FIREBASE_DB_INIT_FAILURE'
+    };
+  }
+  console.log("[SIGNUP_ACTION_FIREBASE_SERVICES_CHECK_PASSED] Firebase Auth and DB appear initialized for server action.");
+
   try {
     const validatedValues = SignUpDetailsInputSchema.parse(values);
     console.log("[SIGNUP_ACTION_VALIDATION_PASSED] Input validation passed for email:", validatedValues.email);
-
-    if (!firebaseAuth || !firebaseAuth.app) {
-      console.error("[SIGNUP_FIREBASE_AUTH_NOT_READY] Firebase Auth is not initialized correctly in signUpUser. Potential .env.local issue.");
-      console.log("[SIGNUP_ACTION_ATTEMPT_RETURN_ERROR_AUTH_UNAVAILABLE]");
-      return { success: false, error: "Authentication service is not available. Please configure Firebase.", errorCode: 'AUTH_UNAVAILABLE' };
-    }
-    console.log("[SIGNUP_ACTION_FIREBASE_AUTH_CHECK_PASSED] Firebase Auth instance seems okay for email:", validatedValues.email);
 
     let userCredential;
     try {
@@ -126,13 +141,6 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     };
     console.log("[SIGNUP_ACTION_PROFILE_OBJECT_CREATED] Initial profile object created for UID:", initialProfile.id, initialProfile);
 
-    if (!db || !db.app || typeof doc !== 'function' || typeof setDoc !== 'function') {
-        console.error("[SIGNUP_FIRESTORE_NOT_READY] Firestore (db, doc, or setDoc) is not initialized correctly for profile creation. DB App:", db?.app);
-        console.log("[SIGNUP_ACTION_ATTEMPT_RETURN_ERROR_FIRESTORE_UNAVAILABLE]");
-        return { success: false, error: "Profile creation failed: Database service unavailable. Your account was created in Auth but profile data was not saved.", errorCode: 'FIRESTORE_UNAVAILABLE' };
-    }
-    console.log("[SIGNUP_ACTION_FIRESTORE_CHECK_PASSED] Firestore instance seems okay for UID:", userCredential.user.uid);
-
     try {
       console.log("[SIGNUP_ACTION_FIRESTORE_SETDOC_START] Attempting to save profile to Firestore for UID:", userCredential.user.uid);
       await setDoc(doc(db, "users", userCredential.user.uid), initialProfile);
@@ -143,15 +151,17 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       const errorCode = String(firestoreError.code || 'FIRESTORE_ERROR');
       console.error(`[SIGNUP_FIRESTORE_ERROR_DETAILS] Code: ${errorCode}, Message: ${errorMessage}`);
       console.log("[SIGNUP_ACTION_ATTEMPT_RETURN_ERROR_FIRESTORE_SETDOC_FAILED]");
-      return { success: false, error: `Account created but profile setup failed: ${errorMessage}. Please contact support.`, errorCode };
+      // User account exists in Auth, but profile creation failed. This is a partial success/failure.
+      // For now, returning as a failure from client's perspective for signup.
+      return { success: false, error: `Account created but profile setup failed: ${errorMessage}. Please contact support.`, errorCode, userId: userCredential.user.uid };
     }
 
     console.log("[SIGNUP_ACTION_SUCCESS] signUpUser action completed successfully for UID:", userCredential.user.uid);
     console.log("[SIGNUP_ACTION_ATTEMPT_RETURN_SUCCESS]");
     return { success: true, userId: userCredential.user.uid };
   } catch (error: any) {
-    console.error("[SIGNUP_ACTION_RAW_ERROR] Raw error in signUpUser:", error);
-    let errorMessage = "An unknown error occurred during account creation.";
+    console.error("[SIGNUP_ACTION_OUTER_CATCH_ERROR] Raw error in signUpUser's outer catch block:", error);
+    let errorMessage = "An unexpected error occurred during account creation.";
     let errorCode = "UNKNOWN_SIGNUP_ERROR";
 
     if (error instanceof z.ZodError) {
