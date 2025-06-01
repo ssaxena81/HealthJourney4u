@@ -15,6 +15,13 @@ const firebaseConfig = {
 // Log the config that is being read AT THE TIME OF MODULE EXECUTION
 console.log("[clientApp.ts] Firebase Config being used at module load:", JSON.stringify(firebaseConfig, (key, value) => value === undefined ? 'ENV_VAR_UNDEFINED' : value, 2));
 
+// Specific check for projectId early on
+if (!firebaseConfig.projectId) {
+  console.error(
+    '[clientApp.ts] CRITICAL FIREBASE CONFIG ERROR: NEXT_PUBLIC_FIREBASE_PROJECT_ID is missing or undefined. Firestore (and potentially other services) will NOT work.'
+  );
+}
+
 let firebaseApp: FirebaseApp;
 let auth: Auth; 
 let db: Firestore; 
@@ -22,7 +29,7 @@ let db: Firestore;
 const allConfigKeysPresent =
   firebaseConfig.apiKey &&
   firebaseConfig.authDomain &&
-  firebaseConfig.projectId &&
+  firebaseConfig.projectId && // Ensuring projectId is part of this check
   firebaseConfig.storageBucket &&
   firebaseConfig.messagingSenderId &&
   firebaseConfig.appId;
@@ -37,11 +44,12 @@ if (!allConfigKeysPresent) {
       console.warn(`[clientApp.ts] Missing Firebase config key: ${key} (expected as ${envVarName})`);
     }
   });
-  // Provide stub if not configured, to prevent app crash during build or initial load
-  // but functionality relying on Firebase will fail.
-  firebaseApp = {} as FirebaseApp; // Stub app
-  auth = {} as Auth;             // Stub auth
-  db = {} as Firestore;           // Stub db
+   if (!firebaseConfig.projectId) { // Re-emphasize projectId if it's the culprit
+      console.warn(`[clientApp.ts] Specifically, NEXT_PUBLIC_FIREBASE_PROJECT_ID is missing, which is vital for Firestore.`);
+  }
+  firebaseApp = {} as FirebaseApp;
+  auth = {} as Auth;
+  db = {} as Firestore;
 } else {
   if (!getApps().length) {
     try {
@@ -50,44 +58,53 @@ if (!allConfigKeysPresent) {
       console.log("[clientApp.ts] Firebase initializeApp SUCCEEDED.");
     } catch (initError: any) {
       console.error("[clientApp.ts] Firebase initializeApp FAILED:", initError.message, initError.stack);
-      firebaseApp = {} as FirebaseApp; // stub on error
+      firebaseApp = {} as FirebaseApp; 
     }
   } else {
     console.log("[clientApp.ts] Getting existing Firebase app.");
     firebaseApp = getApp();
   }
 
-  // Initialize Auth and Firestore, checking if firebaseApp is valid
-  if (firebaseApp && firebaseApp.name) { // Check if firebaseApp is a real app (not a {} stub)
+  if (firebaseApp && firebaseApp.name) { 
     try {
       console.log("[clientApp.ts] Attempting to get Auth instance...");
       auth = getAuth(firebaseApp);
-      console.log("[clientApp.ts] Auth instance obtained:", auth && typeof auth.onAuthStateChanged === 'function' ? 'Seems Valid' : 'INVALID or STUBBED');
+      console.log("[clientApp.ts] Auth instance obtained successfully from getAuth.");
     } catch (authError: any) {
-      console.error("[clientApp.ts] getAuth FAILED:", authError.message, authError.stack);
-      auth = {} as Auth; // stub on error
+      console.error("[clientApp.ts] getAuth FAILED with an exception:", authError.message, authError.stack);
+      auth = {} as Auth; 
     }
 
     try {
       console.log("[clientApp.ts] Attempting to get Firestore instance...");
       db = getFirestore(firebaseApp);
-      console.log("[clientApp.ts] Firestore instance obtained:", db && typeof db.collection === 'function' ? 'Seems Valid' : 'INVALID or STUBBED');
+      // Add a specific check right after getFirestore attempt
+      if (!(db && typeof db.collection === 'function')) {
+        console.error("[clientApp.ts] getFirestore did NOT return a valid instance (e.g., missing 'collection' method), even if it didn't throw. Forcing stub. This often indicates a projectId issue or Firestore API not enabled.");
+        db = {} as Firestore; // Force stub if not valid
+      } else {
+        console.log("[clientApp.ts] Firestore instance obtained successfully from getFirestore.");
+      }
     } catch (dbError: any) {
-      console.error("[clientApp.ts] getFirestore FAILED:", dbError.message, dbError.stack);
-      db = {} as Firestore; // stub on error
+      console.error("[clientApp.ts] getFirestore FAILED with an exception:", dbError.message, dbError.stack);
+      db = {} as Firestore; 
     }
   } else {
-    console.error("[clientApp.ts] firebaseApp is not valid (likely due to missing config or init error), cannot initialize Auth and Firestore. Using stubs.");
+    console.error("[clientApp.ts] firebaseApp is not valid (likely due to missing config or initializeApp failure). Cannot initialize Auth and Firestore. Using stubs.");
     auth = {} as Auth;
     db = {} as Firestore;
   }
 }
 
-// Final check, particularly for the `auth` object
-if (!auth || typeof auth.fetchSignInMethodsForEmail !== 'function') {
-    console.error("[clientApp.ts] FINAL CRITICAL CHECK: Firebase Auth object is NOT correctly initialized or is a STUB. `auth.fetchSignInMethodsForEmail` is undefined. This indicates a problem with Firebase initialization, likely due to missing config or SDK errors during init. Server-side Auth operations will fail.");
-} else {
-    console.log("[clientApp.ts] FINAL CHECK: Firebase Auth object appears to be correctly initialized and `fetchSignInMethodsForEmail` is available.");
+// Final validation logs
+console.log("[clientApp.ts] Final Auth instance check:", auth && typeof auth.onAuthStateChanged === 'function' ? 'Seems Valid' : 'INVALID or STUBBED');
+console.log("[clientApp.ts] Final Firestore instance check:", db && typeof db.collection === 'function' ? 'Seems Valid' : 'INVALID or STUBBED');
+
+if (!(auth && typeof auth.fetchSignInMethodsForEmail === 'function')) {
+    console.error("[clientApp.ts] FINAL CRITICAL CHECK: Firebase Auth object is NOT correctly initialized or is a STUB. Operations like `fetchSignInMethodsForEmail` will fail.");
+}
+if (!(db && typeof db.collection === 'function')) {
+    console.error("[clientApp.ts] FINAL CRITICAL CHECK: Firebase Firestore object is NOT correctly initialized or is a STUB. Firestore operations will fail.");
 }
 
 export { firebaseApp, auth, db };
