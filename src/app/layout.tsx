@@ -1,11 +1,8 @@
 
 import type { Metadata } from 'next';
-import { GeistSans } from 'geist/font/sans';
-import { GeistMono } from 'geist/font/mono';
-import './globals.css';
-import { Toaster } from "@/components/ui/toaster"; // Restored
-import { AuthProvider } from '@/hooks/useAuth'; // Restored
-// import { SidebarProvider } from "@/components/ui/sidebar"; // Still commented out
+// import { GeistSans } from 'geist/font/sans'; // Temporarily commented out
+// import { GeistMono } from 'geist/font/mono'; // Temporarily commented out
+// import './globals.css'; // Temporarily commented out
 
 export const metadata: Metadata = {
   title: 'Health Timeline',
@@ -18,14 +15,11 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
-      <body className={`font-sans antialiased bg-background text-foreground`}>
-        <AuthProvider>
-          {/* <SidebarProvider> */}
-            {children}
-            <Toaster />
-          {/* </SidebarProvider> */}
-        </AuthProvider>
+    // <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
+    <html lang="en">
+      {/* <body className={`font-sans antialiased bg-background text-foreground`}> */}
+      <body>
+        {children}
       </body>
     </html>
   );
