@@ -27,30 +27,37 @@ const allConfigKeysPresent =
 
 if (!getApps().length) {
   if (!allConfigKeysPresent) {
-    console.error( // Make this a more prominent error
-      'CRITICAL FIREBASE CONFIG ERROR: Firebase config is incomplete. Please ensure all NEXT_PUBLIC_FIREBASE_ environment variables are set in .env.local and the server is restarted. Firebase services will NOT work.'
+    console.error(
+      'CRITICAL FIREBASE CONFIG ERROR (clientApp.ts - Initializing App): Firebase config from environment variables is incomplete. This usually means one or more NEXT_PUBLIC_FIREBASE_... variables are missing or undefined in your .env.local file or server environment. Firebase services (Auth, Firestore) will NOT work correctly. Ensure all required Firebase environment variables are set and the server is restarted.'
     );
-    // Log which keys might be missing for easier debugging
     (Object.keys(firebaseConfig) as Array<keyof typeof firebaseConfig>).forEach((key) => {
       if (!firebaseConfig[key]) {
-        // Construct the expected environment variable name
         const envVarName = `NEXT_PUBLIC_FIREBASE_${key.replace(/([A-Z])/g, '_$1').toUpperCase()}`;
-        console.warn(`Missing Firebase config key: ${key} (expected as ${envVarName} in .env.local)`);
+        console.warn(`(clientApp.ts - Initializing App) Missing Firebase config key: ${key} (expected as ${envVarName})`);
       }
     });
     // Provide a default stub if not configured, to prevent app crash during build or initial load
-    firebaseApp = {} as FirebaseApp;
-    auth = {} as Auth; // Stub auth
-    db = {} as Firestore; // Stub db
+    // but functionality relying on Firebase will fail.
+    firebaseApp = {} as FirebaseApp; // Stub app
+    auth = {} as Auth;             // Stub auth - this will cause issues downstream
+    db = {} as Firestore;           // Stub db - this will cause issues downstream
   } else {
+    console.log("(clientApp.ts) Initializing new Firebase app with provided configuration.");
     firebaseApp = initializeApp(firebaseConfig);
     auth = getAuth(firebaseApp); // Initialize auth here
     db = getFirestore(firebaseApp); // Initialize db here
   }
 } else {
+  console.log("(clientApp.ts) Getting existing Firebase app.");
   firebaseApp = getApp();
   auth = getAuth(firebaseApp); // Initialize auth here
   db = getFirestore(firebaseApp); // Initialize db here
 }
 
+if (!auth || typeof auth.fetchSignInMethodsForEmail !== 'function') {
+    console.error("(clientApp.ts) CRITICAL: Firebase Auth object is not correctly initialized or is a stub. `auth.fetchSignInMethodsForEmail` is undefined. This likely means Firebase configuration was incomplete during initialization (see previous logs). Operations requiring Firebase Auth will fail.");
+}
+
+
 export { firebaseApp, auth, db };
+
