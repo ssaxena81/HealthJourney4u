@@ -2,28 +2,27 @@
 import type {NextConfig} from 'next';
 
 const nextConfig: NextConfig = {
-  // All previous configurations are temporarily removed for diagnostics.
-  // typescript: {
-  //   ignoreBuildErrors: true,
-  // },
-  // eslint: {
-  //   ignoreDuringBuilds: true,
-  // },
-  // images: {
-  //   remotePatterns: [
-  //     {
-  //       protocol: 'https',
-  //       hostname: 'placehold.co',
-  //       port: '',
-  //       pathname: '/**',
-  //     },
-  //   ],
-  // },
-  // experimental: {
-  //    allowedDevOrigins: [
-  //        'http://localhost:9003', // Changed port to match package.json
-  //    ],
-  //},
+   typescript: {
+     ignoreBuildErrors: true,
+   },
+   eslint: {
+     ignoreDuringBuilds: true,
+   },
+   images: {
+     remotePatterns: [
+       {
+         protocol: 'https',
+         hostname: 'placehold.co',
+         port: '',
+         pathname: '/**',
+       },
+     ],
+   },
+   experimental: {
+      allowedDevOrigins: [
+          'http://localhost:9003', // Changed port to match package.json
+      ],
+  },
 };
 
 export default nextConfig;
