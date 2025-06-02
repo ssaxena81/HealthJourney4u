@@ -1,12 +1,13 @@
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
-import { getAuth, type Auth } from 'firebase/auth';
+import { getAuth, type Auth, fetchSignInMethodsForEmail as diagnosticFetchSignInMethodsForEmail } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 
 // Log the imported functions themselves to check for import issues
 console.log("[clientApp.ts] Typeof imported 'initializeApp':", typeof initializeApp, ". Name:", (initializeApp as any).name);
 console.log("[clientApp.ts] Typeof imported 'getAuth':", typeof getAuth, ". Name:", (getAuth as any).name);
 console.log("[clientApp.ts] Typeof imported 'getFirestore':", typeof getFirestore, ". Name:", (getFirestore as any).name);
+console.log("[clientApp.ts] Diagnostic: typeof imported fetchSignInMethodsForEmail is", typeof diagnosticFetchSignInMethodsForEmail);
 
 
 const firebaseConfig = {
@@ -162,5 +163,3 @@ if (db) {
 }
 
 export { firebaseApp, auth, db };
-
-    
