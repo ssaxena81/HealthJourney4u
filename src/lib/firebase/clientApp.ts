@@ -1,13 +1,11 @@
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth, fetchSignInMethodsForEmail as diagnosticFetchSignInMethodsForEmail } from 'firebase/auth';
-import { getFirestore, type Firestore } from 'firebase/firestore';
+import { getFirestore, type Firestore, collection as diagnosticCollection } from 'firebase/firestore';
 
-// Log the imported functions themselves to check for import issues
-console.log("[clientApp.ts] Typeof imported 'initializeApp':", typeof initializeApp, ". Name:", (initializeApp as any).name);
-console.log("[clientApp.ts] Typeof imported 'getAuth':", typeof getAuth, ". Name:", (getAuth as any).name);
-console.log("[clientApp.ts] Typeof imported 'getFirestore':", typeof getFirestore, ". Name:", (getFirestore as any).name);
-console.log("[clientApp.ts] Diagnostic: typeof imported fetchSignInMethodsForEmail is", typeof diagnosticFetchSignInMethodsForEmail);
+console.log("[clientApp.ts] Imports: initializeApp, getAuth, getFirestore loaded.");
+console.log("[clientApp.ts] Diagnostic: Directly imported 'fetchSignInMethodsForEmail' type:", typeof diagnosticFetchSignInMethodsForEmail);
+console.log("[clientApp.ts] Diagnostic: Directly imported 'collection' type:", typeof diagnosticCollection);
 
 
 const firebaseConfig = {
@@ -19,21 +17,7 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-const effectiveConfigForLog = { ...firebaseConfig };
-console.log(
-  '[clientApp.ts] Firebase Config being used:',
-  JSON.stringify(
-    effectiveConfigForLog,
-    (key, value) => (value === undefined ? 'ENV_VAR_UNDEFINED' : value),
-    2
-  )
-);
-
-if (!firebaseConfig.projectId) {
-  console.error(
-    '[clientApp.ts] CRITICAL FIREBASE CONFIG ERROR: NEXT_PUBLIC_FIREBASE_PROJECT_ID is missing or undefined.'
-  );
-}
+console.log('[clientApp.ts] Firebase Project ID from config:', firebaseConfig.projectId || 'MISSING');
 
 let firebaseApp: FirebaseApp | null = null;
 let auth: Auth | null = null;
@@ -49,117 +33,70 @@ const allConfigKeysPresent =
 
 if (!allConfigKeysPresent) {
   console.error(
-    '[clientApp.ts] CRITICAL FIREBASE CONFIG ERROR: One or more NEXT_PUBLIC_FIREBASE_... environment variables are missing. Firebase services will NOT work.'
+    '[clientApp.ts] CRITICAL FIREBASE CONFIG ERROR: One or more NEXT_PUBLIC_FIREBASE_... environment variables are missing. Firebase services will NOT be initialized.'
   );
-   (Object.keys(firebaseConfig) as Array<keyof typeof firebaseConfig>).forEach((key) => {
-    if (!firebaseConfig[key]) {
-      const envVarName = `NEXT_PUBLIC_FIREBASE_${key.replace(/([A-Z])/g, '_$1').toUpperCase()}`;
-      console.warn(`[clientApp.ts] Missing Firebase config key: ${key} (expected as ${envVarName})`);
-    }
-  });
-  // Explicitly nullify if config is bad
-  firebaseApp = null; 
-  auth = null;
-  db = null;
 } else {
-  console.log("[clientApp.ts] All Firebase config keys appear to be present in process.env.");
-  
-  console.log("[clientApp.ts] typeof firebaseConfig before initializeApp:", typeof firebaseConfig);
-  console.log("[clientApp.ts] Keys of firebaseConfig:", Object.keys(firebaseConfig));
+  console.log("[clientApp.ts] All Firebase config keys appear to be present.");
 
   if (!getApps().length) {
     try {
-      console.log("[clientApp.ts] Initializing new Firebase app with config."); // Config logged above
       firebaseApp = initializeApp(firebaseConfig);
-      console.log("[clientApp.ts] initializeApp call completed.");
-      if (firebaseApp && typeof firebaseApp.name === 'string') {
-        console.log("[clientApp.ts] Firebase initializeApp SUCCEEDED. App Name:", firebaseApp.name);
-      } else {
-        console.error("[clientApp.ts] Firebase initializeApp call completed but returned an INVALID app object. App Object:", firebaseApp);
-        firebaseApp = null; 
-      }
-    } catch (initError: any) {
-      console.error("[clientApp.ts] Firebase initializeApp FAILED with exception:", initError.message, initError.stack);
+      console.log('[clientApp.ts] Firebase app NEWLY initialized. Name:', firebaseApp?.name || 'Unknown');
+    } catch (e: any) {
+      console.error('[clientApp.ts] Error initializing new Firebase app:', e.message);
       firebaseApp = null;
     }
   } else {
-    console.log("[clientApp.ts] Getting existing Firebase app.");
     firebaseApp = getApp();
-    if (firebaseApp && typeof firebaseApp.name === 'string') {
-        console.log("[clientApp.ts] Existing Firebase app obtained. App Name:", firebaseApp.name);
-    } else {
-        console.error("[clientApp.ts] getApp() returned an INVALID app object. App Object:", firebaseApp);
-        firebaseApp = null;
-    }
+    console.log('[clientApp.ts] Existing Firebase app retrieved. Name:', firebaseApp?.name || 'Unknown');
   }
 
-  if (firebaseApp && typeof firebaseApp.name === 'string' && firebaseApp.options?.apiKey) {
-    console.log("[clientApp.ts] firebaseApp seems valid (has name and apiKey). Proceeding to initialize Auth and Firestore.");
-
+  if (firebaseApp && firebaseApp.name) { // Check if firebaseApp itself is valid
     // Initialize Auth
     try {
-      console.log("[clientApp.ts] Attempting to get Auth instance from firebaseApp:", firebaseApp.name);
-      const authInstance = getAuth(firebaseApp);
-      console.log("[clientApp.ts] getAuth call completed. Auth object type:", typeof authInstance);
-      
-      if (authInstance && typeof authInstance.onAuthStateChanged === 'function' && typeof authInstance.fetchSignInMethodsForEmail === 'function') {
-        auth = authInstance;
-        console.log("[clientApp.ts] Auth instance obtained successfully and seems valid (has onAuthStateChanged & fetchSignInMethodsForEmail).");
+      auth = getAuth(firebaseApp);
+      console.log('[clientApp.ts] getAuth() called.');
+      // Check for essential Auth methods
+      if (auth && typeof auth.onAuthStateChanged === 'function' && typeof auth.fetchSignInMethodsForEmail === 'function') {
+        console.log('[clientApp.ts] Auth instance obtained and appears VALID.');
       } else {
-        console.error("[clientApp.ts] getAuth returned an INVALID Auth object. Details: Type -", typeof authInstance, ", Has onAuthStateChanged:", !!(authInstance as any)?.onAuthStateChanged, ", Has fetchSignInMethodsForEmail:", !!(authInstance as any)?.fetchSignInMethodsForEmail);
-        auth = null;
+        console.error(
+          '[clientApp.ts] Auth instance from getAuth() is INVALID. Has onAuthStateChanged:',
+          !!(auth && typeof (auth as any).onAuthStateChanged === 'function'),
+          ', Has fetchSignInMethodsForEmail:',
+          !!(auth && typeof (auth as any).fetchSignInMethodsForEmail === 'function')
+        );
+        auth = null; // Nullify if invalid
       }
-    } catch (authError: any) {
-      console.error("[clientApp.ts] getAuth FAILED with an exception:", authError.message, authError.stack);
+    } catch (e: any) {
+      console.error('[clientApp.ts] Error calling getAuth():', e.message);
       auth = null;
     }
 
     // Initialize Firestore
     try {
-      console.log("[clientApp.ts] Attempting to get Firestore instance from firebaseApp:", firebaseApp.name);
-      const firestoreInstance = getFirestore(firebaseApp);
-      console.log("[clientApp.ts] getFirestore call completed. Firestore object type:", typeof firestoreInstance);
-      
-      if (firestoreInstance && typeof firestoreInstance.collection === 'function') {
-        db = firestoreInstance;
-        console.log("[clientApp.ts] Firestore instance obtained successfully and seems valid (has collection method).");
+      db = getFirestore(firebaseApp);
+      console.log('[clientApp.ts] getFirestore() called.');
+      // Check for essential Firestore methods
+      if (db && typeof db.collection === 'function') {
+        console.log('[clientApp.ts] Firestore instance obtained and appears VALID.');
       } else {
         console.error(
-          `[clientApp.ts] getFirestore did NOT return a valid Firestore instance (e.g., missing 'collection' method), for projectId ('${effectiveConfigForLog.projectId || 'NOT FOUND IN CONFIG'}'). ` +
-          `Firestore operations will fail. Forcing db to null. Firestore instance received type: ${typeof firestoreInstance}`
+          '[clientApp.ts] Firestore instance from getFirestore() is INVALID. Has collection method:',
+          !!(db && typeof (db as any).collection === 'function')
         );
-        try {
-          console.log('[clientApp.ts] Keys of invalid object from getFirestore (if any):', Object.keys(firestoreInstance || {}));
-        } catch (e) {
-           // console.log('[clientApp.ts] Could not get keys of invalid object from getFirestore.');
-        }
-        db = null;
+        db = null; // Nullify if invalid
       }
-    } catch (dbError: any) {
-      console.error('[clientApp.ts] getFirestore FAILED with an exception:', dbError.message, dbError.stack);
+    } catch (e: any) {
+      console.error('[clientApp.ts] Error calling getFirestore():', e.message);
       db = null;
     }
   } else {
-    console.error("[clientApp.ts] firebaseApp is NULL or invalid. Cannot initialize Auth and Firestore.");
+    console.error('[clientApp.ts] Firebase app object is null or invalid after initialization/retrieval. Auth and Firestore NOT initialized.');
     auth = null; // Ensure these are null if firebaseApp is bad
     db = null;
   }
 }
 
-// Final validation logs
-console.log("[clientApp.ts] Final Auth instance check before export. Is auth object present?", !!auth);
-if (auth) {
-    console.log("[clientApp.ts] Final Auth object has onAuthStateChanged property:", Object.prototype.hasOwnProperty.call(auth, 'onAuthStateChanged'), "and it is a function:", typeof auth.onAuthStateChanged === 'function');
-    console.log("[clientApp.ts] Final Auth object has fetchSignInMethodsForEmail property:", Object.prototype.hasOwnProperty.call(auth, 'fetchSignInMethodsForEmail'), "and it is a function:", typeof auth.fetchSignInMethodsForEmail === 'function');
-} else {
-    console.warn("[clientApp.ts] FINAL WARNING: Firebase Auth object is NULL. Auth operations WILL fail.");
-}
-
-console.log("[clientApp.ts] Final Firestore instance check before export. Is db object present?", !!db);
-if (db) {
-    console.log("[clientApp.ts] Final db object has collection property:", Object.prototype.hasOwnProperty.call(db, 'collection'), "and it is a function:", typeof db.collection === 'function');
-} else {
-    console.error("[clientApp.ts] FINAL CRITICAL CHECK: Firebase Firestore object is NULL. Firestore operations WILL fail.");
-}
-
+console.log('[clientApp.ts] Exporting final state: auth is', auth ? 'VALID Instance' : 'NULL', ', db is', db ? 'VALID Instance' : 'NULL');
 export { firebaseApp, auth, db };
