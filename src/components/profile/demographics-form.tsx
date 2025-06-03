@@ -44,15 +44,15 @@ const demographicsSchemaClient = z.object({
   cellPhone: z.string()
     .regex(/^$|^\d{3}-\d{3}-\d{4}$/, "Invalid phone format (e.g., 999-999-9999).")
     .optional(),
-  ageCertification: z.boolean().optional(), // Optional here, but conditionally required by refine
+  ageCertification: z.boolean().optional(),
 }).refine(data => data.email || data.cellPhone, {
-    message: "At least one contact method (Email or Cell Phone) is required for Multi-Factor Authentication.",
+    message: "At least one contact method (Email or Cell Phone) is required for account recovery and communication.", // Rephrased
     path: ["cellPhone"],
 }).refine(data => {
     if (data.dateOfBirth && calculateAge(data.dateOfBirth) >= 18) {
         return data.ageCertification === true;
     }
-    return true; // Not applicable if under 18 (though other logic prevents submission) or DOB not set
+    return true; 
 }, {
     message: "You must certify that you are 18 or older.",
     path: ["ageCertification"],
@@ -94,13 +94,13 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
       if (age < 18) {
         setIsUserOver18(false);
         setShowAgeRestrictionDialog(true);
-        form.setValue('ageCertification', false); // Reset certification if DOB changes to under 18
+        form.setValue('ageCertification', false); 
       } else {
         setIsUserOver18(true);
-        setShowAgeRestrictionDialog(false); // Ensure dialog is closed if user becomes 18+
+        setShowAgeRestrictionDialog(false); 
       }
     } else {
-      setIsUserOver18(null); // DOB not yet set
+      setIsUserOver18(null); 
       form.setValue('ageCertification', false);
     }
   }, [dobValue, form]);
@@ -119,7 +119,7 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
   const onSubmit = (values: DemographicsFormValues) => {
     if (dobValue && calculateAge(dobValue) < 18) {
       setShowAgeRestrictionDialog(true);
-      return; // Prevent submission
+      return; 
     }
 
     startTransition(async () => {
@@ -193,7 +193,6 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
                           selected={field.value}
                           onSelect={(date) => {
                             field.onChange(date);
-                            // Trigger age check logic by watching dobValue
                           }}
                           disabled={(date) => date > new Date() || date < new Date("1900-01-01") || isPending || showAgeRestrictionDialog}
                           initialFocus
@@ -243,7 +242,7 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
             {form.formState.errors.ageCertification && <p className="text-sm text-destructive">{form.formState.errors.ageCertification.message}</p>}
 
             {form.formState.errors.root && <p className="text-sm text-destructive mt-2">{form.formState.errors.root.message}</p>}
-            {(!form.getValues("email") && !form.getValues("cellPhone")) && <p className="text-sm text-destructive mt-2">At least Email or Cell Phone is required for MFA.</p>}
+            {(!form.getValues("email") && !form.getValues("cellPhone")) && <p className="text-sm text-destructive mt-2">At least Email or Cell Phone is required for contact.</p>}
 
             <div className="flex justify-end">
               <Button type="submit" disabled={isPending || showAgeRestrictionDialog || (isUserOver18 === false) || (isUserOver18 && !form.watch('ageCertification'))}>
@@ -270,3 +269,5 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
     </>
   );
 }
+
+    

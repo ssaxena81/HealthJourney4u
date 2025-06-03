@@ -3,7 +3,7 @@
 
 import {
   createUserWithEmailAndPassword,
-  fetchSignInMethodsForEmail,
+  // fetchSignInMethodsForEmail, // Removed as we're trying to avoid it
   signInWithEmailAndPassword,
   updatePassword as firebaseUpdatePassword, // Aliased to avoid conflict
   type AuthError,
@@ -17,9 +17,10 @@ import { differenceInYears, format } from 'date-fns';
 
 
 // --- Sign Up Schemas ---
-const CheckEmailInputSchema = z.object({
-  email: z.string().email({ message: "Invalid email address." }),
-});
+// CheckEmailInputSchema is removed as its functionality is merged into SignUpDetailsInputSchema implicitly
+// const CheckEmailInputSchema = z.object({
+//   email: z.string().email({ message: "Invalid email address." }),
+// });
 
 const SignUpDetailsInputSchema = z.object({
   email: z.string().email(),
@@ -31,57 +32,21 @@ const SignUpDetailsInputSchema = z.object({
   path: ['confirmPassword'],
 });
 
-// Simplified SignUpResult to ensure maximum serializability
 interface SignUpResult {
   success: boolean;
   userId?: string;
   error?: string;
   errorCode?: string;
-  details?: any; // For Zod error details if needed, though trying to avoid complex objects
+  details?: any;
 }
 
-export async function checkEmailAvailability(values: z.infer<typeof CheckEmailInputSchema>): Promise<{ available: boolean; error?: string; errorCode?: string }> {
-  console.log("[CHECK_EMAIL_AVAILABILITY_START] Checking email:", values.email);
-  try {
-    const validatedValues = CheckEmailInputSchema.parse(values);
-    console.log("[CHECK_EMAIL_AVAILABILITY_VALIDATED] Email validated by Zod:", validatedValues.email);
-
-    if (!firebaseAuth || !firebaseAuth.app || typeof firebaseAuth.fetchSignInMethodsForEmail !== 'function') {
-        console.warn("[CHECK_EMAIL_AVAILABILITY_FIREBASE_NOT_READY] Firebase Auth not properly initialized. Auth object:", firebaseAuth);
-        return { available: false, error: "Email verification service is temporarily unavailable. Please ensure Firebase is configured correctly.", errorCode: 'AUTH_SERVICE_UNAVAILABLE' };
-    }
-    console.log("[CHECK_EMAIL_AVAILABILITY_FIREBASE_READY] Firebase Auth instance seems okay.");
-
-    const methods = await fetchSignInMethodsForEmail(firebaseAuth, validatedValues.email);
-    console.log("[CHECK_EMAIL_AVAILABILITY_FIREBASE_METHODS_FETCHED] Sign-in methods fetched:", methods);
-
-    if (methods.length > 0) {
-      console.log("[CHECK_EMAIL_AVAILABILITY_EMAIL_IN_USE] Email is already registered.");
-      return { available: false, error: "This email is already registered. Please try logging in or use 'Forgot my password'.", errorCode: 'auth/email-already-in-use' };
-    }
-    console.log("[CHECK_EMAIL_AVAILABILITY_EMAIL_AVAILABLE] Email is available.");
-    return { available: true };
-  } catch (error: any) {
-    console.error("[CHECK_EMAIL_AVAILABILITY_OUTER_ERROR] Raw error in checkEmailAvailability:", error);
-    const errorMessage = String(error.message || 'Could not verify email availability.');
-    const errorCode = String(error.code || 'UNKNOWN_ERROR');
-    if (error instanceof z.ZodError) {
-        console.error("[CHECK_EMAIL_AVAILABILITY_ZOD_ERROR_DETAILS] ZodError:", error.flatten());
-        return { available: false, error: "Invalid email format provided.", errorCode: 'VALIDATION_ERROR' };
-    }
-    if (error.code === 'auth/invalid-email') {
-      return { available: false, error: "The email address is badly formatted.", errorCode: error.code };
-    }
-    console.error(`[CHECK_EMAIL_AVAILABILITY_FIREBASE_ERROR] Firebase error. Code: ${errorCode}, Message: ${errorMessage}`);
-    return { available: false, error: `Could not verify email. Service error: ${errorMessage}`, errorCode };
-  }
-}
+// Removed checkEmailAvailability as it's no longer directly used by the signup flow
+// export async function checkEmailAvailability(values: z.infer<typeof CheckEmailInputSchema>): Promise<{ available: boolean; error?: string; errorCode?: string }> { ... }
 
 
 export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema>): Promise<SignUpResult> {
   console.log("[SIGNUP_ACTION_START] signUpUser action initiated with email:", values.email, "tier:", values.subscriptionTier);
 
-  // Explicit check for Firebase services readiness within the server action
   if (!firebaseAuth || !firebaseAuth.app || typeof firebaseAuth.createUserWithEmailAndPassword !== 'function') {
     console.error("[SIGNUP_ACTION_CRITICAL_FAILURE] Firebase Auth service appears uninitialized or misconfigured on the server for signUpUser. firebaseAuth:", firebaseAuth);
     return {
@@ -92,8 +57,6 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
   }
   if (!db || !db.app || typeof doc !== 'function' || typeof setDoc !== 'function') {
     console.error("[SIGNUP_ACTION_CRITICAL_FAILURE] Firestore service (db) appears uninitialized or misconfigured on the server for signUpUser. db:", db);
-    // Account might be created in Auth but profile won't be saved. This is a serious state.
-    // For now, we'll prevent Auth creation if DB is also not ready.
     return {
       success: false,
       error: "Critical server error: Database service is not ready. Profile cannot be saved. Please contact support.",
@@ -151,8 +114,6 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       const errorCode = String(firestoreError.code || 'FIRESTORE_ERROR');
       console.error(`[SIGNUP_FIRESTORE_ERROR_DETAILS] Code: ${errorCode}, Message: ${errorMessage}`);
       console.log("[SIGNUP_ACTION_ATTEMPT_RETURN_ERROR_FIRESTORE_SETDOC_FAILED]");
-      // User account exists in Auth, but profile creation failed. This is a partial success/failure.
-      // For now, returning as a failure from client's perspective for signup.
       return { success: false, error: `Account created but profile setup failed: ${errorMessage}. Please contact support.`, errorCode, userId: userCredential.user.uid };
     }
 
@@ -187,7 +148,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
 const LoginInputSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1, { message: "Password is required." }),
-  mfaCode: z.string().length(8, { message: "MFA code must be 8 digits."}).optional().or(z.literal('')),
+  // mfaCode: z.string().length(8, { message: "MFA code must be 8 digits."}).optional().or(z.literal('')), // Removed MFA
 });
 
 interface LoginResult {
@@ -195,7 +156,7 @@ interface LoginResult {
   userId?: string;
   error?: string;
   errorCode?: string;
-  requiresMfa?: boolean;
+  // requiresMfa?: boolean; // Removed MFA
   passwordExpired?: boolean;
   termsNotAccepted?: boolean; 
   userProfile?: UserProfile | null; 
@@ -283,59 +244,9 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       return { success: true, userId, passwordExpired: true, userProfile };
     }
         
-    if (userProfile.mfaMethod && !validatedValues.mfaCode) {
-      const mfaCode = Math.floor(10000000 + Math.random() * 90000000).toString();
-      const expiresAtTimestamp = Timestamp.fromMillis(Date.now() + 5 * 60 * 1000); // 5 minutes expiry
-
-      console.log(`[LOGIN_MFA_CODE_GENERATED] MFA Code for user ${userProfile.email} is ${mfaCode}. It will expire at ${expiresAtTimestamp.toDate().toISOString()}.`);
-
-      try {
-        const userDocRef = doc(db, "users", userId);
-        await updateDoc(userDocRef, { 
-          mfaCodeAttempt: { code: mfaCode, expiresAt: expiresAtTimestamp.toDate().toISOString() } 
-        });
-        console.log(`[LOGIN_MFA_CODE_STORED] MFA code attempt stored for user ${userId}`);
-      } catch (dbError: any) {
-        console.error(`[LOGIN_MFA_DB_ERROR] Failed to store MFA code attempt for user ${userId}:`, dbError);
-        console.log("[LOGIN_ACTION_ATTEMPT_RETURN_ERROR_MFA_INIT_FAILURE]");
-        return { 
-          success: false, 
-          requiresMfa: true, 
-          error: "MFA is required, but there was an issue initiating it. Please try again.", 
-          userProfile, 
-          errorCode: 'MFA_INIT_FAILURE'
-        };
-      }
-      console.log("[LOGIN_ACTION_ATTEMPT_RETURN_ERROR_MFA_REQUIRED]");
-      return { success: false, requiresMfa: true, error: "MFA code required. Check your device (or server console for simulation).", userProfile, errorCode: 'MFA_REQUIRED' };
-    }
-    
-    if (userProfile.mfaMethod && validatedValues.mfaCode) {
-      if (!userProfile.mfaCodeAttempt || !userProfile.mfaCodeAttempt.code) {
-        console.log("[LOGIN_MFA_NO_ATTEMPT] No MFA code attempt found or code is missing for user:", userId);
-        console.log("[LOGIN_ACTION_ATTEMPT_RETURN_ERROR_MFA_NO_ATTEMPT]");
-        return { success: false, error: "No MFA code attempt found or code is missing. Please try logging in again.", userProfile, errorCode: 'MFA_NO_ATTEMPT' };
-      }
-      if (new Date() > new Date(userProfile.mfaCodeAttempt.expiresAt)) {
-        console.log("[LOGIN_MFA_EXPIRED] MFA code expired for user:", userId);
-        console.log("[LOGIN_ACTION_ATTEMPT_RETURN_ERROR_MFA_EXPIRED]");
-        return { success: false, error: "MFA code has expired. Please try logging in again to get a new code.", userProfile, errorCode: 'MFA_EXPIRED' };
-      }
-      if (userProfile.mfaCodeAttempt.code !== validatedValues.mfaCode) {
-        console.log("[LOGIN_MFA_INVALID_CODE] Invalid MFA code for user:", userId);
-        console.log("[LOGIN_ACTION_ATTEMPT_RETURN_ERROR_MFA_INVALID_CODE]");
-        return { success: false, error: "Invalid MFA code.", userProfile, errorCode: 'MFA_INVALID_CODE' };
-      }
-      
-      try {
-        const userDocRef = doc(db, "users", userId);
-        await updateDoc(userDocRef, { mfaCodeAttempt: null }); 
-        console.log(`[LOGIN_MFA_CODE_CLEARED] MFA code attempt cleared for user ${userId}`);
-      } catch (dbError: any) {
-        console.error(`[LOGIN_MFA_DB_ERROR_CLEARING] Failed to clear MFA code attempt for user ${userId}:`, dbError);
-      }
-      console.log(`[LOGIN_MFA_SUCCESS] MFA code validated successfully for user ${userId}`);
-    }
+    // MFA Logic Removed
+    // if (userProfile.mfaMethod && !validatedValues.mfaCode) { ... }
+    // if (userProfile.mfaMethod && validatedValues.mfaCode) { ... }
 
     console.log("[LOGIN_ACTION_SUCCESS] loginUser action completed successfully for UID:", userId);
     console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_FULL]");
@@ -403,12 +314,17 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
     }
     console.log("[SEND_RESET_CODE_FIREBASE_READY] Firebase Auth instance seems okay.");
 
-    const methods = await fetchSignInMethodsForEmail(firebaseAuth, validatedValues.email);
-    console.log("[SEND_RESET_CODE_METHODS_FETCHED] Sign-in methods fetched for email:", validatedValues.email, methods);
-    if (methods.length === 0) {
-      console.log("[SEND_RESET_CODE_EMAIL_NOT_FOUND] Email not found, sending generic message.");
-      return { success: true, message: "If your email is registered, instructions to reset your password have been sent. (Simulation)" };
-    }
+    // With fetchSignInMethodsForEmail potentially problematic, we proceed assuming the email *might* exist.
+    // Firebase's sendPasswordResetEmail (not used here directly, but conceptually similar for custom flow)
+    // typically doesn't confirm/deny email existence for security.
+    // Our custom flow with a code relies on the user having access to the email.
+
+    // const methods = await fetchSignInMethodsForEmail(firebaseAuth, validatedValues.email);
+    // console.log("[SEND_RESET_CODE_METHODS_FETCHED] Sign-in methods fetched for email:", validatedValues.email, methods);
+    // if (methods.length === 0) {
+    //   console.log("[SEND_RESET_CODE_EMAIL_NOT_FOUND] Email not found, sending generic message.");
+    //   return { success: true, message: "If your email is registered, instructions to reset your password have been sent. (Simulation)" };
+    // }
 
     if (!db || !db.app || typeof collection !== 'function' || typeof query !== 'function' || typeof where !== 'function' || typeof getDocs !== 'function' || typeof doc !== 'function' || typeof updateDoc !== 'function') {
         console.error("[SEND_RESET_CODE_FIRESTORE_NOT_READY] Firestore not available. DB App:", db?.app);
@@ -420,8 +336,9 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
     const querySnapshot = await getDocs(q);
 
     if (querySnapshot.empty) {
-        console.log("[SEND_RESET_CODE_USER_NOT_IN_FIRESTORE] User with email not found in Firestore, though exists in Auth. Sending generic message.");
-        return { success: true, message: "If your email is registered, instructions to reset your password have been sent. (Simulation - User not in DB)" };
+        console.log("[SEND_RESET_CODE_USER_NOT_IN_FIRESTORE] User with email not found in Firestore. Sending generic message to avoid enumeration.");
+        // For security, don't reveal if the email exists or not.
+        return { success: true, message: "If your email is registered, an 8-digit code has been sent. Please check your email/phone (or server console for simulation)." };
     }
     
     const userDoc = querySnapshot.docs[0]; 
@@ -442,6 +359,7 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
       console.error("[SEND_RESET_CODE_ACTION_ZOD_DETAILS] ZodError:", error.flatten());
       return { success: false, error: 'Invalid input.', errorCode: 'VALIDATION_ERROR', details: error.flatten()};
     }
+    // Generic message for other errors too, to avoid email enumeration
     return { success: true, message: "If an account with that email exists, we've sent instructions to reset your password. (Simulation - Error occurred)"};
   }
 }
@@ -591,7 +509,7 @@ const DemographicsSchemaServer = z.object({
   cellPhone: z.string().regex(/^$|^\d{3}-\d{3}-\d{4}$/, "Invalid phone format (e.g., 999-999-9999).").optional(),
   isAgeCertified: z.boolean().optional(),
 }).refine(data => data.email || data.cellPhone, {
-    message: "Either email or cell phone must be provided for contact and MFA.",
+    message: "Either email or cell phone must be provided for contact purposes.",
     path: ["cellPhone"],
 }).refine(data => {
     if (serverCalculateAge(data.dateOfBirth) >= 18) {
@@ -806,4 +724,6 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
         return { success: false, error: errorMessage, errorCode: errorCode};
     }
 }
+    
+
     

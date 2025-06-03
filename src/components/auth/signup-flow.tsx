@@ -11,21 +11,17 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { checkEmailAvailability, signUpUser } from '@/app/actions/auth';
+import { signUpUser } from '@/app/actions/auth'; // checkEmailAvailability removed
 import { passwordSchema } from '@/types';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { SubscriptionTier, UserProfile } from '@/types';
 import { subscriptionTiers } from '@/types';
-import ComparePlansDialog from '@/components/ui/compare-plans-dialog'; 
+// import ComparePlansDialog from '@/components/ui/compare-plans-dialog'; // Kept commented
 import { useAuth } from '@/hooks/useAuth';
 
-const step1Schema = z.object({
+const signUpFormSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
-});
-type Step1Values = z.infer<typeof step1Schema>;
-
-const step2Schema = z.object({
   password: passwordSchema,
   confirmPassword: passwordSchema,
   subscriptionTier: z.custom<SubscriptionTier>((val) => subscriptionTiers.includes(val as SubscriptionTier), {
@@ -35,60 +31,41 @@ const step2Schema = z.object({
   message: "Passwords don't match.",
   path: ['confirmPassword'],
 });
-type Step2Values = z.infer<typeof step2Schema>;
+
+type SignUpFormValues = z.infer<typeof signUpFormSchema>;
 
 export default function SignUpFlow() {
   const router = useRouter();
   const { toast } = useToast();
-  const { checkAuthState, setUserProfile: setAuthUserProfile } = useAuth();
+  const { checkAuthState } = useAuth(); // setUserProfile removed as it's not directly used here now
   const [isPending, startTransition] = useTransition();
-  const [currentStep, setCurrentStep] = useState(1);
-  const [email, setEmail] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const step1Form = useForm<Step1Values>({
-    resolver: zodResolver(step1Schema),
-    defaultValues: { email: '' },
+  const form = useForm<SignUpFormValues>({
+    resolver: zodResolver(signUpFormSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+      confirmPassword: '',
+      subscriptionTier: 'free'
+    },
   });
 
-  const step2Form = useForm<Step2Values>({
-    resolver: zodResolver(step2Schema),
-    defaultValues: { password: '', confirmPassword: '', subscriptionTier: 'free' },
-  });
 
-  const handleStep1Submit = (values: Step1Values) => {
+  const handleFormSubmit = (values: SignUpFormValues) => {
     setError(null);
-    console.log('[SignUpFlow handleStep1Submit] Checking email:', values.email);
-    startTransition(async () => {
-      const result = await checkEmailAvailability({ email: values.email });
-      console.log('[SignUpFlow handleStep1Submit] Server action result from checkEmailAvailability:', result);
-      if (result.available) {
-        setEmail(values.email);
-        setCurrentStep(2);
-        toast({ title: 'Email Available', description: 'Please proceed to the next step.' });
-      } else {
-        const errorMessage = result.error || 'This email is already registered or invalid.';
-        setError(errorMessage);
-        step1Form.setError('email', { type: 'manual', message: errorMessage });
-        toast({ title: 'Email Check Failed', description: errorMessage, variant: 'destructive' });
-      }
-    });
-  };
-
-  const handleStep2Submit = (values: Step2Values) => {
-    setError(null);
-    console.log('[SignUpFlow handleStep2Submit] Submitting Step 2 with email:', email, 'and values:', values);
+    console.log('[SignUpFlow handleFormSubmit] Submitting Sign Up form with values:', values);
     startTransition(async () => {
       const result = await signUpUser({
-        email: email,
+        email: values.email,
         password: values.password,
         confirmPassword: values.confirmPassword,
         subscriptionTier: values.subscriptionTier,
       });
       
-      console.log('[SignUpFlow handleStep2Submit] Server action result from signUpUser:', result);
+      console.log('[SignUpFlow handleFormSubmit] Server action result from signUpUser:', result);
 
       if (result.success && result.userId) { 
         toast({
@@ -110,14 +87,16 @@ export default function SignUpFlow() {
           description: `${displayError}${displayErrorCode}`,
           variant: 'destructive',
         });
-
+        
+        if (result.errorCode === 'auth/email-already-in-use') {
+            form.setError('email', { type: 'manual', message: 'This email is already registered. Please log in or use a different email.' });
+        }
         if (result.details?.fieldErrors?.password) {
-            step2Form.setError('password', { type: 'manual', message: (result.details.fieldErrors.password as string[]).join(', ') });
+            form.setError('password', { type: 'manual', message: (result.details.fieldErrors.password as string[]).join(', ') });
         }
         if (result.details?.fieldErrors?.confirmPassword) {
-            step2Form.setError('confirmPassword', { type: 'manual', message: (result.details.fieldErrors.confirmPassword as string[]).join(', ') });
+            form.setError('confirmPassword', { type: 'manual', message: (result.details.fieldErrors.confirmPassword as string[]).join(', ') });
         }
-        // If there's a general errorCode related to Firebase config, it will be in the main error message.
       }
     });
   };
@@ -130,43 +109,30 @@ export default function SignUpFlow() {
         </div>
       )}
 
-      {currentStep === 1 && (
-        <form onSubmit={step1Form.handleSubmit(handleStep1Submit)} className="space-y-6">
+      <form onSubmit={form.handleSubmit(handleFormSubmit)} className="space-y-6">
           <div className="space-y-2">
-            <Label htmlFor="email-step1">Email</Label>
+            <Label htmlFor="email-signup">Email</Label>
             <Input
-              id="email-step1"
+              id="email-signup"
               type="email"
               placeholder="you@example.com"
-              {...step1Form.register('email')}
+              {...form.register('email')}
               disabled={isPending}
               autoComplete="email"
             />
-            {step1Form.formState.errors.email && (
-              <p className="text-sm text-destructive mt-1">{step1Form.formState.errors.email.message}</p>
+            {form.formState.errors.email && (
+              <p className="text-sm text-destructive mt-1">{form.formState.errors.email.message}</p>
             )}
-          </div>
-          <Button type="submit" className="w-full" disabled={isPending}>
-            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Continue'}
-          </Button>
-        </form>
-      )}
-
-      {currentStep === 2 && (
-        <form onSubmit={step2Form.handleSubmit(handleStep2Submit)} className="space-y-6">
-          <div>
-            <p className="text-sm text-muted-foreground">Creating account for: <strong>{email}</strong></p>
-            <Button variant="link" size="sm" className="p-0 h-auto" onClick={() => {setCurrentStep(1); setError(null); step1Form.setValue('email', email);}}>Change email</Button>
           </div>
           
           <div className="space-y-2">
-            <Label htmlFor="password-step2">Password</Label>
+            <Label htmlFor="password-signup">Password</Label>
             <div className="relative">
               <Input
-                id="password-step2"
+                id="password-signup"
                 type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••"
-                {...step2Form.register('password')}
+                {...form.register('password')}
                 disabled={isPending}
                 autoComplete="new-password"
               />
@@ -174,19 +140,19 @@ export default function SignUpFlow() {
                 {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
-            {step2Form.formState.errors.password && (
-              <p className="text-sm text-destructive mt-1">{step2Form.formState.errors.password.message}</p>
+            {form.formState.errors.password && (
+              <p className="text-sm text-destructive mt-1">{form.formState.errors.password.message}</p>
             )}
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="confirmPassword-step2">Confirm Password</Label>
+            <Label htmlFor="confirmPassword-signup">Confirm Password</Label>
              <div className="relative">
               <Input
-                id="confirmPassword-step2"
+                id="confirmPassword-signup"
                 type={showConfirmPassword ? 'text' : 'password'}
                 placeholder="••••••••"
-                {...step2Form.register('confirmPassword')}
+                {...form.register('confirmPassword')}
                 disabled={isPending}
                 autoComplete="new-password"
               />
@@ -194,8 +160,8 @@ export default function SignUpFlow() {
                 {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
               </Button>
             </div>
-            {step2Form.formState.errors.confirmPassword && (
-              <p className="text-sm text-destructive mt-1">{step2Form.formState.errors.confirmPassword.message}</p>
+            {form.formState.errors.confirmPassword && (
+              <p className="text-sm text-destructive mt-1">{form.formState.errors.confirmPassword.message}</p>
             )}
           </div>
           <p className="text-xs text-muted-foreground">
@@ -209,7 +175,7 @@ export default function SignUpFlow() {
             </div>
             <Controller
               name="subscriptionTier"
-              control={step2Form.control}
+              control={form.control}
               render={({ field }) => (
                 <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isPending}>
                   <SelectTrigger id="subscriptionTier">
@@ -225,8 +191,8 @@ export default function SignUpFlow() {
                 </Select>
               )}
             />
-            {step2Form.formState.errors.subscriptionTier && (
-              <p className="text-sm text-destructive mt-1">{step2Form.formState.errors.subscriptionTier.message}</p>
+            {form.formState.errors.subscriptionTier && (
+              <p className="text-sm text-destructive mt-1">{form.formState.errors.subscriptionTier.message}</p>
             )}
           </div>
 
@@ -234,11 +200,8 @@ export default function SignUpFlow() {
             {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Create Account'}
           </Button>
         </form>
-      )}
     </div>
   );
 }
-
-    
 
     

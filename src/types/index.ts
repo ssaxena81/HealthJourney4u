@@ -327,8 +327,8 @@ export interface UserProfile {
   dateOfBirth?: string; 
   email: string; 
   cellPhone?: string; 
-  mfaMethod?: 'email' | 'sms'; 
-  mfaCodeAttempt?: { code: string; expiresAt: string; };
+  // mfaMethod?: 'email' | 'sms'; // Removed for now
+  // mfaCodeAttempt?: { code: string; expiresAt: string; }; // Removed for now
   passwordResetCodeAttempt?: { code: string; expiresAt: string; }; 
   isAgeCertified?: boolean; 
 
@@ -396,7 +396,7 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Detailed Reports", free: "Basic", silver: "Standard", gold: "Advanced", platinum: "Premium" },
   { feature: "Password Expiry (90 days)", free: true, silver: true, gold: true, platinum: true },
   { feature: "Terms & Conditions Acceptance", free: true, silver: true, gold: true, platinum: true },
-  { feature: "Multi-Factor Authentication", free: true, silver: true, gold: true, platinum: true },
+  // { feature: "Multi-Factor Authentication", free: true, silver: true, gold: true, platinum: true }, // Removed for now
   { feature: "Fitbit Daily Summary Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Fitbit Heart Rate Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Fitbit Sleep Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
@@ -521,3 +521,5 @@ export interface TermsAndConditionsConfig {
   text: string;
   publishedAt?: string; // ISO Timestamp
 }
+
+    
