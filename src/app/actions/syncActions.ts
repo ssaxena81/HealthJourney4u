@@ -31,12 +31,23 @@ interface SyncAllResults {
 
 export async function syncAllConnectedData(): Promise<SyncAllResults> {
   console.log('[SyncActions] Starting syncAllConnectedData...');
+
+  if (!firebaseAuth) {
+    console.error('[SyncActions] Firebase Auth service is not available for syncAllConnectedData.');
+    return { success: false, results: [], error: 'Authentication service unavailable.' };
+  }
+
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
     console.error('[SyncActions] User not authenticated for syncAllConnectedData.');
     return { success: false, results: [], error: 'User not authenticated.' };
   }
   const userId = currentUser.uid;
+
+  if (!db) {
+    console.error('[SyncActions] Firestore service is not available for syncAllConnectedData.');
+    return { success: false, results: [], error: 'Database service unavailable.' };
+  }
 
   let userProfile: UserProfile | null = null;
   const userProfileDocRef = doc(db, 'users', userId);
