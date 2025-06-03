@@ -16,8 +16,7 @@ import {
 import { AppLogo } from '@/components/icons/app-logo';
 // import { Button } from '@/components/ui/button'; // No longer used for settings button here
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dumbbell, Bed, Heart, UserCircle, LogOut, Footprints, Mountain as HikingIcon, Waves, RefreshCw } from 'lucide-react';
-import Run from 'lucide-react/dist/esm/icons/run';
+import { Dumbbell, Bed, Heart, UserCircle, LogOut, Footprints, Mountain as HikingIcon, Waves, RefreshCw, Run } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 

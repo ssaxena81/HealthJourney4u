@@ -10,8 +10,7 @@ import { getNormalizedActivitiesForDateRangeAndType } from '@/app/actions/activi
 import type { NormalizedActivityFirestore, RunningRadarGoals } from '@/types';
 import { NormalizedActivityType } from '@/types';
 import { format, parseISO, startOfDay, endOfDay, differenceInDays } from 'date-fns';
-import { Loader2 } from 'lucide-react';
-import Run from 'lucide-react/dist/esm/icons/run';
+import { Loader2, Run } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   RadarChart,
