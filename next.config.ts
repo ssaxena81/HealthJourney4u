@@ -27,9 +27,9 @@ const nextConfig = {
   experimental: {
     // This is to allow the Next.js dev server to be accessed from a different origin,
     // which can happen in some development environments (like IDX/Project IDX).
-    allowedDevOrigins: [
-        'http://localhost:9003', // Matches your package.json dev script port
-    ],
+    // allowedDevOrigins: [  // Commented out as it's causing a config error
+    //     'http://localhost:9003', // Matches your package.json dev script port
+    // ],
   },
 };
 

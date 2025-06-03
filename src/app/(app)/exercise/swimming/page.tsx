@@ -185,7 +185,7 @@ export default function SwimmingExercisePage() {
   const chartConfig = {
     performance: {
       label: 'Swimming Performance',
-      color: 'hsl(var(--chart-4))', // Using a different chart color
+      color: 'hsl(var(--chart-4))', 
     },
   };
   
@@ -361,5 +361,3 @@ export default function SwimmingExercisePage() {
     </div>
   );
 }
-
-```

@@ -15,42 +15,39 @@ import { updateWalkingRadarGoals } from '@/app/actions/userProfileActions';
 import { Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
 
-// Schema for validating individual goal values in the form
 const optionalNonNegativeNumberWithEmptyAsUndefined = z.preprocess(
   (val) => (val === "" || val === null || val === undefined ? undefined : Number(val)),
   z.number().nonnegative("Must be a non-negative number (0 or more).").optional().nullable()
 );
 
 const walkingGoalsFormSchema = z.object({
-  // Maximums
   maxDailySteps: optionalNonNegativeNumberWithEmptyAsUndefined,
   maxDailyDistanceMeters: optionalNonNegativeNumberWithEmptyAsUndefined,
-  maxDailyDurationMinutes: optionalNonNegativeNumberWithEmptyAsUndefined, // Input in minutes
+  maxDailyDurationMinutes: optionalNonNegativeNumberWithEmptyAsUndefined, 
   maxDailySessions: optionalNonNegativeNumberWithEmptyAsUndefined,
-  // Minimums
   minDailySteps: optionalNonNegativeNumberWithEmptyAsUndefined,
   minDailyDistanceMeters: optionalNonNegativeNumberWithEmptyAsUndefined,
-  minDailyDurationMinutes: optionalNonNegativeNumberWithEmptyAsUndefined, // Input in minutes
+  minDailyDurationMinutes: optionalNonNegativeNumberWithEmptyAsUndefined, 
   minDailySessions: optionalNonNegativeNumberWithEmptyAsUndefined,
-}).superRefine((data, ctx) => { // superRefine for cross-field validation
+}).superRefine((data, ctx) => { 
   const checkMinMax = (minVal?: number | null, maxVal?: number | null, fieldNamePrefix?: string) => {
     if (minVal !== undefined && minVal !== null && maxVal !== undefined && maxVal !== null && minVal > maxVal) {
       if (fieldNamePrefix) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: `Min ${fieldNamePrefix.toLowerCase()} cannot be greater than Max ${fieldNamePrefix.toLowerCase()}.`,
-            path: [`min${fieldNamePrefix}`], // Report error on min field
+            path: [`min${fieldNamePrefix}`], 
           });
            ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: `Max ${fieldNamePrefix.toLowerCase()} cannot be less than Min ${fieldNamePrefix.toLowerCase()}.`,
-            path: [`max${fieldNamePrefix}`], // Optionally report on max field too
+            path: [`max${fieldNamePrefix}`], 
           });
       } else {
          ctx.addIssue({
             code: z.ZodIssueCode.custom,
             message: "Minimum value cannot be greater than its corresponding maximum value.",
-            path: ['minDailySteps'], // Generic path if no prefix
+            path: ['minDailySteps'], 
           });
       }
     }
@@ -114,15 +111,13 @@ export default function WalkingGoalsForm({ userProfile, onProfileUpdate }: Walki
         toast({ title: 'Update Failed', description: result.error || 'Could not save walking goals.', variant: 'destructive' });
         if (result.details?.fieldErrors) {
           Object.entries(result.details.fieldErrors).forEach(([field, messages]) => {
-            // Check if the field exists in WalkingGoalsFormValues before setting error
             if (field in form.getValues()) {
                 form.setError(field as keyof WalkingGoalsFormValues, {
                 type: 'server',
                 message: (messages as string[])?.join(', '),
                 });
             } else {
-                // Handle form-level errors (from .refine or .superRefine without a specific path)
-                form.setError("root.serverError" as any, { // Use a generic root error
+                form.setError("root.serverError" as any, { 
                     type: "server",
                     message: (messages as string[])?.join(', ') || result.error
                 });
@@ -149,7 +144,6 @@ export default function WalkingGoalsForm({ userProfile, onProfileUpdate }: Walki
           {form.formState.errors.root?.serverError && (
             <p className="text-sm text-destructive mt-1">{(form.formState.errors.root.serverError as any).message}</p>
           )}
-          {/* STEPS */}
           <div>
             <h3 className="text-lg font-medium mb-2">Daily Steps</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
@@ -167,7 +161,6 @@ export default function WalkingGoalsForm({ userProfile, onProfileUpdate }: Walki
           </div>
           <Separator />
 
-          {/* DISTANCE */}
           <div>
             <h3 className="text-lg font-medium mb-2">Daily Distance (meters)</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
@@ -185,7 +178,6 @@ export default function WalkingGoalsForm({ userProfile, onProfileUpdate }: Walki
           </div>
           <Separator />
 
-          {/* DURATION */}
           <div>
             <h3 className="text-lg font-medium mb-2">Daily Duration (minutes)</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
@@ -203,7 +195,6 @@ export default function WalkingGoalsForm({ userProfile, onProfileUpdate }: Walki
           </div>
           <Separator />
 
-          {/* SESSIONS */}
           <div>
             <h3 className="text-lg font-medium mb-2">Daily Sessions</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
@@ -230,4 +221,3 @@ export default function WalkingGoalsForm({ userProfile, onProfileUpdate }: Walki
     </Card>
   );
 }
-```

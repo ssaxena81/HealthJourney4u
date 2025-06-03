@@ -121,7 +121,6 @@ export default function SwimmingGoalsForm({ userProfile, onProfileUpdate }: Swim
             <p className="text-sm text-destructive mt-1">{(form.formState.errors.root.serverError as any).message}</p>
           )}
           
-          {/* DISTANCE */}
           <div>
             <h3 className="text-lg font-medium mb-2">Daily Distance (meters)</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
@@ -139,7 +138,6 @@ export default function SwimmingGoalsForm({ userProfile, onProfileUpdate }: Swim
           </div>
           <Separator />
 
-          {/* DURATION */}
           <div>
             <h3 className="text-lg font-medium mb-2">Daily Duration (minutes)</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
@@ -157,7 +155,6 @@ export default function SwimmingGoalsForm({ userProfile, onProfileUpdate }: Swim
           </div>
           <Separator />
 
-          {/* SESSIONS */}
           <div>
             <h3 className="text-lg font-medium mb-2">Daily Sessions</h3>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
@@ -184,4 +181,3 @@ export default function SwimmingGoalsForm({ userProfile, onProfileUpdate }: Swim
     </Card>
   );
 }
-```
