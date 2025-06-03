@@ -16,9 +16,32 @@ import {
 import { AppLogo } from '@/components/icons/app-logo';
 // import { Button } from '@/components/ui/button'; // No longer used for settings button here
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Dumbbell, Bed, Heart, UserCircle, LogOut, Footprints, Mountain as HikingIcon, Waves, RefreshCw, Run } from 'lucide-react';
+import { Dumbbell, Bed, Heart, UserCircle, LogOut, Footprints, Mountain as HikingIcon, Waves, RefreshCw } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
+import React from 'react'; // Import React for SVG component
+
+// Inline SVG for the Run icon
+const RunIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <circle cx="12" cy="5" r="1" />
+    <path d="M12 20a5 5 0 0 0-4.2-7.8c.2-.2.3-.5.3-.8l.2-1.5c.1-.4 0-.8-.4-1L6 7.4V6h3.5c.4 0 .8.2 1.1.5l1.5 1.5" />
+    <path d="M16 10h4l-2 4-2-4" />
+    <path d="m7.5 9.5 2 5L11 18l2-4-1.5-3z" />
+  </svg>
+);
+
 
 interface SubNavItemDef {
   href: string;
@@ -62,7 +85,7 @@ export default function SidebarNav({ onSyncAllClick }: SidebarNavProps) {
       href: '/exercise', // Main exercise page
       subItems: [
         { href: '/exercise/walking', label: 'Walking', icon: Footprints },
-        { href: '/exercise/running', label: 'Running', icon: Run },
+        { href: '/exercise/running', label: 'Running', icon: RunIcon },
         { href: '/exercise/hiking', label: 'Hiking', icon: HikingIcon },
         { href: '/exercise/swimming', label: 'Swimming', icon: Waves },
       ],

@@ -10,7 +10,7 @@ import { getNormalizedActivitiesForDateRangeAndType } from '@/app/actions/activi
 import type { NormalizedActivityFirestore, RunningRadarGoals } from '@/types';
 import { NormalizedActivityType } from '@/types';
 import { format, parseISO, startOfDay, endOfDay, differenceInDays } from 'date-fns';
-import { Loader2, Run } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   RadarChart,
@@ -22,6 +22,28 @@ import {
   ResponsiveContainer,
 } from 'recharts';
 import { ChartContainer, ChartTooltip, ChartTooltipContent } from '@/components/ui/chart';
+
+// Inline SVG for the Run icon
+const RunIcon = (props: React.SVGProps<SVGSVGElement>) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    width="24"
+    height="24"
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
+    <circle cx="12" cy="5" r="1" />
+    <path d="M12 20a5 5 0 0 0-4.2-7.8c.2-.2.3-.5.3-.8l.2-1.5c.1-.4 0-.8-.4-1L6 7.4V6h3.5c.4 0 .8.2 1.1.5l1.5 1.5" />
+    <path d="M16 10h4l-2 4-2-4" />
+    <path d="m7.5 9.5 2 5L11 18l2-4-1.5-3z" />
+  </svg>
+);
+
 
 // Default maximums for normalization IF user has not configured them
 const DEFAULT_MAX_AVG_DAILY_DISTANCE_METERS = 8000; // 8km
@@ -223,7 +245,7 @@ export default function RunningExercisePage() {
       <Card className="shadow-lg rounded-xl">
         <CardHeader>
           <div className="flex items-center space-x-3">
-            <Run className="h-8 w-8 text-primary" />
+            <RunIcon className="h-8 w-8 text-primary" />
             <div>
               <CardTitle className="text-3xl font-bold tracking-tight">Running Activities</CardTitle>
               <CardDescription className="text-muted-foreground">
@@ -331,7 +353,7 @@ export default function RunningExercisePage() {
               <Card key={activity.id} className="shadow-sm hover:shadow-md transition-shadow rounded-lg overflow-hidden">
                 <CardHeader className="pb-2 bg-muted/30">
                   <CardTitle className="text-lg capitalize flex items-center gap-2">
-                     <Run className="h-5 w-5 text-primary" />
+                     <RunIcon className="h-5 w-5 text-primary" />
                     {activity.name || `Run on ${format(parseISO(activity.startTimeUtc), 'PP')}`}
                   </CardTitle>
                    <CardDescription className="text-xs">
