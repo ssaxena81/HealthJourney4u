@@ -6,7 +6,7 @@ import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import type { UserProfile, SubscriptionTier, NormalizedActivityFirestore, GoogleFitApiCallStats } from '@/types';
 import { NormalizedActivityType } from '@/types';
 import * as googleFitService from '@/lib/services/googleFitService';
-import { getValidGoogleFitAccessToken, clearGoogleFitTokens } from '@/lib/google-fit-auth-utils';
+import { getValidGoogleFitAccessToken, clearGoogleFitTokens } from '@/lib/google-fit-auth-utils'; // Corrected import
 import { isSameDay, startOfDay, format, parseISO } from 'date-fns';
 
 interface FetchGoogleFitDataResult {
@@ -24,48 +24,27 @@ function getRateLimitConfigGoogleFit(
 ): { limit: number; periodHours: number } {
   switch (tier) {
     case 'platinum':
-      // Platinum users might get more frequent calls or higher limits for aggregation
-      return callType === 'sessions' ? { limit: 3, periodHours: 24 } : { limit: 20, periodHours: 24 }; // More aggregate calls
+      return callType === 'sessions' ? { limit: 3, periodHours: 24 } : { limit: 20, periodHours: 24 };
     case 'gold':
        return callType === 'sessions' ? { limit: 1, periodHours: 24 } : { limit: 10, periodHours: 24 };
     case 'silver':
     case 'free':
     default:
-      return callType === 'sessions' ? { limit: 1, periodHours: 24 } : { limit: 5, periodHours: 24 }; // Fewer aggregate calls for free/silver
+      return callType === 'sessions' ? { limit: 1, periodHours: 24 } : { limit: 5, periodHours: 24 };
   }
 }
 
-// Helper to map Google Fit activity types to NormalizedActivityType
 function mapGoogleFitActivityTypeToNormalizedType(activityType: number): NormalizedActivityType {
-  // Reference: https://developers.google.com/fit/rest/v1/reference/activity-types
   switch (activityType) {
-    case 7: // Walking
-    case 107: // Walking.fitness
-    case 108: // Walking.stroller
-    case 116: // Walking.treadmill
+    case 7: case 107: case 108: case 116:
       return NormalizedActivityType.Walking;
-    case 8: // Running
-    case 94: // Running.jogging
-    case 95: // Running.sand
-    case 96: // Running.treadmill
+    case 8: case 94: case 95: case 96:
       return NormalizedActivityType.Running;
-    case 25: // Hiking (sometimes Trail Running is used for hiking too)
-    case 113: // Hiking (Light)
-    case 114: // Hiking (Moderate)
-    case 115: // Hiking (Vigorous/Mountain)
+    case 25: case 113: case 114: case 115:
       return NormalizedActivityType.Hiking;
-    case 57: // Swimming
-    case 101: // Swimming.open_water
-    case 102: // Swimming.pool
+    case 57: case 101: case 102:
       return NormalizedActivityType.Swimming;
-    case 1: // Biking
-    case 9: // Cycling.bmx
-    case 10: // Cycling.hand
-    case 11: // Cycling.mountain
-    case 12: // Cycling.road
-    case 13: // Cycling.spinning
-    case 14: // Cycling.stationary
-    case 15: // Cycling.utility
+    case 1: case 9: case 10: case 11: case 12: case 13: case 14: case 15:
       return NormalizedActivityType.Cycling;
     default:
       return NormalizedActivityType.Other;
@@ -113,7 +92,6 @@ export async function fetchAndStoreGoogleFitActivities(
   const todayStart = startOfDay(now);
   let apiCallStats = userProfile.googleFitApiCallStats || { sessions: { callCountToday: 0 }, aggregateData: { callCountToday: 0 } };
   
-  // Rate limit for fetching sessions
   const sessionsCallType: GoogleFitCallType = 'sessions';
   const sessionsRateLimitConfig = getRateLimitConfigGoogleFit(userProfile.subscriptionTier, sessionsCallType);
   let sessionsCallCountToday = apiCallStats.sessions?.lastCalledAt && isSameDay(new Date(apiCallStats.sessions.lastCalledAt), todayStart) 
@@ -137,16 +115,17 @@ export async function fetchAndStoreGoogleFitActivities(
     apiCallStats.sessions = { lastCalledAt: now.toISOString(), callCountToday: sessionsCallCountToday };
   } catch (error: any) {
     console.error(`[GoogleFitActions] Error calling googleFitService.getGoogleFitActivitySessions for user ${userId}:`, error);
-    if (error.status === 401 || error.status === 403) {
+    const serviceError = error as { status?: number; message: string };
+    if (serviceError.status === 401 || serviceError.status === 403) {
       await clearGoogleFitTokens();
       return { success: false, message: 'Google Fit authentication error. Please reconnect Google Fit.', errorCode: 'GOOGLE_FIT_AUTH_EXPIRED_SESSIONS' };
     }
-    return { success: false, message: `Failed to fetch sessions from Google Fit: ${String(error.message)}`, errorCode: 'GOOGLE_FIT_API_ERROR_SESSIONS' };
+    return { success: false, message: `Failed to fetch sessions from Google Fit: ${String(serviceError.message)}`, errorCode: 'GOOGLE_FIT_API_ERROR_SESSIONS' };
   }
   
   if (!sessions || sessions.length === 0) {
     console.log(`[GoogleFitActions] No relevant activity sessions found from Google Fit for user ${userId} in the given range.`);
-    await updateDoc(doc(db, 'users', userId), { googleFitApiCallStats: apiCallStats }); // Update stats even if no sessions
+    await updateDoc(doc(db, 'users', userId), { googleFitApiCallStats: apiCallStats });
     return { success: true, message: 'No relevant activity sessions found from Google Fit.', activitiesProcessed: 0 };
   }
   
@@ -161,12 +140,13 @@ export async function fetchAndStoreGoogleFitActivities(
     NormalizedActivityType.Running, 
     NormalizedActivityType.Hiking, 
     NormalizedActivityType.Swimming,
+    NormalizedActivityType.Cycling,
   ];
 
   for (const session of sessions) {
     const normalizedType = mapGoogleFitActivityTypeToNormalizedType(session.activityType);
     if (!relevantActivityTypesToNormalize.includes(normalizedType)) {
-        console.log(`[GoogleFitActions] Skipping session ${session.id} of type ${session.activityType} as it's not targeted for normalization.`);
+        console.log(`[GoogleFitActions] Skipping session ${session.id} of type ${session.activityType} ('${normalizedType}') as it's not targeted for detailed normalization.`);
         continue;
     }
 
@@ -179,7 +159,6 @@ export async function fetchAndStoreGoogleFitActivities(
     let avgHeartRate: number | undefined;
 
     try {
-      // Fetch distance
       if (aggregateCallCountToday < aggregateRateLimitConfig.limit) {
         const distanceData = await googleFitService.getAggregatedData(accessToken, {
           aggregateBy: [{ dataTypeName: "com.google.distance.delta" }],
@@ -191,7 +170,6 @@ export async function fetchAndStoreGoogleFitActivities(
         apiCallStats.aggregateData = { lastCalledAt: new Date().toISOString(), callCountToday: aggregateCallCountToday };
       } else { console.warn(`[GoogleFitActions] Aggregate data rate limit reached for user ${userId}. Skipping distance fetch for session ${session.id}.`);}
 
-      // Fetch calories
       if (aggregateCallCountToday < aggregateRateLimitConfig.limit) {
         const caloriesData = await googleFitService.getAggregatedData(accessToken, {
           aggregateBy: [{ dataTypeName: "com.google.calories.expended" }],
@@ -203,7 +181,6 @@ export async function fetchAndStoreGoogleFitActivities(
         apiCallStats.aggregateData = { lastCalledAt: new Date().toISOString(), callCountToday: aggregateCallCountToday };
       } else { console.warn(`[GoogleFitActions] Aggregate data rate limit reached for user ${userId}. Skipping calorie fetch for session ${session.id}.`);}
       
-      // Fetch steps if applicable
       if ((normalizedType === NormalizedActivityType.Walking || normalizedType === NormalizedActivityType.Running || normalizedType === NormalizedActivityType.Hiking) && aggregateCallCountToday < aggregateRateLimitConfig.limit) {
           const stepsData = await googleFitService.getAggregatedData(accessToken, {
               aggregateBy: [{ dataTypeName: "com.google.step_count.delta" }],
@@ -215,17 +192,16 @@ export async function fetchAndStoreGoogleFitActivities(
           apiCallStats.aggregateData = { lastCalledAt: new Date().toISOString(), callCountToday: aggregateCallCountToday };
       } else if (normalizedType === NormalizedActivityType.Walking || normalizedType === NormalizedActivityType.Running || normalizedType === NormalizedActivityType.Hiking) { console.warn(`[GoogleFitActions] Aggregate data rate limit reached for user ${userId}. Skipping step fetch for session ${session.id}.`);}
 
-      // Fetch heart rate if applicable
        if (aggregateCallCountToday < aggregateRateLimitConfig.limit) {
             const heartRateData = await googleFitService.getAggregatedData(accessToken, {
-                aggregateBy: [{ dataTypeName: "com.google.heart_rate.bpm" }], // Fetches average, min, max
+                aggregateBy: [{ dataTypeName: "com.google.heart_rate.bpm" }],
                 startTimeMillis: startTimeMillis, endTimeMillis: endTimeMillis,
                 bucketByTime: { durationMillis: endTimeMillis - startTimeMillis }
             });
             const hrPoint = heartRateData.bucket?.[0]?.dataset?.[0]?.point?.[0];
-            if (hrPoint?.value?.[0]?.fpVal) { // Check if fpVal holds the average directly
+            if (hrPoint?.value?.[0]?.fpVal) {
                 avgHeartRate = hrPoint.value[0].fpVal;
-            } else if (hrPoint?.value?.[0]?.mapVal) { // Check if values are in mapVal
+            } else if (hrPoint?.value?.[0]?.mapVal) {
                 const avgEntry = hrPoint.value[0].mapVal.find(m => m.key === 'average');
                 avgHeartRate = avgEntry?.value?.fpVal;
             }
@@ -233,15 +209,14 @@ export async function fetchAndStoreGoogleFitActivities(
             apiCallStats.aggregateData = { lastCalledAt: new Date().toISOString(), callCountToday: aggregateCallCountToday };
         } else { console.warn(`[GoogleFitActions] Aggregate data rate limit reached for user ${userId}. Skipping heart rate fetch for session ${session.id}.`);}
 
-
     } catch (metricError: any) {
       console.error(`[GoogleFitActions] Error fetching metrics for session ${session.id}, user ${userId}: ${String(metricError.message)}`);
-      if (metricError.status === 401 || metricError.status === 403) {
+      const serviceError = metricError as { status?: number; message: string };
+      if (serviceError.status === 401 || serviceError.status === 403) {
            await clearGoogleFitTokens();
            await updateDoc(doc(db, 'users', userId), { googleFitApiCallStats: apiCallStats });
            return { success: false, message: 'Google Fit authentication error while fetching session details. Please reconnect.', errorCode: 'GOOGLE_FIT_AUTH_EXPIRED_METRICS' };
       }
-      // Continue to save session even if some metrics fail, but log it
     }
 
     const firestoreData: NormalizedActivityFirestore = {
@@ -252,7 +227,7 @@ export async function fetchAndStoreGoogleFitActivities(
       type: normalizedType,
       name: session.name || `${NormalizedActivityType[normalizedType]} Session`,
       startTimeUtc: new Date(startTimeMillis).toISOString(),
-      date: new Date(startTimeMillis).toISOString().substring(0, 10), // YYYY-MM-DD
+      date: new Date(startTimeMillis).toISOString().substring(0, 10),
       durationMovingSec: session.activeTimeMillis ? parseInt(session.activeTimeMillis, 10) / 1000 : undefined,
       durationElapsedSec: (endTimeMillis - startTimeMillis) / 1000,
       distanceMeters: distanceMeters,
@@ -260,7 +235,6 @@ export async function fetchAndStoreGoogleFitActivities(
       steps: steps,
       averageHeartRateBpm: avgHeartRate,
       lastFetched: new Date().toISOString(),
-      // elevationGainMeters and mapPolyline are harder to get from Google Fit easily and are omitted for now
     };
 
     const activityDocRef = doc(db, 'users', userId, 'activities', firestoreData.id);
@@ -280,5 +254,4 @@ export async function fetchAndStoreGoogleFitActivities(
     message: `Successfully processed ${activitiesStoredCount} Google Fit activities. Total sessions found: ${sessions.length}.`, 
     activitiesProcessed: activitiesStoredCount 
   };
-
 }

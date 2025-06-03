@@ -267,5 +267,3 @@ export async function getGoogleFitActivitySessions(
   
   return response.session || [];
 }
-
-```
