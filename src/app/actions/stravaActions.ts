@@ -3,7 +3,7 @@
 
 import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
-import type { UserProfile, SubscriptionTier, StravaActivityFirestore, StravaApiCallStats, NormalizedActivityFirestore } from '@/types';
+import type { UserProfile, SubscriptionTier, StravaApiCallStats, NormalizedActivityFirestore } from '@/types';
 import { NormalizedActivityType } from '@/types';
 import { getStravaActivities, type StravaActivity } from '@/lib/services/stravaService';
 import { getValidStravaAccessToken, clearStravaTokens } from '@/lib/strava-auth-utils';
@@ -64,6 +64,10 @@ export async function fetchAndStoreStravaRecentActivities(
 ): Promise<FetchStravaDataResult> {
   console.log('[StravaActions] Initiating fetchAndStoreStravaRecentActivities with params:', params);
 
+  if (!firebaseAuth) {
+    console.error('[StravaActions] Firebase Auth service is not available for fetchAndStoreStravaRecentActivities.');
+    return { success: false, message: 'Authentication service unavailable.', errorCode: 'AUTH_UNAVAILABLE' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
     console.error('[StravaActions] User not authenticated.');
@@ -199,3 +203,4 @@ export async function fetchAndStoreStravaRecentActivities(
     return { success: false, message: errorMessage, errorCode: errorCode };
   }
 }
+
