@@ -692,7 +692,7 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
         console.log("[FINALIZE_WITHINGS_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId, "with data:", connectionUpdateData);
         await updateDoc(userProfileDocRef, connectionUpdateData);
         console.log("[FINALIZE_WITHINGS_FIRESTORE_UPDATE_SUCCESS] Firestore updated with Withings connection, initial sync date, and Withings User ID for UID:", userId);
-        return { success: true, data: { withingsUserId } };
+        return { success: true, data: { withingsUserId: withingsApiUserId } };
     } catch (error: any) {
         console.error("[FINALIZE_WITHINGS_RAW_ERROR] Raw error finalizing Withings connection for UID:", userId, "Error:", error);
         const errorMessage = String(error.message || "Failed to finalize Withings connection.");

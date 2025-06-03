@@ -19,7 +19,7 @@ const nextConfig = {
     ],
   },
   serverExternalPackages: ['@grpc/grpc-js', 'firebase'],
-  transpilePackages: ['@firebase/auth', '@firebase/firestore'], // Removed 'firebase'
+  transpilePackages: ['@firebase/auth'], // Removed '@firebase/firestore'
 };
 
 export default nextConfig;
