@@ -52,7 +52,7 @@ function mapFitbitActivityNameToNormalizedType(activityName?: string): Normalize
 function mapFitbitUnitToMeters(distance?: number, unit?: string): number | undefined {
   if (distance === undefined || distance === null || isNaN(distance)) return undefined;
   
-  // If unit is not provided and distance is likely in km (e.g. a small number like 5 for 5km), we might infer.
+  // If unit is not provided and distance is likely in km (e.g., a small number like 5 for 5km), we might infer.
   // However, Fitbit's API is inconsistent with providing distanceUnit for all activities.
   // For daily summary distance, it's often in the user's preferred unit (km or miles).
   // For logged activities, it *should* have distanceUnit, but let's be defensive.
@@ -93,6 +93,10 @@ export async function fetchAndStoreFitbitDailyActivity(
 ): Promise<FetchFitbitDataResult> {
   console.log(`[FitbitActions] Initiating fetchAndStoreFitbitDailyActivity for date: ${targetDate}`);
 
+  if (!firebaseAuth) {
+    console.error('[FitbitActions] Firebase Auth service is not available for fetchAndStoreFitbitDailyActivity.');
+    return { success: false, message: 'Authentication service unavailable.', errorCode: 'AUTH_UNAVAILABLE' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
     console.error('[FitbitActions] User not authenticated for fetchAndStoreFitbitDailyActivity.');
@@ -201,6 +205,10 @@ export async function fetchAndStoreFitbitDailyActivity(
 export async function getFitbitActivitySummariesForDateRange(
   dateRange: { from: string; to: string } // Dates in 'yyyy-MM-dd' format
 ): Promise<{ success: boolean; data?: FitbitActivitySummaryFirestore[]; error?: string }> {
+  if (!firebaseAuth) {
+    console.error('[FitbitActions] Firebase Auth service is not available for getFitbitActivitySummariesForDateRange.');
+    return { success: false, error: 'Authentication service unavailable.' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
@@ -242,6 +250,10 @@ export async function fetchAndStoreFitbitHeartRate(
   detailLevel: '1min' | '1sec' = '1min'
 ): Promise<FetchFitbitDataResult> {
   console.log(`[FitbitActions] Initiating fetchAndStoreFitbitHeartRate for date: ${targetDate}, detail: ${detailLevel}`);
+  if (!firebaseAuth) {
+    console.error('[FitbitActions] Firebase Auth service is not available for fetchAndStoreFitbitHeartRate.');
+    return { success: false, message: 'Authentication service unavailable.', errorCode: 'AUTH_UNAVAILABLE' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   const userId = currentUser.uid;
@@ -327,6 +339,10 @@ export async function fetchAndStoreFitbitSleep(
   targetDate: string // YYYY-MM-DD
 ): Promise<FetchFitbitDataResult> {
   console.log(`[FitbitActions] Initiating fetchAndStoreFitbitSleep for date: ${targetDate}`);
+  if (!firebaseAuth) {
+    console.error('[FitbitActions] Firebase Auth service is not available for fetchAndStoreFitbitSleep.');
+    return { success: false, message: 'Authentication service unavailable.', errorCode: 'AUTH_UNAVAILABLE' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   const userId = currentUser.uid;
@@ -432,6 +448,10 @@ export async function fetchAndStoreFitbitSwimmingData(
   targetDate: string // YYYY-MM-DD format
 ): Promise<FetchFitbitDataResult> {
   console.log(`[FitbitActions] Initiating fetchAndStoreFitbitSwimmingData for date: ${targetDate}`);
+  if (!firebaseAuth) {
+    console.error('[FitbitActions] Firebase Auth service is not available for fetchAndStoreFitbitSwimmingData.');
+    return { success: false, message: 'Authentication service unavailable.', errorCode: 'AUTH_UNAVAILABLE' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   const userId = currentUser.uid;
@@ -542,6 +562,10 @@ export async function fetchAndStoreFitbitLoggedActivities(
   targetDate: string // YYYY-MM-DD format
 ): Promise<FetchFitbitDataResult> {
   console.log(`[FitbitActions] Initiating fetchAndStoreFitbitLoggedActivities for date: ${targetDate}`);
+  if (!firebaseAuth) {
+    console.error('[FitbitActions] Firebase Auth service is not available for fetchAndStoreFitbitLoggedActivities.');
+    return { success: false, message: 'Authentication service unavailable.', errorCode: 'AUTH_UNAVAILABLE' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   const userId = currentUser.uid;
@@ -676,6 +700,10 @@ export async function fetchAndStoreFitbitLoggedActivities(
 export async function getFitbitSleepLogsForDateRange(
   dateRange: { from: string; to: string } // Dates in 'yyyy-MM-dd' format
 ): Promise<{ success: boolean; data?: FitbitSleepLogFirestore[]; error?: string }> {
+  if (!firebaseAuth) {
+    console.error('[FitbitActions] Firebase Auth service is not available for getFitbitSleepLogsForDateRange.');
+    return { success: false, error: 'Authentication service unavailable.' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
