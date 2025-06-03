@@ -3,9 +3,8 @@
 
 import {
   createUserWithEmailAndPassword,
-  // fetchSignInMethodsForEmail, // Removed as we're trying to avoid it
   signInWithEmailAndPassword,
-  updatePassword as firebaseUpdatePassword, // Aliased to avoid conflict
+  updatePassword as firebaseUpdatePassword, 
   type AuthError,
 } from 'firebase/auth';
 import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
@@ -17,11 +16,6 @@ import { differenceInYears, format } from 'date-fns';
 
 
 // --- Sign Up Schemas ---
-// CheckEmailInputSchema is removed as its functionality is merged into SignUpDetailsInputSchema implicitly
-// const CheckEmailInputSchema = z.object({
-//   email: z.string().email({ message: "Invalid email address." }),
-// });
-
 const SignUpDetailsInputSchema = z.object({
   email: z.string().email(),
   password: passwordSchema,
@@ -39,10 +33,6 @@ interface SignUpResult {
   errorCode?: string;
   details?: any;
 }
-
-// Removed checkEmailAvailability as it's no longer directly used by the signup flow
-// export async function checkEmailAvailability(values: z.infer<typeof CheckEmailInputSchema>): Promise<{ available: boolean; error?: string; errorCode?: string }> { ... }
-
 
 export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema>): Promise<SignUpResult> {
   console.log("[SIGNUP_ACTION_START] signUpUser action initiated with email:", values.email, "tier:", values.subscriptionTier);
@@ -148,7 +138,6 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
 const LoginInputSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1, { message: "Password is required." }),
-  // mfaCode: z.string().length(8, { message: "MFA code must be 8 digits."}).optional().or(z.literal('')), // Removed MFA
 });
 
 interface LoginResult {
@@ -156,7 +145,6 @@ interface LoginResult {
   userId?: string;
   error?: string;
   errorCode?: string;
-  // requiresMfa?: boolean; // Removed MFA
   passwordExpired?: boolean;
   termsNotAccepted?: boolean; 
   userProfile?: UserProfile | null; 
@@ -244,10 +232,6 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       return { success: true, userId, passwordExpired: true, userProfile };
     }
         
-    // MFA Logic Removed
-    // if (userProfile.mfaMethod && !validatedValues.mfaCode) { ... }
-    // if (userProfile.mfaMethod && validatedValues.mfaCode) { ... }
-
     console.log("[LOGIN_ACTION_SUCCESS] loginUser action completed successfully for UID:", userId);
     console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_FULL]");
     return { success: true, userId, userProfile };
@@ -314,18 +298,6 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
     }
     console.log("[SEND_RESET_CODE_FIREBASE_READY] Firebase Auth instance seems okay.");
 
-    // With fetchSignInMethodsForEmail potentially problematic, we proceed assuming the email *might* exist.
-    // Firebase's sendPasswordResetEmail (not used here directly, but conceptually similar for custom flow)
-    // typically doesn't confirm/deny email existence for security.
-    // Our custom flow with a code relies on the user having access to the email.
-
-    // const methods = await fetchSignInMethodsForEmail(firebaseAuth, validatedValues.email);
-    // console.log("[SEND_RESET_CODE_METHODS_FETCHED] Sign-in methods fetched for email:", validatedValues.email, methods);
-    // if (methods.length === 0) {
-    //   console.log("[SEND_RESET_CODE_EMAIL_NOT_FOUND] Email not found, sending generic message.");
-    //   return { success: true, message: "If your email is registered, instructions to reset your password have been sent. (Simulation)" };
-    // }
-
     if (!db || !db.app || typeof collection !== 'function' || typeof query !== 'function' || typeof where !== 'function' || typeof getDocs !== 'function' || typeof doc !== 'function' || typeof updateDoc !== 'function') {
         console.error("[SEND_RESET_CODE_FIRESTORE_NOT_READY] Firestore not available. DB App:", db?.app);
         return { success: false, error: "Database service for password reset is unavailable.", errorCode: 'DB_UNAVAILABLE'};
@@ -337,7 +309,6 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
 
     if (querySnapshot.empty) {
         console.log("[SEND_RESET_CODE_USER_NOT_IN_FIRESTORE] User with email not found in Firestore. Sending generic message to avoid enumeration.");
-        // For security, don't reveal if the email exists or not.
         return { success: true, message: "If your email is registered, an 8-digit code has been sent. Please check your email/phone (or server console for simulation)." };
     }
     
@@ -359,7 +330,6 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
       console.error("[SEND_RESET_CODE_ACTION_ZOD_DETAILS] ZodError:", error.flatten());
       return { success: false, error: 'Invalid input.', errorCode: 'VALIDATION_ERROR', details: error.flatten()};
     }
-    // Generic message for other errors too, to avoid email enumeration
     return { success: true, message: "If an account with that email exists, we've sent instructions to reset your password. (Simulation - Error occurred)"};
   }
 }
@@ -414,11 +384,17 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
   console.log("[RESET_PASSWORD_START] Action initiated for email:", values.email);
   try {
     const validatedValues = FinalResetPasswordSchema.parse(values);
+
+    if (!firebaseAuth) {
+        console.warn("[RESET_PASSWORD_FIREBASE_AUTH_NULL] firebaseAuth is null. Cannot proceed with password reset.");
+        return { success: false, error: "Authentication service is not available.", errorCode: 'AUTH_UNAVAILABLE' };
+    }
+    
     const currentUser = firebaseAuth.currentUser;
 
-    if (!firebaseAuth || !firebaseAuth.app) {
-        console.warn("[RESET_PASSWORD_FIREBASE_NOT_READY] Firebase Auth not properly initialized in resetPassword.");
-        return { success: false, error: "Password reset service is temporarily unavailable.", errorCode: 'AUTH_UNAVAILABLE' };
+    if (!firebaseAuth.app) {
+        console.warn("[RESET_PASSWORD_FIREBASE_APP_NULL] firebaseAuth.app is null. Firebase Auth not properly initialized in resetPassword.");
+        return { success: false, error: "Password reset service is temporarily unavailable due to configuration issues.", errorCode: 'AUTH_UNAVAILABLE_APP_SCOPE' };
     }
 
     if (currentUser && currentUser.email === validatedValues.email) {
@@ -725,5 +701,5 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
     }
 }
     
-
     
+

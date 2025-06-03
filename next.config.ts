@@ -19,7 +19,7 @@ const nextConfig = {
     ],
   },
   experimental: {
-    serverComponentsExternalPackages: ['@grpc/grpc-js'],
+    serverComponentsExternalPackages: ['@grpc/grpc-js', 'firebase'],
   },
   transpilePackages: ['firebase', '@firebase/auth', '@firebase/firestore'],
 };
