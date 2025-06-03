@@ -282,5 +282,3 @@ export async function fetchAndStoreGoogleFitActivities(
   };
 
 }
-
-```

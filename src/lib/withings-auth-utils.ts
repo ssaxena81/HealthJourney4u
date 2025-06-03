@@ -30,7 +30,7 @@ interface StoredWithingsTokens {
   userId: string | undefined;
 }
 
-export function getWithingsTokens(): StoredWithingsTokens {
+export async function getWithingsTokens(): Promise<StoredWithingsTokens> {
   const cookieStore = cookies();
   const accessToken = cookieStore.get(WITHINGS_ACCESS_TOKEN_COOKIE)?.value;
   const refreshToken = cookieStore.get(WITHINGS_REFRESH_TOKEN_COOKIE)?.value;
@@ -144,7 +144,7 @@ export async function refreshWithingsTokens(
 }
 
 export async function getValidWithingsAccessToken(): Promise<string | null> {
-  let { accessToken, refreshToken, expiresAt } = getWithingsTokens();
+  let { accessToken, refreshToken, expiresAt } = await getWithingsTokens();
 
   if (!accessToken || !refreshToken) {
     console.log('[WithingsAuthUtils] No Withings tokens found in cookies.');

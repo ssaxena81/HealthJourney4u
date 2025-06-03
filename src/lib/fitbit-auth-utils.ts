@@ -25,7 +25,7 @@ interface StoredFitbitTokens {
   expiresAt: number | undefined; // Timestamp in milliseconds
 }
 
-export function getFitbitTokens(): StoredFitbitTokens {
+export async function getFitbitTokens(): Promise<StoredFitbitTokens> {
   const cookieStore = cookies();
   const accessToken = cookieStore.get(FITBIT_ACCESS_TOKEN_COOKIE)?.value;
   const refreshToken = cookieStore.get(FITBIT_REFRESH_TOKEN_COOKIE)?.value;
@@ -138,7 +138,7 @@ export async function refreshFitbitTokens(
 
 // Helper to get a valid access token, attempting refresh if needed
 export async function getValidFitbitAccessToken(): Promise<string | null> {
-  let { accessToken, refreshToken, expiresAt } = getFitbitTokens();
+  let { accessToken, refreshToken, expiresAt } = await getFitbitTokens();
 
   if (!accessToken || !refreshToken) {
     console.log('[FitbitAuthUtils] No Fitbit tokens found in cookies.');
@@ -162,5 +162,3 @@ export async function getValidFitbitAccessToken(): Promise<string | null> {
 
   return accessToken;
 }
-
-    

@@ -25,7 +25,7 @@ interface StoredStravaTokens {
   expiresAt: number | undefined; // Timestamp in milliseconds
 }
 
-export function getStravaTokens(): StoredStravaTokens {
+export async function getStravaTokens(): Promise<StoredStravaTokens> {
   const cookieStore = cookies();
   const accessToken = cookieStore.get(STRAVA_ACCESS_TOKEN_COOKIE)?.value;
   const refreshToken = cookieStore.get(STRAVA_REFRESH_TOKEN_COOKIE)?.value;
@@ -135,7 +135,7 @@ export async function refreshStravaTokens(
 }
 
 export async function getValidStravaAccessToken(): Promise<string | null> {
-  let { accessToken, refreshToken, expiresAt } = getStravaTokens();
+  let { accessToken, refreshToken, expiresAt } = await getStravaTokens();
 
   if (!accessToken || !refreshToken) {
     console.log('[StravaAuthUtils] No Strava tokens found in cookies.');
