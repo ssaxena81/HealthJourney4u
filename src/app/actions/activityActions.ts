@@ -16,6 +16,11 @@ export async function getNormalizedActivitiesForDateRangeAndType(
   dateRange: { from: string; to: string }, // Dates in 'yyyy-MM-dd' format
   activityType: NormalizedActivityType
 ): Promise<GetActivitiesResponse> {
+  if (!firebaseAuth) {
+    console.error('[ActivityActions] Firebase Auth service is not available for getNormalizedActivitiesForDateRangeAndType.');
+    return { success: false, error: 'Authentication service unavailable.' };
+  }
+
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
@@ -49,7 +54,7 @@ export async function getNormalizedActivitiesForDateRangeAndType(
       activities.push(docSnap.data() as NormalizedActivityFirestore);
     });
 
-    console.log(`[ActivityActions] Fetched ${activities.length} ${activityType} activities from Firestore.`);
+    console.log(`[ActivityActions] Fetched ${activities.length} ${activityType} activities from Firestore for user ${userId}.`);
     return { success: true, data: activities };
   } catch (error: any) {
     console.error(`[ActivityActions] Error fetching ${activityType} activities from Firestore for user ${userId}:`, error);

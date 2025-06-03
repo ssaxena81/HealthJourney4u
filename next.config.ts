@@ -19,9 +19,9 @@ const nextConfig = {
     ],
   },
   experimental: {
-    // allowedDevOrigins removed
+    serverComponentsExternalPackages: ['@grpc/grpc-js'],
   },
-  transpilePackages: ['firebase', '@firebase/auth', '@firebase/firestore', '@grpc/grpc-js'],
+  transpilePackages: ['firebase', '@firebase/auth', '@firebase/firestore'],
 };
 
 export default nextConfig;
