@@ -2,7 +2,7 @@
 'use server';
 
 import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
-import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, query, where, getDocs, orderBy, Timestamp, doc, getDoc } from 'firebase/firestore'; // Added doc, getDoc
 import type { 
   UserProfile, 
   DashboardMetricIdValue, 
@@ -12,7 +12,7 @@ import type {
   FitbitActivitySummaryFirestore,
   FitbitHeartRateFirestore
 } from '@/types';
-import { AVAILABLE_DASHBOARD_METRICS, DashboardMetricId } from '@/types';
+import { AVAILABLE_DASHBOARD_METRICS, DashboardMetricId, NormalizedActivityType } from '@/types'; // Added NormalizedActivityType
 import { differenceInDays, format, parseISO, startOfDay, endOfDay } from 'date-fns';
 
 interface DateRange {
@@ -22,6 +22,10 @@ interface DateRange {
 
 async function calculateAvgDailySteps(userId: string, dateRange: DateRange, numberOfDays: number): Promise<number | undefined> {
   if (numberOfDays <= 0) return 0;
+  if (!db) { // Added null check for db
+    console.error(`[DashboardActions] Firestore (db) not available for calculateAvgDailySteps.`);
+    return undefined;
+  }
   try {
     const activitiesRef = collection(db, 'users', userId, 'activities');
     const q = query(activitiesRef, 
@@ -44,6 +48,10 @@ async function calculateAvgDailySteps(userId: string, dateRange: DateRange, numb
 
 async function calculateAvgSleepDuration(userId: string, dateRange: DateRange, numberOfDays: number): Promise<number | undefined> {
   if (numberOfDays <= 0) return 0;
+  if (!db) { // Added null check for db
+    console.error(`[DashboardActions] Firestore (db) not available for calculateAvgSleepDuration.`);
+    return undefined;
+  }
   try {
     const sleepLogsRef = collection(db, 'users', userId, 'fitbit_sleep');
     const q = query(sleepLogsRef, 
@@ -70,6 +78,10 @@ async function calculateAvgSleepDuration(userId: string, dateRange: DateRange, n
 
 async function calculateAvgActiveMinutes(userId: string, dateRange: DateRange, numberOfDays: number): Promise<number | undefined> {
   if (numberOfDays <= 0) return 0;
+  if (!db) { // Added null check for db
+    console.error(`[DashboardActions] Firestore (db) not available for calculateAvgActiveMinutes.`);
+    return undefined;
+  }
   try {
     // Option 1: Use Fitbit Daily Summaries (if consistently synced and preferred)
     const summariesRef = collection(db, 'users', userId, 'fitbit_activity_summaries');
@@ -113,6 +125,10 @@ import { documentId } from 'firebase/firestore';
 
 async function calculateAvgRestingHeartRate(userId: string, dateRange: DateRange, numberOfDays: number): Promise<number | undefined> {
   if (numberOfDays <= 0) return 0;
+  if (!db) { // Added null check for db
+    console.error(`[DashboardActions] Firestore (db) not available for calculateAvgRestingHeartRate.`);
+    return undefined;
+  }
   try {
     const heartRateRef = collection(db, 'users', userId, 'fitbit_heart_rate');
     // Query by document ID which is the date 'YYYY-MM-DD'
@@ -141,6 +157,10 @@ async function calculateAvgRestingHeartRate(userId: string, dateRange: DateRange
 
 async function calculateAvgWorkoutDuration(userId: string, dateRange: DateRange, numberOfDays: number): Promise<number | undefined> {
     if (numberOfDays <= 0) return 0;
+    if (!db) { // Added null check for db
+        console.error(`[DashboardActions] Firestore (db) not available for calculateAvgWorkoutDuration.`);
+        return undefined;
+    }
     try {
         const activitiesRef = collection(db, 'users', userId, 'activities');
         const workoutTypes: NormalizedActivityType[] = [
@@ -172,6 +192,10 @@ async function calculateAvgWorkoutDuration(userId: string, dateRange: DateRange,
 }
 
 async function calculateTotalWorkouts(userId: string, dateRange: DateRange, numberOfDays: number): Promise<number | undefined> {
+    if (!db) { // Added null check for db
+        console.error(`[DashboardActions] Firestore (db) not available for calculateTotalWorkouts.`);
+        return undefined;
+    }
     try {
         const activitiesRef = collection(db, 'users', userId, 'activities');
         const workoutTypes: NormalizedActivityType[] = [
@@ -198,11 +222,20 @@ async function calculateTotalWorkouts(userId: string, dateRange: DateRange, numb
 export async function getDashboardRadarData(
   dateRange: DateRange
 ): Promise<{ success: boolean; data?: RadarDataPoint[]; error?: string }> {
+  if (!firebaseAuth) {
+    console.error('[DashboardActions] Firebase Auth service is not available.');
+    return { success: false, error: 'Authentication service unavailable.' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
   }
   const userId = currentUser.uid;
+
+  if (!db) { // Check if db is null
+    console.error('[DashboardActions] Firestore (db) not initialized.');
+    return { success: false, error: 'Database service unavailable.' };
+  }
 
   try {
     const userProfileDocRef = doc(db, 'users', userId);
