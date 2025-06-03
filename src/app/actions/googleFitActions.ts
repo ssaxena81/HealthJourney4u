@@ -4,7 +4,7 @@
 import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import type { UserProfile, SubscriptionTier, NormalizedActivityFirestore, GoogleFitApiCallStats } from '@/types';
-import { NormalizedActivityType } from '@/types';
+import { NormalizedActivityType, normalizedActivityTypeDisplayNames } from '@/types';
 import * as googleFitService from '@/lib/services/googleFitService';
 import { getValidGoogleFitAccessToken, clearGoogleFitTokens } from '@/lib/google-fit-auth-utils'; // Corrected import
 import { isSameDay, startOfDay, format, parseISO } from 'date-fns';
@@ -58,7 +58,7 @@ export async function fetchAndStoreGoogleFitActivities(
   console.log('[GoogleFitActions] Initiating fetchAndStoreGoogleFitActivities with params:', params);
 
   if (!firebaseAuth) {
-    console.error('[GoogleFitActions] Firebase Auth service is not available.');
+    console.error('[GoogleFitActions] Firebase Auth service is not available for fetchAndStoreGoogleFitActivities.');
     return { success: false, message: 'Authentication service unavailable.', errorCode: 'AUTH_UNAVAILABLE' };
   }
   const currentUser = firebaseAuth.currentUser;
@@ -229,7 +229,7 @@ export async function fetchAndStoreGoogleFitActivities(
       originalId: session.id,
       dataSource: 'google-fit',
       type: normalizedType,
-      name: session.name || `${NormalizedActivityType[normalizedType]} Session`,
+      name: session.name || `${normalizedActivityTypeDisplayNames[normalizedType]} Session`,
       startTimeUtc: new Date(startTimeMillis).toISOString(),
       date: new Date(startTimeMillis).toISOString().substring(0, 10),
       durationMovingSec: session.activeTimeMillis ? parseInt(session.activeTimeMillis, 10) / 1000 : undefined,
