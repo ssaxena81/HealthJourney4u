@@ -47,6 +47,10 @@ interface UpdateWalkingRadarGoalsResult {
 export async function updateWalkingRadarGoals(
   values: WalkingRadarGoals 
 ): Promise<UpdateWalkingRadarGoalsResult> {
+  if (!firebaseAuth) {
+    console.error('[USER_PROFILE_ACTIONS] Firebase Auth service is not available for updateWalkingRadarGoals.');
+    return { success: false, error: 'Authentication service unavailable.' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
@@ -123,6 +127,10 @@ interface UpdateRunningRadarGoalsResult {
 export async function updateRunningRadarGoals(
   values: RunningRadarGoals
 ): Promise<UpdateRunningRadarGoalsResult> {
+  if (!firebaseAuth) {
+    console.error('[USER_PROFILE_ACTIONS] Firebase Auth service is not available for updateRunningRadarGoals.');
+    return { success: false, error: 'Authentication service unavailable.' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
@@ -199,6 +207,10 @@ interface UpdateHikingRadarGoalsResult {
 export async function updateHikingRadarGoals(
   values: HikingRadarGoals
 ): Promise<UpdateHikingRadarGoalsResult> {
+  if (!firebaseAuth) {
+    console.error('[USER_PROFILE_ACTIONS] Firebase Auth service is not available for updateHikingRadarGoals.');
+    return { success: false, error: 'Authentication service unavailable.' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
@@ -276,6 +288,10 @@ interface UpdateSwimmingRadarGoalsResult {
 export async function updateSwimmingRadarGoals(
   values: SwimmingRadarGoals
 ): Promise<UpdateSwimmingRadarGoalsResult> {
+  if (!firebaseAuth) {
+    console.error('[USER_PROFILE_ACTIONS] Firebase Auth service is not available for updateSwimmingRadarGoals.');
+    return { success: false, error: 'Authentication service unavailable.' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
@@ -338,6 +354,10 @@ interface UpdateSleepRadarGoalsResult {
 export async function updateSleepRadarGoals(
   values: SleepRadarGoals
 ): Promise<UpdateSleepRadarGoalsResult> {
+  if (!firebaseAuth) {
+    console.error('[USER_PROFILE_ACTIONS] Firebase Auth service is not available for updateSleepRadarGoals.');
+    return { success: false, error: 'Authentication service unavailable.' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
@@ -398,6 +418,10 @@ interface UpdateDashboardRadarMetricsResult {
 export async function updateDashboardRadarMetrics(
   selectedMetricIds: DashboardMetricIdValue[]
 ): Promise<UpdateDashboardRadarMetricsResult> {
+  if (!firebaseAuth) {
+    console.error('[USER_PROFILE_ACTIONS] Firebase Auth service is not available for updateDashboardRadarMetrics.');
+    return { success: false, error: 'Authentication service unavailable.' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
