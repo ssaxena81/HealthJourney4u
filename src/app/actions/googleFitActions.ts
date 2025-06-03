@@ -57,6 +57,10 @@ export async function fetchAndStoreGoogleFitActivities(
 ): Promise<FetchGoogleFitDataResult> {
   console.log('[GoogleFitActions] Initiating fetchAndStoreGoogleFitActivities with params:', params);
 
+  if (!firebaseAuth) {
+    console.error('[GoogleFitActions] Firebase Auth service is not available.');
+    return { success: false, message: 'Authentication service unavailable.', errorCode: 'AUTH_UNAVAILABLE' };
+  }
   const currentUser = firebaseAuth.currentUser;
   if (!currentUser) {
     console.error('[GoogleFitActions] User not authenticated.');
@@ -255,3 +259,4 @@ export async function fetchAndStoreGoogleFitActivities(
     activitiesProcessed: activitiesStoredCount 
   };
 }
+
