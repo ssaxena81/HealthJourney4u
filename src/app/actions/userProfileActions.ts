@@ -108,7 +108,7 @@ const RunningRadarGoalsSchema = z.object({
   const checkMinMax = (minVal?: number | null, maxVal?: number | null, fieldNamePrefix?: string, minPath?: keyof typeof data, maxPath?: keyof typeof data) => {
     if (minVal !== undefined && minVal !== null && maxVal !== undefined && maxVal !== null && minVal > maxVal) {
       const msg = `Min ${fieldNamePrefix ? fieldNamePrefix.toLowerCase() : ''} cannot be greater than Max ${fieldNamePrefix ? fieldNamePrefix.toLowerCase() : ''}.`;
-      if (minPath) ctx.addIssue({ code: z.ZodIssueCode.custom, message: msg, path: [maxPath] });
+      if (minPath) ctx.addIssue({ code: z.ZodIssueCode.custom, message: msg, path: [minPath] });
       if (maxPath) ctx.addIssue({ code: z.ZodIssueCode.custom, message: msg, path: [maxPath] });
     }
   };
@@ -269,7 +269,7 @@ const SwimmingRadarGoalsSchema = z.object({
   const checkMinMax = (minVal?: number | null, maxVal?: number | null, fieldNamePrefix?: string, minPath?: keyof typeof data, maxPath?: keyof typeof data) => {
     if (minVal !== undefined && minVal !== null && maxVal !== undefined && maxVal !== null && minVal > maxVal) {
       const msg = `Min ${fieldNamePrefix ? fieldNamePrefix.toLowerCase() : ''} cannot be greater than Max ${fieldNamePrefix ? fieldNamePrefix.toLowerCase() : ''}.`;
-      if (minPath) ctx.addIssue({ code: z.ZodIssueCode.custom, message: msg, path: [maxPath] });
+      if (minPath) ctx.addIssue({ code: z.ZodIssueCode.custom, message: msg, path: [minPath] });
       if (maxPath) ctx.addIssue({ code: z.ZodIssueCode.custom, message: msg, path: [maxPath] });
     }
   };
@@ -455,3 +455,4 @@ export async function updateDashboardRadarMetrics(
     return { success: false, error: String(error.message) || 'Failed to update dashboard metric selection.' };
   }
 }
+
