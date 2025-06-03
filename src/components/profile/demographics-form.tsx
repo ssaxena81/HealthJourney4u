@@ -62,7 +62,7 @@ type DemographicsFormValues = z.infer<typeof demographicsSchemaClient>;
 
 interface DemographicsFormProps {
   userProfile: UserProfile;
-  onProfileUpdate?: (updatedProfile: UserProfile | null) => void;
+  onProfileUpdate?: (updatedProfileData: Partial<UserProfile>) => void;
 }
 
 export default function DemographicsForm({ userProfile, onProfileUpdate }: DemographicsFormProps) {
@@ -132,7 +132,7 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
       if (result.success) {
         toast({ title: "Demographics Updated", description: "Your information has been saved." });
         if (onProfileUpdate && result.data) {
-           onProfileUpdate({ ...userProfile, ...result.data });
+           onProfileUpdate(result.data);
         }
       } else {
         toast({ title: "Update Failed", description: result.error || "Could not save demographics.", variant: "destructive" });
@@ -269,5 +269,3 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
     </>
   );
 }
-
-    
