@@ -416,7 +416,7 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
     }
 
     console.log("[RESET_PASSWORD_UNAUTH_FLOW_INITIATED] Unauthenticated password reset initiated for email:", validatedValues.email);
-    if (!db || !db.app || typeof collection !== 'function' || typeof query !== 'function' || typeof where !== 'function' || typeof getDocs !== 'function' || typeof doc === 'function' || typeof updateDoc === 'function') {
+    if (!db || !db.app || typeof collection !== 'function' || typeof query !== 'function' || typeof where !== 'function' || typeof getDocs !== 'function' || typeof doc !== 'function' || typeof updateDoc !== 'function') {
       console.error("[RESET_PASSWORD_UNAUTH_FIRESTORE_NOT_READY] Firestore not available for unauth reset. DB App:", db?.app);
       return { success: false, error: "Database service unavailable for password reset.", errorCode: 'DB_UNAVAILABLE'};
     }
@@ -702,4 +702,3 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
 }
     
     
-
