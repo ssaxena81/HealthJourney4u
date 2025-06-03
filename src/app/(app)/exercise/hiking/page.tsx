@@ -10,7 +10,7 @@ import { getNormalizedActivitiesForDateRangeAndType } from '@/app/actions/activi
 import type { NormalizedActivityFirestore, HikingRadarGoals } from '@/types';
 import { NormalizedActivityType } from '@/types';
 import { format, parseISO, startOfDay, endOfDay, differenceInDays } from 'date-fns';
-import { Loader2, Hiking as HikingIcon } from 'lucide-react';
+import { Loader2, Mountain as HikingIcon } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import {
   RadarChart,
