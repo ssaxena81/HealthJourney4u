@@ -47,7 +47,7 @@ interface SignUpResult {
 export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema>): Promise<SignUpResult> {
   console.log("[SIGNUP_ACTION_START] signUpUser action initiated with email:", values.email, "tier:", values.subscriptionTier);
 
-  if (!firebaseAuth || !firebaseAuth.app || typeof firebaseAuth.createUserWithEmailAndPassword !== 'function') {
+  if (!firebaseAuth || !firebaseAuth.app) {
     console.error("[SIGNUP_ACTION_CRITICAL_FAILURE] Firebase Auth service appears uninitialized or misconfigured on the server for signUpUser. firebaseAuth:", firebaseAuth);
     return {
       success: false,
@@ -579,7 +579,7 @@ export async function updateUserTermsAcceptance(userId: string, accepted: boolea
 }
 
 
-export async function finalizeFitbitConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string}> {
+export async function finalizeFitbitConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string, data?: any}> {
     console.log("[FINALIZE_FITBIT_CONNECTION_START] Finalizing Fitbit connection for UID:", userId);
     try {
         if (!db || !db.app || typeof doc !== 'function' || typeof updateDoc !== 'function' || typeof getDoc !== 'function') {
@@ -617,7 +617,7 @@ export async function finalizeFitbitConnection(userId: string): Promise<{success
     }
 }
 
-export async function finalizeStravaConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string}> {
+export async function finalizeStravaConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string, data?: any}> {
     console.log("[FINALIZE_STRAVA_CONNECTION_START] Finalizing Strava connection for UID:", userId);
     try {
         if (!db || !db.app || typeof doc !== 'function' || typeof updateDoc !== 'function' || typeof getDoc !== 'function') {
@@ -652,7 +652,7 @@ export async function finalizeStravaConnection(userId: string): Promise<{success
     }
 }
 
-export async function finalizeGoogleFitConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string}> {
+export async function finalizeGoogleFitConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string, data?: any}> {
     console.log("[FINALIZE_GOOGLE_FIT_CONNECTION_START] Finalizing Google Fit connection for UID:", userId);
      try {
         if (!db || !db.app || typeof doc !== 'function' || typeof updateDoc !== 'function' || typeof getDoc !== 'function') {
