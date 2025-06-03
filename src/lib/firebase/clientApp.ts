@@ -41,8 +41,6 @@ if (!allConfigKeysPresent) {
   );
 } else {
   console.log("[clientApp.ts] All Firebase config keys appear to be present in process.env.");
-  console.log("[clientApp.ts] typeof firebaseConfig before initializeApp:", typeof firebaseConfig);
-  console.log("[clientApp.ts] Keys of firebaseConfig:", Object.keys(firebaseConfig));
 
   if (!getApps().length) {
     try {
@@ -65,36 +63,32 @@ if (!allConfigKeysPresent) {
       console.log('[clientApp.ts] firebaseApp.options.apiKey check SUCCEEDED.');
     } else {
       console.error('[clientApp.ts] firebaseApp.options.apiKey check FAILED. firebaseApp.options:', firebaseApp.options);
-      firebaseApp = null; // Invalidate if options are not properly set
+      firebaseApp = null;
     }
   } else {
     console.error('[clientApp.ts] Firebase initializeApp/getApp FAILED to return a valid app object.');
   }
 
   if (firebaseApp) {
-    console.log('[clientApp.ts] firebaseApp seems valid (has name and apiKey). Proceeding to initialize Auth and Firestore.');
+    console.log('[clientApp.ts] firebaseApp seems valid. Proceeding to initialize Auth and Firestore.');
     // Initialize Auth
     try {
       console.log('[clientApp.ts] Attempting to get Auth instance from firebaseApp:', firebaseApp.name);
-      auth = getAuth(firebaseApp); // Explicitly pass firebaseApp
+      auth = getAuth(firebaseApp);
       console.log('[clientApp.ts] getAuth call completed. Auth object type:', typeof auth);
 
       const hasOnAuthStateChanged = !!(auth && typeof (auth as any).onAuthStateChanged === 'function');
-      const hasFetchSignInMethods = !!(auth && typeof (auth as any).fetchSignInMethodsForEmail === 'function');
+      // We are no longer directly using fetchSignInMethodsForEmail in app logic, so its absence on the auth object
+      // won't be treated as making the auth object "INVALID" for basic operations.
+      // const hasFetchSignInMethods = !!(auth && typeof (auth as any).fetchSignInMethodsForEmail === 'function');
 
-      if (hasOnAuthStateChanged && hasFetchSignInMethods) {
-        console.log('[clientApp.ts] Auth instance obtained and appears fully VALID.');
-      } else if (hasOnAuthStateChanged && !hasFetchSignInMethods) {
-        console.warn(
-          '[clientApp.ts] Auth instance from getAuth() is PARTIALLY VALID. It has onAuthStateChanged but is MISSING fetchSignInMethodsForEmail. Some Auth operations (like email availability check) will fail.'
-        );
-        // Do NOT nullify auth here, to allow basic auth operations to proceed
+      if (hasOnAuthStateChanged) {
+        console.log('[clientApp.ts] Auth instance obtained and has onAuthStateChanged, considered VALID for basic auth operations.');
       } else {
         console.error(
-          '[clientApp.ts] Auth instance from getAuth() is COMPLETELY INVALID. Has onAuthStateChanged:', hasOnAuthStateChanged,
-          ', Has fetchSignInMethodsForEmail:', hasFetchSignInMethods
+          '[clientApp.ts] Auth instance from getAuth() is INVALID (missing onAuthStateChanged). Has onAuthStateChanged:', hasOnAuthStateChanged
         );
-        auth = null; // Nullify if completely invalid
+        auth = null;
       }
     } catch (e: any) {
       console.error('[clientApp.ts] Error calling getAuth():', e.message, e.stack);
@@ -104,7 +98,7 @@ if (!allConfigKeysPresent) {
     // Initialize Firestore
     try {
       console.log('[clientApp.ts] Attempting to get Firestore instance from firebaseApp:', firebaseApp.name);
-      db = getFirestore(firebaseApp); // Explicitly pass firebaseApp
+      db = getFirestore(firebaseApp);
       console.log('[clientApp.ts] getFirestore call completed. Firestore object type:', typeof db);
 
       const hasCollectionMethod = !!(db && typeof (db as any).collection === 'function');
@@ -115,7 +109,7 @@ if (!allConfigKeysPresent) {
         console.error(
             `[clientApp.ts] Firestore instance from getFirestore() is INVALID (missing 'collection' method) for projectId ('${firebaseConfig.projectId}'). Firestore operations will fail. Firestore instance received type: ${typeof db}`
         );
-        db = null; // Nullify if invalid
+        db = null;
       }
     } catch (e: any) {
       console.error('[clientApp.ts] Error calling getFirestore():', e.message, e.stack);
@@ -128,5 +122,6 @@ if (!allConfigKeysPresent) {
   }
 }
 
-console.log('[clientApp.ts] Exporting final state: auth is', auth ? (typeof (auth as any).fetchSignInMethodsForEmail === 'function' ? 'VALID Instance' : 'PARTIALLY VALID Instance (missing fetchSignInMethodsForEmail)') : 'NULL', ', db is', db ? 'VALID Instance' : 'NULL');
+console.log('[clientApp.ts] Exporting final state: auth is', auth ? 'Instance (basic validity)' : 'NULL', ', db is', db ? 'VALID Instance' : 'NULL');
 export { firebaseApp, auth, db };
+
