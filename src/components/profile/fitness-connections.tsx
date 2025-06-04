@@ -8,6 +8,7 @@ import { mockFitnessApps } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label'; // Added import
 import { useToast } from '@/hooks/use-toast';
 import { XCircle, CheckCircle2, Link2, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -77,7 +78,7 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
         return;
       }
       setIsLoading(prev => ({ ...prev, [serviceId]: true }));
-      // For Withings, finalizeWithingsConnection might take a second arg (withingsApiUserId), but here we don't have it from callback, it's set during finalize.
+      
       const result = await finalizeAction(user.uid);
       if (result.success) {
         toast({ title: `${serviceName} Connected!`, description: `Successfully linked your ${serviceName} account.` });
@@ -115,36 +116,28 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
     };
 
     if (fitbitConnected === 'true') {
-      handleConnectionResult('fitbit', 'Fitbit', finalizeFitbitConnection);
+      handleConnectionResult('fitbit', 'Fitbit', finalizeFitbitConnection as any);
     } else if (fitbitError) {
       toast({ title: "Fitbit Connection Failed", description: decodeURIComponent(fitbitError), variant: "destructive" });
       router.replace('/profile', { scroll: false });
     }
 
     if (stravaConnected === 'true') {
-      handleConnectionResult('strava', 'Strava', finalizeStravaConnection);
+      handleConnectionResult('strava', 'Strava', finalizeStravaConnection as any);
     } else if (stravaError) {
       toast({ title: "Strava Connection Failed", description: decodeURIComponent(stravaError), variant: "destructive" });
       router.replace('/profile', { scroll: false });
     }
 
     if (googleFitConnected === 'true') {
-      handleConnectionResult('google-fit', 'Google Fit', finalizeGoogleFitConnection);
+      handleConnectionResult('google-fit', 'Google Fit', finalizeGoogleFitConnection as any);
     } else if (googleFitError) {
       toast({ title: "Google Fit Connection Failed", description: decodeURIComponent(googleFitError), variant: "destructive" });
       router.replace('/profile', { scroll: false });
     }
 
     if (withingsConnected === 'true') {
-      // The finalizeWithingsConnection function in auth.ts does accept an optional second 'withingsApiUserId' argument.
-      // However, at this stage (callback handling), we don't have the Withings User ID yet from the client-side.
-      // The User ID is typically obtained *after* the token exchange, often via a separate API call or embedded in the token response.
-      // The `finalizeWithingsConnection` in `auth.ts` is designed to store this ID if provided.
-      // For now, we call it with just `userId`. The `withingsUserId` would be populated if `setWithingsTokens` included it
-      // and if the server action `finalizeWithingsConnection` retrieves and includes it in its `data` return.
-      // The current implementation of `finalizeWithingsConnection` correctly sets `withingsUserId` in `connectionUpdateData`
-      // if `withingsApiUserId` is passed to it. Let's assume for the callback finalization, this ID isn't known yet or is handled internally by the action.
-      handleConnectionResult('withings', 'Withings', finalizeWithingsConnection);
+      handleConnectionResult('withings', 'Withings', finalizeWithingsConnection as any);
     } else if (withingsError) {
       toast({ title: "Withings Connection Failed", description: decodeURIComponent(withingsError), variant: "destructive" });
       router.replace('/profile', { scroll: false });
