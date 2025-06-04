@@ -14,7 +14,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { CalendarIcon } from 'lucide-react';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, formatISO } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import React from 'react';
@@ -58,6 +58,7 @@ const formSchema = baseSchema.extend({
   title: z.string().optional(), // Title is optional as medicationName/conditionName might be used
   value: z.any().optional(), // Number or object like LipidPanelData
   unit: z.string().optional(),
+  quality: z.string().optional(), // Added for breathing quality
   // Appointment specific
   doctor: z.string().optional(),
   location: z.string().optional(),
