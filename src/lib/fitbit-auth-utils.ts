@@ -26,7 +26,7 @@ interface StoredFitbitTokens {
 }
 
 export async function getFitbitTokens(): Promise<StoredFitbitTokens> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const accessToken = cookieStore.get(FITBIT_ACCESS_TOKEN_COOKIE)?.value;
   const refreshToken = cookieStore.get(FITBIT_REFRESH_TOKEN_COOKIE)?.value;
   const expiresAtString = cookieStore.get(FITBIT_TOKEN_EXPIRES_AT_COOKIE)?.value;
