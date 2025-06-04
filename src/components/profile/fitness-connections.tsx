@@ -19,6 +19,15 @@ interface FitnessConnectionsProps {
   onConnectionsUpdate?: (updatedProfileData: Partial<UserProfile>) => void;
 }
 
+// Define a common result type for finalize actions
+interface FinalizeActionResult {
+  success: boolean;
+  error?: string;
+  errorCode?: string;
+  data?: any; // Allows for optional data, like withingsUserId
+}
+
+
 const getMaxConnections = (tier: SubscriptionTier): number => {
   switch (tier) {
     case 'free': return 1;
@@ -60,7 +69,7 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
     const handleConnectionResult = async (
         serviceId: string,
         serviceName: string,
-        finalizeAction: (userId: string) => Promise<{success: boolean, error?: string}>
+        finalizeAction: (userId: string, apiSpecificId?: string) => Promise<FinalizeActionResult>
     ) => {
       if (!user?.uid) {
         toast({ title: `Error Finalizing ${serviceName} Connection`, description: "User session not found.", variant: "destructive" });
@@ -68,6 +77,7 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
         return;
       }
       setIsLoading(prev => ({ ...prev, [serviceId]: true }));
+      // For Withings, finalizeWithingsConnection might take a second arg (withingsApiUserId), but here we don't have it from callback, it's set during finalize.
       const result = await finalizeAction(user.uid);
       if (result.success) {
         toast({ title: `${serviceName} Connected!`, description: `Successfully linked your ${serviceName} account.` });
@@ -78,8 +88,8 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
             const updatedProfilePartial: Partial<UserProfile> = { 
                 connectedFitnessApps: [...(userProfile.connectedFitnessApps || []).filter(c => c.id !== serviceId), newConnectionDetails]
             };
-             if (serviceId === 'withings' && result.data && (result.data as any).withingsUserId) {
-                (updatedProfilePartial as any).withingsUserId = (result.data as any).withingsUserId;
+             if (serviceId === 'withings' && result.data && (result.data as { withingsUserId?: string }).withingsUserId) {
+                (updatedProfilePartial as any).withingsUserId = (result.data as { withingsUserId?: string }).withingsUserId;
             }
             onConnectionsUpdate(updatedProfilePartial);
         }
@@ -91,8 +101,8 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
                     ...prev,
                     connectedFitnessApps: [...existingConnections.filter(c => c.id !== serviceId), newConnectionDetails]
                 };
-                if (serviceId === 'withings' && result.data && (result.data as any).withingsUserId) {
-                    (updatedProfile as any).withingsUserId = (result.data as any).withingsUserId;
+                if (serviceId === 'withings' && result.data && (result.data as { withingsUserId?: string }).withingsUserId) {
+                    (updatedProfile as any).withingsUserId = (result.data as { withingsUserId?: string }).withingsUserId;
                 }
                 return updatedProfile;
             });
@@ -126,6 +136,14 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
     }
 
     if (withingsConnected === 'true') {
+      // The finalizeWithingsConnection function in auth.ts does accept an optional second 'withingsApiUserId' argument.
+      // However, at this stage (callback handling), we don't have the Withings User ID yet from the client-side.
+      // The User ID is typically obtained *after* the token exchange, often via a separate API call or embedded in the token response.
+      // The `finalizeWithingsConnection` in `auth.ts` is designed to store this ID if provided.
+      // For now, we call it with just `userId`. The `withingsUserId` would be populated if `setWithingsTokens` included it
+      // and if the server action `finalizeWithingsConnection` retrieves and includes it in its `data` return.
+      // The current implementation of `finalizeWithingsConnection` correctly sets `withingsUserId` in `connectionUpdateData`
+      // if `withingsApiUserId` is passed to it. Let's assume for the callback finalization, this ID isn't known yet or is handled internally by the action.
       handleConnectionResult('withings', 'Withings', finalizeWithingsConnection);
     } else if (withingsError) {
       toast({ title: "Withings Connection Failed", description: decodeURIComponent(withingsError), variant: "destructive" });
@@ -133,7 +151,7 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
     }
 
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, user?.uid, toast, router, onConnectionsUpdate, setAuthUserProfile]);
+  }, [searchParams, user?.uid, toast, router, onConnectionsUpdate, setAuthUserProfile, userProfile.connectedFitnessApps]);
 
 
   const handleDisconnect = async (appId: string) => {
