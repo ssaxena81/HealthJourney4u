@@ -78,9 +78,6 @@ if (!allConfigKeysPresent) {
       console.log('[clientApp.ts] getAuth call completed. Auth object type:', typeof auth);
 
       const hasOnAuthStateChanged = !!(auth && typeof (auth as any).onAuthStateChanged === 'function');
-      // We are no longer directly using fetchSignInMethodsForEmail in app logic, so its absence on the auth object
-      // won't be treated as making the auth object "INVALID" for basic operations.
-      // const hasFetchSignInMethods = !!(auth && typeof (auth as any).fetchSignInMethodsForEmail === 'function');
 
       if (hasOnAuthStateChanged) {
         console.log('[clientApp.ts] Auth instance obtained and has onAuthStateChanged, considered VALID for basic auth operations.');
@@ -99,17 +96,20 @@ if (!allConfigKeysPresent) {
     try {
       console.log('[clientApp.ts] Attempting to get Firestore instance from firebaseApp:', firebaseApp.name);
       db = getFirestore(firebaseApp);
-      console.log('[clientApp.ts] getFirestore call completed. Firestore object type:', typeof db);
+      console.log('[clientApp.ts] getFirestore call completed. Firestore object type:', typeof db, 'Project ID in db.app.options:', (db as any)?.app?.options?.projectId);
 
-      const hasCollectionMethod = !!(db && typeof (db as any).collection === 'function');
-
-      if (hasCollectionMethod) {
-        console.log('[clientApp.ts] Firestore instance obtained and appears VALID.');
+      // A more reliable check for a modular Firestore instance is its 'app' property
+      // or simply if it's an object and getFirestore didn't throw.
+      // The previous check for `db.collection` was incorrect for the modular SDK.
+      if (db && typeof db === 'object' && (db as any).app) {
+        console.log(`[clientApp.ts] Firestore instance obtained and appears VALID for project: ${(db as any).app.options.projectId}.`);
       } else {
         console.error(
-            `[clientApp.ts] Firestore instance from getFirestore() is INVALID (missing 'collection' method) for projectId ('${firebaseConfig.projectId}'). Firestore operations will fail. Firestore instance received type: ${typeof db}`
+            `[clientApp.ts] Firestore instance from getFirestore() is considered INVALID or its app property is not accessible. Firestore operations might fail. Firestore instance received:`, db
         );
-        db = null;
+        // Do not nullify db here if getFirestore itself didn't throw,
+        // let subsequent operations fail if it's truly unusable.
+        // db = null; 
       }
     } catch (e: any) {
       console.error('[clientApp.ts] Error calling getFirestore():', e.message, e.stack);
@@ -122,6 +122,5 @@ if (!allConfigKeysPresent) {
   }
 }
 
-console.log('[clientApp.ts] Exporting final state: auth is', auth ? 'Instance (basic validity)' : 'NULL', ', db is', db ? 'VALID Instance' : 'NULL');
+console.log('[clientApp.ts] Exporting final state: auth is', auth ? 'Instance (basic validity)' : 'NULL', ', db is', db ? 'Instance' : 'NULL');
 export { firebaseApp, auth, db };
-
