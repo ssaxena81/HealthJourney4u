@@ -1,7 +1,7 @@
 
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { cookies, type RequestCookies } from 'next/headers'; // Import RequestCookies type
 import { setGoogleFitTokens } from '@/lib/google-fit-auth-utils';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
   const profileUrl = `${appUrl}/profile`;
 
-  const cookieStore = cookies();
+  const cookieStore: RequestCookies = cookies(); // Explicitly type cookieStore
   const storedState = cookieStore.get('google_oauth_state')?.value;
   cookieStore.delete('google_oauth_state'); // Clean up state cookie
 
