@@ -40,7 +40,7 @@ export async function setFitbitTokens(
   refreshToken: string,
   expiresIn: number // seconds
 ): Promise<void> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const now = Date.now();
   const expiresAt = now + expiresIn * 1000; // Convert expiresIn to milliseconds and add to now
 
@@ -71,7 +71,7 @@ export async function setFitbitTokens(
 }
 
 export async function clearFitbitTokens(): Promise<void> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   cookieStore.delete(FITBIT_ACCESS_TOKEN_COOKIE);
   cookieStore.delete(FITBIT_REFRESH_TOKEN_COOKIE);
   cookieStore.delete(FITBIT_TOKEN_EXPIRES_AT_COOKIE);
