@@ -9,17 +9,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { resetPassword } from '@/app/actions/auth'; // passwordSchema removed
-import { passwordSchema } from '@/types'; // Import from types
+import { resetPassword } from '@/app/actions/auth';
+import { passwordSchema } from '@/types';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { useAuth } from '@/hooks/useAuth'; // To get current user's email
+import { useAuth } from '@/hooks/useAuth';
 
 
 const changePasswordFormSchema = z.object({
-  // Firebase's updatePassword requires the user to be recently signed in.
-  // If reauthentication is needed, Firebase throws an error which should be handled.
-  // currentPassword: passwordSchema, // Not directly used with firebaseUpdatePassword unless re-auth flow is implemented
   newPassword: passwordSchema,
   confirmNewPassword: passwordSchema,
 }).refine((data) => data.newPassword === data.confirmNewPassword, {
@@ -31,7 +28,7 @@ type ChangePasswordFormValues = z.infer<typeof changePasswordFormSchema>;
 
 export default function ChangePasswordForm() {
   const { toast } = useToast();
-  const { user, setUserProfile } = useAuth(); // Get current user's email and setUserProfile
+  const { user, setUserProfile } = useAuth();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -47,17 +44,17 @@ export default function ChangePasswordForm() {
 
   const onSubmit = (values: ChangePasswordFormValues) => {
     setError(null);
-    if (!user?.email) {
-        setError("User session not found. Please log in again.");
-        toast({ title: "Error", description: "User session not found. Please log in again.", variant: "destructive" });
+    if (!user || !user.email) { // Ensure user and user.email are not null
+        setError("User session not found or email is missing. Please log in again.");
+        toast({ title: "Error", description: "User session not found or email is missing. Please log in again.", variant: "destructive" });
         return;
     }
+    
+    const userEmail: string = user.email; // user.email is now confirmed to be a string
+
     startTransition(async () => {
-      // The `resetPassword` action internally calls `firebaseUpdatePassword` which requires a logged-in user.
-      // If Firebase requires re-authentication (e.g., "auth/requires-recent-login"),
-      // the server action should ideally return a specific error code to handle that on the client.
       const result = await resetPassword({
-        email: user.email, 
+        email: userEmail, 
         newPassword: values.newPassword,
         confirmNewPassword: values.confirmNewPassword,
       });
@@ -67,14 +64,11 @@ export default function ChangePasswordForm() {
           title: 'Password Changed Successfully!',
           description: result.message || 'Your password has been updated.',
         });
-        // Update lastPasswordChangeDate in local UserProfile state
         if (setUserProfile) {
             setUserProfile(prev => prev ? ({...prev, lastPasswordChangeDate: new Date().toISOString()}) : null);
         }
         form.reset();
       } else {
-        // TODO: Handle specific Firebase errors like 'auth/requires-recent-login'
-        // by prompting user to re-authenticate.
         setError(result.error || 'An unknown error occurred.');
         toast({
           title: 'Password Change Failed',
