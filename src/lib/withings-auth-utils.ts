@@ -31,7 +31,7 @@ interface StoredWithingsTokens {
 }
 
 export async function getWithingsTokens(): Promise<StoredWithingsTokens> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const accessToken = cookieStore.get(WITHINGS_ACCESS_TOKEN_COOKIE)?.value;
   const refreshToken = cookieStore.get(WITHINGS_REFRESH_TOKEN_COOKIE)?.value;
   const expiresAtString = cookieStore.get(WITHINGS_TOKEN_EXPIRES_AT_COOKIE)?.value;
@@ -47,7 +47,7 @@ export async function setWithingsTokens(
   expiresIn: number, // seconds
   withingsUserId: string
 ): Promise<void> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const now = Date.now();
   const expiresAt = now + expiresIn * 1000;
 
@@ -81,7 +81,7 @@ export async function setWithingsTokens(
 }
 
 export async function clearWithingsTokens(): Promise<void> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   cookieStore.delete(WITHINGS_ACCESS_TOKEN_COOKIE);
   cookieStore.delete(WITHINGS_REFRESH_TOKEN_COOKIE);
   cookieStore.delete(WITHINGS_TOKEN_EXPIRES_AT_COOKIE);
