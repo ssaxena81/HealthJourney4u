@@ -18,8 +18,8 @@ const nextConfig = {
       // Add other image source hostnames here if needed
     ],
   },
-  serverExternalPackages: ['@grpc/grpc-js'],
-  transpilePackages: ['firebase'], // Simplified: Only transpile the main firebase package
+  serverExternalPackages: ['@grpc/grpc-js', '@firebase/firestore'], // Added @firebase/firestore
+  transpilePackages: ['firebase'], 
 };
 
 export default nextConfig;

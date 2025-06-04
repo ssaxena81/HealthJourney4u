@@ -61,10 +61,10 @@ export default function DashboardMetricsForm({ userProfile, onProfileUpdate }: D
         }
       } else {
         toast({ title: 'Update Failed', description: result.error || 'Could not save dashboard metric preferences.', variant: 'destructive' });
-        if (result.details?.fieldErrors?.selectedMetrics) {
+        if (result.details?.fieldErrors?.selectedMetricIds) {
           form.setError('selectedMetrics', {
             type: 'server',
-            message: (result.details.fieldErrors.selectedMetrics as unknown as string[]).join(', '),
+            message: (result.details.fieldErrors.selectedMetricIds as string[]).join(', '),
           });
         } else if (result.error) {
             form.setError("root.serverError" as any, {type: "server", message: result.error});
