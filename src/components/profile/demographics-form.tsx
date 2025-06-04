@@ -245,7 +245,7 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
             {(!form.getValues("email") && !form.getValues("cellPhone")) && <p className="text-sm text-destructive mt-2">At least Email or Cell Phone is required for contact.</p>}
 
             <div className="flex justify-end">
-              <Button type="submit" disabled={isPending || showAgeRestrictionDialog || (isUserOver18 === false) || (isUserOver18 && !form.watch('ageCertification'))}>
+              <Button type="submit" disabled={isPending || showAgeRestrictionDialog || (isUserOver18 === false) || (isUserOver18 === true && !form.watch('ageCertification'))}>
                 {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save Demographics'}
               </Button>
             </div>
