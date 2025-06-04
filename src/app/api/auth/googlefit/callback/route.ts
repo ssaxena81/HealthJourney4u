@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
   const profileUrl = `${appUrl}/profile`;
 
-  const cookieStore: ReturnType<typeof cookies> = cookies();
+  const cookieStore = await cookies();
   const storedState = cookieStore.get('google_oauth_state')?.value;
   cookieStore.delete('google_oauth_state'); // Clean up state cookie
 

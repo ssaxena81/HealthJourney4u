@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002'; // Fallback for redirect
   const profileUrl = `${appUrl}/profile`;
 
-  const cookieStore: ReturnType<typeof cookies> = cookies();
+  const cookieStore = await cookies();
   const storedState = cookieStore.get('strava_oauth_state')?.value;
   cookieStore.delete('strava_oauth_state'); // Clean up state cookie
 
