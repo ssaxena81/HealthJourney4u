@@ -113,7 +113,7 @@ export default function SidebarNav({ onSyncAllClick }: SidebarNavProps) {
             {navItems.map((item) => (
               <SidebarMenuItem key={item.label}>
                 <SidebarMenuButton
-                  variant="ghost"
+                  variant="default"
                   className="w-full justify-start"
                   onClick={item.action ? item.action : item.href ? () => router.push(item.href!) : undefined}
                   disabled={item.disabled}
