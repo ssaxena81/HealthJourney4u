@@ -1,13 +1,13 @@
 
 import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+// cookies import is no longer needed here for setting
 import { randomBytes } from 'crypto';
 
 const WITHINGS_AUTHORIZE_URL = 'https://account.withings.com/oauth2_user/authorize2';
 
-export async function GET() {
+export async function GET() { // Make async if other async operations are needed
   const clientId = process.env.NEXT_PUBLIC_WITHINGS_CLIENT_ID;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL; // Your app's base URL
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL; 
   const oauthStateSecret = process.env.OAUTH_STATE_SECRET;
 
   if (!clientId || !appUrl || !oauthStateSecret) {
@@ -18,17 +18,6 @@ export async function GET() {
   const redirectUri = `${appUrl}/api/auth/withings/callback`;
   const state = randomBytes(16).toString('hex');
 
-  const cookieStore = cookies();
-  cookieStore.set('withings_oauth_state', state, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    maxAge: 60 * 10, // 10 minutes
-    sameSite: 'lax',
-  });
-
-  // Common scopes for Withings: user.info, user.metrics (weight, height, heart rate etc.), user.activity
-  // Refer to Withings API documentation for a full list of scopes.
   const scopes = 'user.info,user.metrics,user.activity';
 
   const params = new URLSearchParams({
@@ -37,11 +26,21 @@ export async function GET() {
     state: state,
     scope: scopes,
     redirect_uri: redirectUri,
-    // mode: 'demo', // Optional: for testing with demo data if your app is not yet validated by Withings
   });
 
   const authorizationUrl = `${WITHINGS_AUTHORIZE_URL}?${params.toString()}`;
   
   console.log('[Withings Connect] Redirecting to Withings for authorization:', authorizationUrl);
-  return NextResponse.redirect(authorizationUrl);
+  
+  const response = NextResponse.redirect(authorizationUrl);
+  response.cookies.set('withings_oauth_state', state, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === 'production',
+    path: '/',
+    maxAge: 60 * 10, // 10 minutes
+    sameSite: 'lax',
+  });
+
+  return response;
 }
+
