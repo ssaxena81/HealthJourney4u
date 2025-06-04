@@ -129,7 +129,6 @@ export default function SidebarNav({ onSyncAllClick }: SidebarNavProps) {
                       <SidebarMenuSubItem key={subItem.label}>
                         <SidebarMenuSubButton
                           onClick={() => router.push(subItem.href)}
-                          tooltip={{ children: subItem.label, side: 'right', align: 'center' }}
                           aria-label={subItem.label}
                         >
                           <subItem.icon className="h-5 w-5" />
