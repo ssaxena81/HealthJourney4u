@@ -25,7 +25,7 @@ interface StoredGoogleFitTokens {
 }
 
 export async function getGoogleFitTokens(): Promise<StoredGoogleFitTokens> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const accessToken = cookieStore.get(GOOGLE_FIT_ACCESS_TOKEN_COOKIE)?.value;
   const refreshToken = cookieStore.get(GOOGLE_FIT_REFRESH_TOKEN_COOKIE)?.value;
   const expiresAtString = cookieStore.get(GOOGLE_FIT_TOKEN_EXPIRES_AT_COOKIE)?.value;
@@ -39,7 +39,7 @@ export async function setGoogleFitTokens(
   refreshToken: string | undefined, // Refresh token might not always be provided on refresh
   expiresIn: number // seconds
 ): Promise<void> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const now = Date.now();
   const expiresAt = now + expiresIn * 1000;
 
@@ -70,7 +70,7 @@ export async function setGoogleFitTokens(
 }
 
 export async function clearGoogleFitTokens(): Promise<void> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   cookieStore.delete(GOOGLE_FIT_ACCESS_TOKEN_COOKIE);
   cookieStore.delete(GOOGLE_FIT_REFRESH_TOKEN_COOKIE);
   cookieStore.delete(GOOGLE_FIT_TOKEN_EXPIRES_AT_COOKIE);
