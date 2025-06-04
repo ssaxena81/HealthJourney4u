@@ -3,10 +3,9 @@
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { onAuthStateChanged, signOut, type User as FirebaseUser } from 'firebase/auth';
-import { auth as firebaseAuth } from '@/lib/firebase/clientApp';
+import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
 import type { UserProfile } from '@/types';
-// TODO: Import Firestore functions to fetch user profile: import { doc, getDoc } from 'firebase/firestore';
-// TODO: Import db from firebase clientApp
+import { doc, getDoc } from 'firebase/firestore'; // Ensure getDoc is imported
 
 const AuthContext = createContext<{
   user: FirebaseUser | null;
@@ -30,42 +29,47 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   const fetchUserProfile = useCallback(async (firebaseUser: FirebaseUser) => {
-    // TODO: Implement actual Firestore profile fetch
-    // const userDocRef = doc(db, "users", firebaseUser.uid);
-    // const userDocSnap = await getDoc(userDocRef);
-    // if (userDocSnap.exists()) {
-    //   setUserProfile(userDocSnap.data() as UserProfile);
-    // } else {
-    //   // Profile might not be created yet (e.g., mid-signup) or an error
-    //   console.warn("User profile not found in Firestore for UID:", firebaseUser.uid);
-    //   setUserProfile(null); // Or a default/partial profile
-    // }
-    // --- MOCK PROFILE ---
-    if (firebaseUser) {
-        // Simulate fetching a more complete profile based on stored info or defaults
-        // This mock profile should align with the UserProfile structure
+    if (!db || !db.app) {
+      console.warn("[AuthProvider] Firestore (db) is not initialized. Cannot fetch real profile. Falling back to mock if user exists.");
+       if (firebaseUser) {
         const mockProfileData: UserProfile = {
             id: firebaseUser.uid,
-            email: firebaseUser.email || 'mock@example.com', // Ensure email is present
-            subscriptionTier: 'free', // Default tier
-            lastPasswordChangeDate: new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString(), // 100 days ago
-            acceptedLatestTerms: false, // Default, will trigger T&C modal
-            firstName: "Mock", // Default
-            lastName: "User", // Default
-            dateOfBirth: new Date(1990, 0, 1).toISOString(), // Default
-            cellPhone: undefined, // Default
-            mfaMethod: undefined, // Default
-            termsVersionAccepted: undefined, // Default
-            paymentDetails: undefined, // Default
-            connectedFitnessApps: [], // Default
-            connectedDiagnosticsServices: [], // Default
-            connectedInsuranceProviders: [], // Default
+            email: firebaseUser.email || 'mock@example.com',
+            subscriptionTier: 'free', 
+            lastPasswordChangeDate: new Date(Date.now() - 100 * 24 * 60 * 60 * 1000).toISOString(),
+            acceptedLatestTerms: false,
+            firstName: "Mock",
+            lastName: "User",
+            dateOfBirth: new Date(1990, 0, 1).toISOString(),
+            cellPhone: undefined,
+            // mfaMethod: undefined, // Removed as it's not in UserProfile type
+            termsVersionAccepted: undefined,
+            paymentDetails: undefined,
+            connectedFitnessApps: [],
+            connectedDiagnosticsServices: [],
+            connectedInsuranceProviders: [],
         };
         setUserProfile(mockProfileData);
-    } else {
+      } else {
         setUserProfile(null);
+      }
+      return;
     }
-    // --- END MOCK PROFILE ---
+
+    try {
+        const userDocRef = doc(db, "users", firebaseUser.uid);
+        const userDocSnap = await getDoc(userDocRef);
+        if (userDocSnap.exists()) {
+          setUserProfile(userDocSnap.data() as UserProfile);
+          console.log("[AuthProvider] User profile fetched from Firestore for UID:", firebaseUser.uid);
+        } else {
+          console.warn("[AuthProvider] User profile not found in Firestore for UID:", firebaseUser.uid, ". This might be okay during initial signup flow.");
+          setUserProfile(null); 
+        }
+    } catch (error) {
+        console.error("[AuthProvider] Error fetching user profile from Firestore for UID:", firebaseUser.uid, error);
+        setUserProfile(null); // Set to null on error to avoid inconsistent state
+    }
   }, []);
 
 
