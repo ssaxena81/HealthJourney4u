@@ -26,7 +26,7 @@ interface StoredStravaTokens {
 }
 
 export async function getStravaTokens(): Promise<StoredStravaTokens> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const accessToken = cookieStore.get(STRAVA_ACCESS_TOKEN_COOKIE)?.value;
   const refreshToken = cookieStore.get(STRAVA_REFRESH_TOKEN_COOKIE)?.value;
   const expiresAtString = cookieStore.get(STRAVA_TOKEN_EXPIRES_AT_COOKIE)?.value;
@@ -40,7 +40,7 @@ export async function setStravaTokens(
   refreshToken: string,
   expiresAtTimestampSeconds: number // Strava provides expires_at directly as a Unix timestamp
 ): Promise<void> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const expiresAtMilliseconds = expiresAtTimestampSeconds * 1000;
   const now = Date.now();
   const maxAgeSeconds = Math.max(0, Math.floor((expiresAtMilliseconds - now) / 1000));
@@ -74,7 +74,7 @@ export async function setStravaTokens(
 }
 
 export async function clearStravaTokens(): Promise<void> {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   cookieStore.delete(STRAVA_ACCESS_TOKEN_COOKIE);
   cookieStore.delete(STRAVA_REFRESH_TOKEN_COOKIE);
   cookieStore.delete(STRAVA_TOKEN_EXPIRES_AT_COOKIE);
@@ -158,3 +158,4 @@ export async function getValidStravaAccessToken(): Promise<string | null> {
 
   return accessToken;
 }
+
