@@ -6,11 +6,12 @@ import { onAuthStateChanged, signOut, type User as FirebaseUser } from 'firebase
 import { auth as firebaseAuthModule, db } from '@/lib/firebase/clientApp'; // Aliased import
 import type { UserProfile } from '@/types';
 import { doc, getDoc } from 'firebase/firestore';
-import { useRouter } from 'next/navigation'; // For client-side navigation where needed
 
-// Define default stubs outside the component for type safety and to avoid "not defined" if context is somehow used before provider fully initializes
+// Define default stubs outside the component for type safety
 const defaultLogoutStub = async () => { console.error("AuthContext: DEFAULT logout stub executed. AuthProvider might not be mounted or context not properly updated."); };
 const defaultCheckAuthStateStub = async () => { console.error("AuthContext: DEFAULT checkAuthState stub executed."); };
+
+console.log("[AuthProvider Module Scope] firebaseAuthModule from clientApp.ts:", firebaseAuthModule);
 
 const AuthContext = createContext<{
   user: FirebaseUser | null;
@@ -32,9 +33,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfileState] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  // const router = useRouter(); // Not used directly by functions passed to context anymore
 
-  const firebaseAuthInstance = firebaseAuthModule;
+  console.log("[AuthProvider Instance] Initializing AuthProvider. firebaseAuthModule (instance check):", firebaseAuthModule);
 
   const fetchUserProfile = useCallback(async (fbUser: FirebaseUser) => {
     console.log("[AuthProvider fetchUserProfile] Attempting to fetch profile for UID:", fbUser.uid);
@@ -49,7 +49,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (userDocSnap.exists()) {
         const profileData = userDocSnap.data() as UserProfile;
         setUserProfileState(profileData);
-        console.log("[AuthProvider fetchUserProfile] User profile fetched and set for UID:", fbUser.uid);
+        console.log("[AuthProvider fetchUserProfile] User profile fetched and set for UID:", fbUser.uid, "Profile:", profileData);
       } else {
         console.warn("[AuthProvider fetchUserProfile] User profile not found in Firestore for UID:", fbUser.uid);
         setUserProfileState(null);
@@ -58,35 +58,32 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.error("[AuthProvider fetchUserProfile] Error fetching user profile for UID:", fbUser.uid, error);
       setUserProfileState(null);
     }
-  }, []); // firebaseAuthInstance is module-level, db is module-level
+  }, []);
 
-  // Define logout function for the context
   const contextLogout = useCallback(async () => {
     console.log("!!! [AuthProvider CONTEXT logout CALLED] !!! Attempting to sign out...");
-    if (!firebaseAuthInstance) {
+    if (!firebaseAuthModule) {
       console.error("[AuthProvider CONTEXT logout] Firebase Auth instance is not available. Cannot logout.");
       return;
     }
     try {
-      await signOut(firebaseAuthInstance);
+      await signOut(firebaseAuthModule);
       console.log("[AuthProvider CONTEXT logout] signOut successful via context function.");
-      // Actual state updates (user to null, profile to null) will be handled by onAuthStateChanged
-      // Navigation should be handled by the component calling this logout function (e.g., SidebarNav)
+      // State updates are handled by onAuthStateChanged
     } catch (error) {
       console.error("[AuthProvider CONTEXT logout] Error signing out via context function:", error);
     }
-  }, [firebaseAuthInstance]); // Dependency is stable
+  }, [firebaseAuthModule]);
 
-  // Define checkAuthState function for the context
   const contextCheckAuthState = useCallback(async () => {
     console.log("!!! [AuthProvider CONTEXT checkAuthState CALLED] !!!");
-    if (!firebaseAuthInstance) {
+    if (!firebaseAuthModule) {
       console.error("[AuthProvider CONTEXT checkAuthState] Firebase Auth instance not available.");
-      setLoading(false); // Ensure loading is false if we can't proceed
+      setLoading(false);
       return;
     }
     setLoading(true);
-    const currentFbUser = firebaseAuthInstance.currentUser;
+    const currentFbUser = firebaseAuthModule.currentUser;
     console.log("[AuthProvider CONTEXT checkAuthState] Current Firebase user:", currentFbUser ? currentFbUser.uid : 'null');
     if (currentFbUser) {
       setUser(currentFbUser);
@@ -97,63 +94,72 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
     setLoading(false);
     console.log("[AuthProvider CONTEXT checkAuthState] Finished. Loading:", false);
-  }, [firebaseAuthInstance, fetchUserProfile]); // Dependencies
+  }, [firebaseAuthModule, fetchUserProfile]);
 
   useEffect(() => {
-    console.log("[AuthProvider useEffect] Setting up onAuthStateChanged listener. Firebase Auth instance:", firebaseAuthInstance ? "Available" : "NULL");
-    if (!firebaseAuthInstance || typeof firebaseAuthInstance.onAuthStateChanged !== 'function') {
-      console.warn('[AuthProvider useEffect] Firebase Auth is not initialized or onAuthStateChanged is not a function. Setting loading to false.');
+    console.log("!!! [AuthProvider useEffect for onAuthStateChanged] START. firebaseAuthModule is:", firebaseAuthModule ? "Available" : "NULL or Undefined");
+
+    if (!firebaseAuthModule || typeof firebaseAuthModule.onAuthStateChanged !== 'function') {
+      console.warn('[AuthProvider useEffect] Firebase Auth (firebaseAuthModule) is not initialized correctly or onAuthStateChanged is not a function. Auth listener NOT set up. Setting loading to false.');
       setLoading(false);
       return () => {};
     }
 
-    const unsubscribe = onAuthStateChanged(firebaseAuthInstance, async (fbUser) => {
-      console.log("!!! [AuthProvider onAuthStateChanged FIRED] !!! Received firebaseUser (UID if present):", fbUser ? fbUser.uid : 'null');
-      setLoading(true); // Set loading true at the start of processing this event
-      console.log("[AuthProvider onAuthStateChanged] ==> setLoading(true) called.");
+    let unsubscribe;
+    try {
+      console.log("[AuthProvider useEffect] Attempting to set up onAuthStateChanged listener...");
+      unsubscribe = onAuthStateChanged(firebaseAuthModule, async (fbUser) => {
+        console.log("!!! [AuthProvider onAuthStateChanged FIRED] !!! Received firebaseUser (UID if present):", fbUser ? fbUser.uid : 'null');
+        setLoading(true);
+        console.log("[AuthProvider onAuthStateChanged] ==> setLoading(true) called.");
 
-      if (fbUser) {
-        console.log("[AuthProvider onAuthStateChanged] FirebaseUser IS TRUTHY. UID:", fbUser.uid);
-        setUser(fbUser);
-        console.log("[AuthProvider onAuthStateChanged] ==> setUser(fbUser) called for UID:", fbUser.uid);
-        await fetchUserProfile(fbUser);
-        console.log("[AuthProvider onAuthStateChanged] fetchUserProfile completed for UID:", fbUser.uid);
-      } else {
-        console.log("[AuthProvider onAuthStateChanged] FirebaseUser IS FALSY. Setting user and profile to null.");
-        setUser(null);
-        setUserProfileState(null);
-        console.log("[AuthProvider onAuthStateChanged] ==> setUser(null) and setUserProfileState(null) called.");
-      }
-      setLoading(false); // Set loading false at the end of processing this event
-      console.log("[AuthProvider onAuthStateChanged] ==> setLoading(false) called. Final state - User UID:", fbUser ? fbUser.uid : 'null', "Loading:", false, "Profile Set:", !!userProfile);
-    });
+        if (fbUser) {
+          console.log("[AuthProvider onAuthStateChanged] FirebaseUser IS TRUTHY. UID:", fbUser.uid);
+          setUser(fbUser);
+          console.log("[AuthProvider onAuthStateChanged] ==> setUser(fbUser) called for UID:", fbUser.uid);
+          await fetchUserProfile(fbUser);
+          console.log("[AuthProvider onAuthStateChanged] fetchUserProfile completed for UID:", fbUser.uid);
+        } else {
+          console.log("[AuthProvider onAuthStateChanged] FirebaseUser IS FALSY. Setting user and profile to null.");
+          setUser(null);
+          setUserProfileState(null);
+          console.log("[AuthProvider onAuthStateChanged] ==> setUser(null) and setUserProfileState(null) called.");
+        }
+        setLoading(false);
+        console.log("[AuthProvider onAuthStateChanged] ==> setLoading(false) called. Final state - User UID:", fbUser ? fbUser.uid : 'null', "Loading:", false);
+      });
+      console.log("[AuthProvider useEffect] onAuthStateChanged listener SUBSCRIBED successfully.");
+    } catch (error) {
+        console.error("[AuthProvider useEffect] CRITICAL ERROR setting up onAuthStateChanged listener:", error);
+        setLoading(false); // Ensure loading is false if listener setup fails
+        return () => {}; // Return empty cleanup
+    }
 
     return () => {
-      console.log("[AuthProvider useEffect] CLEANING UP onAuthStateChanged listener.");
-      unsubscribe();
+      if (unsubscribe) {
+        console.log("[AuthProvider useEffect] CLEANING UP onAuthStateChanged listener.");
+        unsubscribe();
+      } else {
+        console.log("[AuthProvider useEffect] Cleanup attempted, but unsubscribe function was not available (listener might not have been set).");
+      }
     };
-  }, [fetchUserProfile, firebaseAuthInstance]);
+  }, [fetchUserProfile, firebaseAuthModule]);
 
+  const contextValue = useMemo(() => ({
+    user,
+    userProfile,
+    setUserProfile: setUserProfileState,
+    loading,
+    logout: contextLogout,
+    checkAuthState: contextCheckAuthState,
+  }), [user, userProfile, loading, contextLogout, contextCheckAuthState]);
 
-  // Log right before returning the Provider
-  // This log is crucial for SSR debugging if the error points here
   console.log(
-      "[AuthProvider RENDER] Preparing context value. User:", user ? user.uid : 'null',
-      "Loading:", loading,
-      "contextLogout is func:", typeof contextLogout === 'function',
-      "contextCheckAuthState is func:", typeof contextCheckAuthState === 'function'
+      `[AuthProvider RENDER] Context being provided: User UID: ${contextValue.user ? contextValue.user.uid : 'null'} Loading: ${contextValue.loading} Profile ID: ${contextValue.userProfile ? contextValue.userProfile.id : 'null'} Last Logged In: ${contextValue.userProfile?.lastLoggedInDate || 'N/A'}`
   );
 
-  // This is line 106 (or around it, depending on exact formatting/comments above)
   return (
-    <AuthContext.Provider value={{
-      user,
-      userProfile,
-      setUserProfile: setUserProfileState,
-      loading,
-      logout: contextLogout, // Pass the useCallback-wrapped function
-      checkAuthState: contextCheckAuthState // Pass the useCallback-wrapped function
-    }}>
+    <AuthContext.Provider value={contextValue}>
       {children}
     </AuthContext.Provider>
   );
@@ -161,12 +167,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
 export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) { // Check for undefined, which is the default if not wrapped
+  if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider. Context was undefined.');
   }
-  // Check if the functions are still the stubs, indicating AuthProvider might not have initialized its value for this consumer
-  if (context.logout === defaultLogoutStub) {
+  if (context.logout === defaultLogoutStub || context.checkAuthState === defaultCheckAuthStateStub) {
       console.warn("useAuth is returning the default context stubs for logout/checkAuthState. This might be normal during initial SSR passes or if AuthProvider is not correctly wrapping this component tree.");
   }
   return context;
 };
+
+    
