@@ -12,12 +12,11 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { loginUser } from '@/app/actions/auth';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth';
+// useAuth is not strictly needed here anymore if we rely on onAuthStateChanged to redirect properly.
 
 const loginFormSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
   password: z.string().min(1, {message: "Password is required."}),
-  // mfaCode: z.string().length(8, { message: "MFA code must be 8 digits."}).optional().or(z.literal('')), // MFA removed
 });
 
 type LoginFormValues = z.infer<typeof loginFormSchema>;
@@ -25,18 +24,15 @@ type LoginFormValues = z.infer<typeof loginFormSchema>;
 export default function LoginForm() {
   const router = useRouter();
   const { toast } = useToast();
-  const { setUserProfile: setAuthUserProfile, checkAuthState } = useAuth();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  // const [requiresMfa, setRequiresMfa] = useState(false); // MFA removed
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
     defaultValues: {
       email: '',
       password: '',
-      // mfaCode: '', // MFA removed
     },
   });
 
@@ -53,35 +49,21 @@ export default function LoginForm() {
           title: 'Login Successful!',
           description: 'Welcome back.',
         });
-
-        if (result.userProfile && setAuthUserProfile) {
-          console.log('[LOGIN_FORM_SUCCESS] Setting user profile in AuthContext from login action:', result.userProfile);
-          setAuthUserProfile(result.userProfile);
-        } else {
-           await checkAuthState();
-        }
         
-        console.log('[LOGIN_FORM_SUCCESS] Redirecting to "/".');
+        // By simply navigating, we rely on onAuthStateChanged in AuthProvider
+        // to update the context and trigger re-renders in components like RootPage.
+        console.log('[LOGIN_FORM_SUCCESS] Redirecting to "/". AuthProvider should handle state update.');
         router.push('/');
-        router.refresh(); 
-
+        // router.refresh(); // Removed: Let onAuthStateChanged and Next.js routing handle re-renders.
       } else {
         console.log('[LOGIN_FORM_FAILURE] Login action reported failure. Result:', result);
-        // MFA logic removed
-        // if (result.requiresMfa) {
-        //   setRequiresMfa(true);
-        //   setError(result.error || "MFA code required. Please check your device.");
-        //    console.log('[LOGIN_FORM_MFA_REQUIRED] MFA is required. Prompting for code.');
-        // } else {
-        //   setRequiresMfa(false);
-          setError(result.error || 'An unknown error occurred.');
-          toast({
-            title: 'Login Failed',
-            description: result.error || 'Please check your credentials.',
-            variant: 'destructive',
-          });
-           console.log('[LOGIN_FORM_ERROR] Login failed with error:', result.error, 'Code:', result.errorCode);
-        // }
+        setError(result.error || 'An unknown error occurred.');
+        toast({
+          title: 'Login Failed',
+          description: result.error || 'Please check your credentials.',
+          variant: 'destructive',
+        });
+        console.log('[LOGIN_FORM_ERROR] Login failed with error:', result.error, 'Code:', result.errorCode);
       }
     });
   };
@@ -94,7 +76,6 @@ export default function LoginForm() {
         </div>
       )}
       
-      {/* Removed requiresMfa condition wrapper */}
       <>
         <div className="space-y-2">
           <Label htmlFor="email">Email</Label>
@@ -140,9 +121,6 @@ export default function LoginForm() {
         </div>
       </>
 
-      {/* Removed MFA code input block */}
-      {/* {requiresMfa && ( ... )} */}
-
       <Button type="submit" className="w-full" disabled={isPending}>
         {isPending ? (
           <>
@@ -156,5 +134,4 @@ export default function LoginForm() {
     </form>
   );
 }
-
     
