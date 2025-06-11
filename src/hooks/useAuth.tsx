@@ -42,13 +42,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         if (userDocSnap.exists()) {
           const profileData = userDocSnap.data() as UserProfile;
           setUserProfile(profileData);
-          console.log("[AuthProvider fetchUserProfile] User profile fetched from Firestore:", profileData);
+          console.log("[AuthProvider fetchUserProfile] User profile fetched and set for UID:", firebaseUser.uid, "Profile exists:", !!profileData);
         } else {
           console.warn("[AuthProvider fetchUserProfile] User profile not found in Firestore for UID:", firebaseUser.uid);
           setUserProfile(null); 
         }
     } catch (error) {
-        console.error("[AuthProvider fetchUserProfile] Error fetching user profile from Firestore:", error);
+        console.error("[AuthProvider fetchUserProfile] Error fetching user profile from Firestore for UID:", firebaseUser.uid, error);
         setUserProfile(null);
     }
   }, []);
@@ -58,20 +58,27 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     console.log("[AuthProvider useEffect] Setting up onAuthStateChanged listener.");
     if (firebaseAuth && typeof firebaseAuth.onAuthStateChanged === 'function') {
       const unsubscribe = onAuthStateChanged(firebaseAuth, async (firebaseUser) => {
-        setLoading(true); // START loading state
-        console.log("[AuthProvider onAuthStateChanged] Auth state changed. FirebaseUser:", firebaseUser ? firebaseUser.uid : 'null', "Current loading state:", loading);
+        console.log("[AuthProvider onAuthStateChanged] CALLBACK START. Current Firebase Auth User (UID if present):", firebaseAuth.currentUser ? firebaseAuth.currentUser.uid : 'null');
+        console.log("[AuthProvider onAuthStateChanged] Received firebaseUser (UID if present) from listener:", firebaseUser ? firebaseUser.uid : 'null');
         
+        setLoading(true); 
+        console.log("[AuthProvider onAuthStateChanged] setLoading(true) called.");
+
         if (firebaseUser) {
-          console.log("[AuthProvider onAuthStateChanged] User is present. Setting user and fetching profile.");
-          setUser(firebaseUser);
+          console.log("[AuthProvider onAuthStateChanged] FirebaseUser is TRUTHY. UID:", firebaseUser.uid);
+          setUser(firebaseUser); 
+          console.log("[AuthProvider onAuthStateChanged] setUser(firebaseUser) called. Profile fetch starting for UID:", firebaseUser.uid);
           await fetchUserProfile(firebaseUser);
+          console.log("[AuthProvider onAuthStateChanged] fetchUserProfile completed for UID:", firebaseUser.uid);
         } else {
-          console.log("[AuthProvider onAuthStateChanged] User is null. Clearing user and profile.");
+          console.log("[AuthProvider onAuthStateChanged] FirebaseUser is FALSY. Setting user and profile to null.");
           setUser(null);
           setUserProfile(null);
+          console.log("[AuthProvider onAuthStateChanged] setUser(null) and setUserProfile(null) called.");
         }
-        setLoading(false); // END loading state after all processing
-        console.log("[AuthProvider onAuthStateChanged] Finished processing. Loading set to false. Final user:", user ? user.uid : 'null', "Final profile:", userProfile ? userProfile.id : 'null');
+        
+        setLoading(false); 
+        console.log("[AuthProvider onAuthStateChanged] CALLBACK END. setLoading(false) called.");
       });
       return () => {
         console.log("[AuthProvider useEffect] Unsubscribing from onAuthStateChanged.");
@@ -86,24 +93,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setUserProfile(null);
       return () => {};
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [fetchUserProfile]);
 
   const checkAuthState = useCallback(async () => {
-    console.log("[AuthProvider checkAuthState] Manually checking auth state.");
+    console.log("[AuthProvider checkAuthState] Manually checking auth state (primarily uses onAuthStateChanged now).");
     setLoading(true);
-    if (firebaseAuth && typeof firebaseAuth.onAuthStateChanged === 'function') {
-      const currentUser = firebaseAuth.currentUser;
-      if (currentUser) {
-        setUser(currentUser);
-        await fetchUserProfile(currentUser);
-      } else {
+    // onAuthStateChanged is the primary mechanism, this function is more of a utility
+    // but direct currentUser access can be stale. Rely on the listener.
+    if (firebaseAuth?.currentUser) {
+        setUser(firebaseAuth.currentUser);
+        await fetchUserProfile(firebaseAuth.currentUser);
+    } else {
         setUser(null);
         setUserProfile(null);
-      }
-    } else {
-      setUser(null);
-      setUserProfile(null);
     }
     setLoading(false);
     console.log("[AuthProvider checkAuthState] Finished. Loading set to false.");
@@ -113,18 +115,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     console.log("[AuthProvider logout] Logging out user.");
     if (firebaseAuth && typeof firebaseAuth.signOut === 'function') {
       await signOut(firebaseAuth);
-      // onAuthStateChanged will handle setting user, userProfile to null and loading to false.
-      // Explicitly setting user/profile to null here can be redundant if onAuthStateChanged fires quickly,
-      // but doesn't hurt as a safeguard for immediate UI update.
-      setUser(null);
-      setUserProfile(null);
+      // onAuthStateChanged will handle setting user, userProfile to null.
     } else {
       console.warn('[AuthProvider logout] Firebase Auth is not initialized. Cannot sign out.');
       setUser(null); 
       setUserProfile(null);
+      setLoading(false); // Ensure loading is false if auth is not init
     }
     console.log("[AuthProvider logout] Logout process complete.");
   };
+
+  console.log("[AuthProvider RENDER] Context being provided: User UID:", user ? user.uid : 'null', "Loading:", loading, "Profile ID:", userProfile ? userProfile.id : 'null');
 
   return (
     <AuthContext.Provider value={{ user, userProfile, setUserProfile, loading, logout, checkAuthState }}>

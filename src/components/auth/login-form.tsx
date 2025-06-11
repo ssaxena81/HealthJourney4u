@@ -22,7 +22,7 @@ const loginFormSchema = z.object({
 type LoginFormValues = z.infer<typeof loginFormSchema>;
 
 export default function LoginForm() {
-  const router = useRouter();
+  const router = useRouter(); // Keep router for potential future use, but not for immediate redirect
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
@@ -38,23 +38,19 @@ export default function LoginForm() {
 
   const onSubmit = (values: LoginFormValues) => {
     setError(null);
-    console.log('[LOGIN_FORM_SUBMIT_START] Submitting login form with values:', values);
+    console.log('[LOGIN_FORM_SUBMIT_START] Submitting login form with values:', values.email);
     startTransition(async () => {
       const result = await loginUser(values);
       console.log('[LOGIN_FORM_SUBMIT_RESULT] Received result from loginUser action:', JSON.stringify(result, null, 2));
 
       if (result.success) {
-        console.log('[LOGIN_FORM_SUCCESS] Login action reported success.');
+        console.log('[LOGIN_FORM_SUCCESS] Login action reported success. AuthProvider should handle state update and RootPage will react.');
         toast({
           title: 'Login Successful!',
           description: 'Welcome back.',
         });
-        
-        // By simply navigating, we rely on onAuthStateChanged in AuthProvider
-        // to update the context and trigger re-renders in components like RootPage.
-        console.log('[LOGIN_FORM_SUCCESS] Redirecting to "/". AuthProvider should handle state update.');
-        router.push('/');
-        // router.refresh(); // Removed: Let onAuthStateChanged and Next.js routing handle re-renders.
+        // REMOVED: router.push('/'); 
+        // AuthProvider will update context, and RootPage or other layout will react.
       } else {
         console.log('[LOGIN_FORM_FAILURE] Login action reported failure. Result:', result);
         setError(result.error || 'An unknown error occurred.');
