@@ -329,6 +329,7 @@ export interface UserProfile {
   cellPhone?: string; 
   passwordResetCodeAttempt?: { code: string; expiresAt: string; }; 
   isAgeCertified?: boolean; 
+  profileSetupComplete?: boolean; // Added field
 
   lastPasswordChangeDate: string; 
   lastLoggedInDate?: string; // Added new field

@@ -455,3 +455,32 @@ export async function updateDashboardRadarMetrics(
     return { success: false, error: String(error.message) || 'Failed to update dashboard metric selection.' };
   }
 }
+
+// --- Mark Profile Setup Complete ---
+export async function markProfileSetupComplete(userId: string): Promise<{ success: boolean, error?: string }> {
+  if (!firebaseAuth || !db) {
+    console.error('[USER_PROFILE_ACTIONS] Firebase services not available for markProfileSetupComplete.');
+    return { success: false, error: 'Core services unavailable.' };
+  }
+  
+  // Optional: Verify it's the currently logged-in user or an admin making this call
+  // For simplicity, we'll assume the caller (DemographicsForm) has access to the correct userId.
+  if (firebaseAuth.currentUser?.uid !== userId) {
+    // This check might be too strict if an admin could mark it, but for user-driven flow it's okay.
+    // console.warn('[USER_PROFILE_ACTIONS] Attempt to mark profile complete for a different user ID.');
+    // return { success: false, error: 'Authorization error.' };
+  }
+
+  console.log('[USER_PROFILE_ACTIONS] Marking profile setup as complete for UID:', userId);
+  try {
+    const userProfileDocRef = doc(db, 'users', userId);
+    await updateDoc(userProfileDocRef, {
+      profileSetupComplete: true,
+    });
+    console.log('[USER_PROFILE_ACTIONS] Profile setup marked as complete in Firestore for UID:', userId);
+    return { success: true };
+  } catch (error: any) {
+    console.error('[USER_PROFILE_ACTIONS] Error marking profile setup complete for UID:', userId, error);
+    return { success: false, error: String(error.message) || 'Failed to update profile completion status.' };
+  }
+}

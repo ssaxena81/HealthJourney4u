@@ -202,6 +202,7 @@ export default function AuthenticatedAppLayout({
       Accepted Terms: ${userProfile?.acceptedLatestTerms}
       Terms Version: ${userProfile?.termsVersionAccepted} (Latest: ${LATEST_TERMS_VERSION})
       Last Password Change: ${userProfile?.lastPasswordChangeDate}
+      Profile Setup Complete: ${userProfile?.profileSetupComplete}
     `);
 
     if (isLoading) {
@@ -216,13 +217,19 @@ export default function AuthenticatedAppLayout({
     }
 
     if (!userProfile) {
-      // This case implies profileLoading is false, but userProfile is still null.
-      console.log('[AuthenticatedAppLayout useEffect] User exists, but no profile data (and not loading profile). Redirecting to /profile.');
+      console.log('[AuthenticatedAppLayout useEffect] User exists, but no profile data (and not loading profile). Redirecting to /profile to initialize.');
       router.replace('/profile');
       return;
     }
 
-    // User and UserProfile exist, proceed with checks
+    // Check 1: Profile Setup Complete
+    if (userProfile.profileSetupComplete !== true) {
+        console.log('[AuthenticatedAppLayout useEffect] Profile setup not complete. Redirecting to /profile.');
+        router.replace('/profile');
+        return;
+    }
+
+    // Check 2: Password Expiry (Only if profile setup is complete)
     if (userProfile.lastPasswordChangeDate) {
       const lastChange = new Date(userProfile.lastPasswordChangeDate);
       const daysSinceChange = (new Date().getTime() - lastChange.getTime()) / (1000 * 3600 * 24);
@@ -232,19 +239,17 @@ export default function AuthenticatedAppLayout({
         return;
       }
     } else {
-      // lastPasswordChangeDate is essential. If missing, force reset.
       console.warn("[AuthenticatedAppLayout useEffect] User profile missing lastPasswordChangeDate. Redirecting to password reset.");
       router.replace('/reset-password-required');
       return;
     }
 
+    // Check 3: Terms Acceptance (Only if profile setup is complete and password is not expired)
     if (!userProfile.acceptedLatestTerms || userProfile.termsVersionAccepted !== LATEST_TERMS_VERSION) {
       console.log('[AuthenticatedAppLayout useEffect] Terms not accepted or version mismatch. Showing terms modal.');
       setShowTermsModal(true);
-      // Do not return here, allow modal to show over content or loader
     } else {
       console.log('[AuthenticatedAppLayout useEffect] All checks passed. User can proceed to view content.');
-      // No explicit redirect here, content will render if modal is not shown.
     }
 
   }, [user, userProfile, isLoading, authLoading, profileLoading, router]);
@@ -371,7 +376,6 @@ export default function AuthenticatedAppLayout({
   }
 
   if (!user) {
-    // This case should ideally be caught by useEffect and redirected, but as a fallback:
     console.log('[AuthenticatedAppLayout] Rendering redirect to login because no user (and not loading).');
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -380,7 +384,7 @@ export default function AuthenticatedAppLayout({
     );
   }
   
-  if (!userProfile && !profileLoading) { // Check profileLoading specifically here
+  if (!userProfile && !profileLoading) { 
     console.log('[AuthenticatedAppLayout] Rendering redirect to profile because user exists but no profile (and not loading profile).');
      return (
       <div className="flex min-h-screen items-center justify-center bg-background">
@@ -390,12 +394,25 @@ export default function AuthenticatedAppLayout({
     );
   }
 
+  // If profile setup is not complete, redirect to profile page (this is a safeguard)
+  if (userProfile && userProfile.profileSetupComplete !== true) {
+    console.log('[AuthenticatedAppLayout] Safeguard: Profile setup incomplete. Redirecting to /profile.');
+    // A loader might be shown here briefly before RootPage or this component redirects.
+    // We can show a loader or simply let the redirect happen.
+     return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <Loader2 className="h-16 w-16 animate-spin text-primary" />
+        <p className="ml-4 text-lg text-foreground">Redirecting to profile setup...</p>
+      </div>
+    );
+  }
+
+
   if (showTermsModal) {
     console.log('[AuthenticatedAppLayout] Rendering Terms Modal.');
     return (
       <Dialog open={showTermsModal} onOpenChange={(open) => {
         if (!open && (!termsAcceptedCheckbox || !userProfile?.acceptedLatestTerms)) {
-          // Prevent closing if terms not accepted, unless it's due to saving them
           return; 
         }
         setShowTermsModal(open);
@@ -436,6 +453,7 @@ export default function AuthenticatedAppLayout({
   // Check all conditions before rendering AppLayoutClient
   const canRenderApp = user && 
                        userProfile && 
+                       userProfile.profileSetupComplete === true &&
                        (userProfile.acceptedLatestTerms && userProfile.termsVersionAccepted === LATEST_TERMS_VERSION) &&
                        (userProfile.lastPasswordChangeDate && (new Date().getTime() - new Date(userProfile.lastPasswordChangeDate).getTime()) / (1000 * 3600 * 24) < 90);
 
@@ -448,8 +466,6 @@ export default function AuthenticatedAppLayout({
     );
   }
 
-  // Fallback: If checks above don't lead to rendering AppLayoutClient or a modal/redirect, show a loader.
-  // This state should ideally be very transient.
   console.log('[AuthenticatedAppLayout] Fallback: Conditions not met to render AppLayoutClient or T&C modal. Showing loader. User/Profile/T&C/Password may not be fully resolved or meet criteria.');
   return (
     <div className="flex min-h-screen items-center justify-center bg-background">
@@ -458,4 +474,3 @@ export default function AuthenticatedAppLayout({
     </div>
   );
 }
-

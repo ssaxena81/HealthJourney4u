@@ -19,6 +19,7 @@ import { CalendarIcon, Loader2 } from 'lucide-react';
 import { format, parseISO, differenceInYears } from 'date-fns';
 import { cn } from '@/lib/utils';
 import { updateDemographics } from '@/app/actions/auth';
+import { markProfileSetupComplete } from '@/app/actions/userProfileActions'; // New import
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 
@@ -67,7 +68,7 @@ interface DemographicsFormProps {
 
 export default function DemographicsForm({ userProfile, onProfileUpdate }: DemographicsFormProps) {
   const { toast } = useToast();
-  const { logout } = useAuth();
+  const { logout, setUserProfile } = useAuth(); // Added setUserProfile
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [showAgeRestrictionDialog, setShowAgeRestrictionDialog] = useState(false);
@@ -131,9 +132,26 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
       
       if (result.success) {
         toast({ title: "Demographics Updated", description: "Your information has been saved." });
-        if (onProfileUpdate && result.data) {
-           onProfileUpdate(result.data);
+        let updatedProfileDataForContext = { ...result.data };
+
+        // If demographics saved successfully and profile setup wasn't complete, mark it complete
+        if (userProfile.profileSetupComplete === false || userProfile.profileSetupComplete === undefined) {
+          const completionResult = await markProfileSetupComplete(userProfile.id);
+          if (completionResult.success) {
+            toast({ title: "Profile Setup Complete!", description: "Your profile is now fully set up." });
+            updatedProfileDataForContext = { ...updatedProfileDataForContext, profileSetupComplete: true };
+          } else {
+            toast({ title: "Profile Status Update Failed", description: completionResult.error || "Could not mark profile as complete.", variant: "destructive" });
+          }
         }
+        
+        if (onProfileUpdate) {
+           onProfileUpdate(updatedProfileDataForContext);
+        }
+        if (setUserProfile) { // Update context if setUserProfile is available
+            setUserProfile(prev => prev ? ({ ...prev, ...updatedProfileDataForContext }) : null);
+        }
+
       } else {
         toast({ title: "Update Failed", description: result.error || "Could not save demographics.", variant: "destructive" });
         if (result.details?.fieldErrors) {
@@ -150,7 +168,7 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
       <Card>
         <CardHeader>
           <CardTitle>Demographic Information</CardTitle>
-          <CardDescription>Please provide your personal details. Fields marked with * are required.</CardDescription>
+          <CardDescription>Please provide your personal details. Fields marked with * are required. Completing this form marks your profile setup as complete.</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">

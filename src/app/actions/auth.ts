@@ -90,6 +90,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       lastLoggedInDate: nowIso, 
       acceptedLatestTerms: false,
       isAgeCertified: false,
+      profileSetupComplete: false, // Initialize as false
       connectedFitnessApps: [],
       connectedDiagnosticsServices: [],
       connectedInsuranceProviders: [],
@@ -231,6 +232,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
         acceptedLatestTerms: !!rawProfileData.acceptedLatestTerms,
         termsVersionAccepted: typeof rawProfileData.termsVersionAccepted === 'string' ? rawProfileData.termsVersionAccepted : undefined,
         isAgeCertified: !!rawProfileData.isAgeCertified,
+        profileSetupComplete: typeof rawProfileData.profileSetupComplete === 'boolean' ? rawProfileData.profileSetupComplete : false, // Default to false if undefined
         firstName: typeof rawProfileData.firstName === 'string' ? rawProfileData.firstName : undefined,
         middleInitial: typeof rawProfileData.middleInitial === 'string' ? rawProfileData.middleInitial : undefined,
         lastName: typeof rawProfileData.lastName === 'string' ? rawProfileData.lastName : undefined,
@@ -579,6 +581,7 @@ export async function updateDemographics(userId: string, values: z.infer<typeof 
             dateOfBirth: validatedValues.dateOfBirth,
             cellPhone: validatedValues.cellPhone,
             isAgeCertified: validatedValues.isAgeCertified,
+            // Do not update profileSetupComplete here directly; it's handled by a separate action
         };
         console.log("[UPDATE_DEMOGRAPHICS_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId);
         await updateDoc(doc(db, "users", userId), profileUpdateData); 
@@ -765,3 +768,4 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
 }
     
     
+
