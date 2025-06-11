@@ -1,7 +1,7 @@
 
 import type { Metadata } from 'next';
 import '../globals.css';
-import { Toaster } from "@/components/ui/toaster";
+// Toaster removed from here, it's now in the root layout
 
 export const metadata: Metadata = {
   title: 'Authentication - Health Timeline',
@@ -28,7 +28,7 @@ export default function AuthLayout({
       <div className="relative z-10 flex min-h-screen flex-col items-center justify-center p-4 bg-background">
         {children}
       </div>
-      <Toaster />
+      {/* <Toaster /> */}
     </>
   );
 }
