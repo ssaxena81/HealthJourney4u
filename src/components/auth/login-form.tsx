@@ -5,14 +5,14 @@ import React, { useState, useTransition } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-// useRouter removed as it's not used
+import { useRouter } from 'next/navigation'; // Import useRouter
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { loginUser } from '@/app/actions/auth';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth'; // Import useAuth
+import { useAuth } from '@/hooks/useAuth';
 
 const loginFormSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -23,10 +23,11 @@ type LoginFormValues = z.infer<typeof loginFormSchema>;
 
 export default function LoginForm() {
   const { toast } = useToast();
+  const router = useRouter(); // Initialize useRouter
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const { checkAuthState } = useAuth(); // Get checkAuthState from context
+  const { checkAuthState } = useAuth();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
@@ -40,7 +41,7 @@ export default function LoginForm() {
     setError(null);
     console.log('[LOGIN_FORM_SUBMIT_START] Submitting login form with values:', values.email);
     startTransition(async () => {
-      try { // Add a try block for the whole async operation within startTransition
+      try {
         const result = await loginUser(values);
         console.log('[LOGIN_FORM_SUBMIT_RESULT] Received result from loginUser action:', JSON.stringify(result, null, 2));
 
@@ -48,15 +49,14 @@ export default function LoginForm() {
           console.log('[LOGIN_FORM_SUCCESS] Login action reported success.');
           
           try {
-            console.log('[LOGIN_FORM_SUCCESS] Attempting to show toast...');
+            console.log('[LOGIN_FORM_SUCCESS] Attempting to show success toast...');
             toast({
               title: 'Login Successful!',
               description: 'Welcome back.',
             });
-            console.log('[LOGIN_FORM_SUCCESS] Toast shown successfully.');
+            console.log('[LOGIN_FORM_SUCCESS] Success toast shown successfully.');
           } catch (toastError: any) {
-            console.error('[LOGIN_FORM_ERROR] Error showing toast:', toastError);
-            // Decide if you want to proceed or stop if toast fails
+            console.error('[LOGIN_FORM_ERROR] Error showing success toast:', toastError);
           }
           
           console.log('[LOGIN_FORM_SUCCESS] Attempting to call checkAuthState() post-login.');
@@ -64,6 +64,12 @@ export default function LoginForm() {
             try {
               await checkAuthState();
               console.log('[LOGIN_FORM_SUCCESS] checkAuthState() call completed successfully.');
+              
+              // --- NAVIGATION ADDED HERE ---
+              console.log('[LOGIN_FORM_SUCCESS] Navigating to /');
+              router.push('/'); // Navigate to the root authenticated page
+              // --- END NAVIGATION ---
+
             } catch (checkAuthError: any) {
               console.error('[LOGIN_FORM_ERROR] Error during checkAuthState() call:', checkAuthError);
               setError(`Error refreshing auth state: ${checkAuthError.message}`);
@@ -74,11 +80,11 @@ export default function LoginForm() {
               });
             }
           } else {
-            console.error('[LOGIN_FORM_CRITICAL_ERROR] checkAuthState is not a function! Context might be broken.');
+            console.error('[LOGIN_FORM_CRITICAL_ERROR] checkAuthState is not a function! Auth context might be broken.');
             setError('Critical error: Auth context function unavailable.');
             toast({
               title: 'Critical Error',
-              description: 'Authentication system is not working correctly.',
+              description: 'Authentication system is not working correctly (checkAuthState missing).',
               variant: 'destructive',
             });
           }
@@ -94,7 +100,6 @@ export default function LoginForm() {
           console.log('[LOGIN_FORM_ERROR] Login failed with error:', result.error, 'Code:', result.errorCode);
         }
       } catch (transitionError: any) {
-        // Catch errors from loginUser itself or any other await before/after if not caught internally
         console.error('[LOGIN_FORM_ERROR] Error within startTransition async block:', transitionError);
         setError(transitionError.message || 'An unexpected error occurred during login process.');
         toast({
