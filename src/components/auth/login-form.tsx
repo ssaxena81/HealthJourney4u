@@ -28,8 +28,7 @@ export default function LoginForm() {
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const { checkAuthState, userProfile: profileFromHook } = useAuth(); // Get userProfile directly from hook too
-  const [localUserProfile, setLocalUserProfile] = useState<UserProfile | null>(null);
+  const { checkAuthState } = useAuth();
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
@@ -38,11 +37,6 @@ export default function LoginForm() {
       password: '',
     },
   });
-
-  useEffect(() => {
-    // Keep localUserProfile in sync with the context if it changes
-    setLocalUserProfile(profileFromHook);
-  }, [profileFromHook]);
 
   const onSubmit = (values: LoginFormValues) => {
     setError(null);
@@ -58,38 +52,31 @@ export default function LoginForm() {
             description: 'Welcome back.',
           });
           
-          setLocalUserProfile(result.userProfile); // Store the profile returned by login action
-
-          console.log('[LOGIN_FORM_SUCCESS] Attempting to call checkAuthState() post-login.');
-          if (typeof checkAuthState === 'function') {
-            try {
-              await checkAuthState(); // This updates the context
-              console.log('[LOGIN_FORM_SUCCESS] checkAuthState() call completed successfully.');
-              
-              // After checkAuthState, profileFromHook should be updated.
-              // For immediate use, we can rely on result.userProfile or the updated localUserProfile.
-              const currentProfile = result.userProfile; // Use the most fresh profile data
-              console.log('[LOGIN_FORM_SUCCESS] Profile for redirection check:', currentProfile);
-
-              const profileSetupComplete = currentProfile?.profileSetupComplete;
-              console.log(`[LOGIN_FORM_SUCCESS] Profile setup complete status: ${profileSetupComplete}`);
-
-              if (profileSetupComplete === true) {
-                console.log('[LOGIN_FORM_SUCCESS] Redirecting to dashboard page (/).');
-                router.push('/');
-              } else {
-                console.log('[LOGIN_FORM_SUCCESS] Redirecting to profile setup page (/profile). Reason: profileSetupComplete is', profileSetupComplete);
-                router.push('/profile');
-              }
-
-            } catch (checkAuthError: any) {
-              console.error('[LOGIN_FORM_ERROR] Error during checkAuthState() call:', checkAuthError);
-              setError(`Error refreshing auth state: ${checkAuthError.message}`);
-            }
-          } else {
-            console.error('[LOGIN_FORM_CRITICAL_ERROR] checkAuthState is not a function! Auth context might be broken.');
-            setError('Critical error: Auth context function unavailable.');
+          // Call checkAuthState to attempt to sync context, but don't rely on its immediate effect for this navigation.
+          console.log('[LOGIN_FORM_SUCCESS] Attempting to call checkAuthState() to sync context.');
+          try {
+            await checkAuthState();
+            console.log('[LOGIN_FORM_SUCCESS] checkAuthState() call completed.');
+          } catch (checkAuthError: any) {
+            console.error('[LOGIN_FORM_ERROR] Error during checkAuthState() call:', checkAuthError);
+            // Non-fatal for this immediate navigation, as onAuthStateChanged should eventually sync.
           }
+          
+          // Use profile from server action for immediate redirection decision
+          const serverProfile = result.userProfile;
+          console.log('[LOGIN_FORM_SUCCESS] Profile from server for redirection check:', serverProfile);
+
+          const profileSetupComplete = serverProfile?.profileSetupComplete;
+          console.log(`[LOGIN_FORM_SUCCESS] Profile setup complete status from server: ${profileSetupComplete}`);
+
+          if (profileSetupComplete === true) {
+            console.log('[LOGIN_FORM_SUCCESS] Redirecting to dashboard page (/).');
+            router.push('/');
+          } else {
+            console.log('[LOGIN_FORM_SUCCESS] Redirecting to profile setup page (/profile). Reason: profileSetupComplete is', profileSetupComplete);
+            router.push('/profile');
+          }
+
         } else if (result.success && !result.userProfile) {
            console.warn('[LOGIN_FORM_WARNING] Login succeeded but server action did not return userProfile.');
            setError('Login succeeded but profile data could not be retrieved. Please try again or contact support.');

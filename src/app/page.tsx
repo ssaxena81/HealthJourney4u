@@ -16,42 +16,47 @@ export default function RootPage() {
 
     if (authLoading) {
       setStatusMessage('Verifying authentication...');
+      console.log('[RootPage useEffect] Auth is loading. Waiting...');
       return; 
     }
 
+    // Auth is NOT loading anymore, proceed with checks
     if (user) {
-      // User is authenticated. Now check profile setup.
-      if (userProfile && userProfile.profileSetupComplete === true) {
-        setStatusMessage('Loading your dashboard...');
-        // AuthenticatedAppLayout will handle rendering, no redirect needed FROM here if profile is complete.
-        // If router.replace('/') were here, it could cause loop with AuthenticatedAppLayout if it also checks profile.
-      } else if (userProfile && userProfile.profileSetupComplete === false) {
-        setStatusMessage('Profile setup incomplete. Redirecting to profile page...');
-        console.log('[RootPage useEffect] User authenticated, profile NOT complete. Redirecting to /profile.');
-        router.replace('/profile');
-      } else if (!userProfile) {
-        // This case might happen briefly if user is authenticated but profile hasn't loaded into context yet.
-        // Or if profile fetch failed. AuthProvider should ideally handle this.
-        setStatusMessage('Finalizing session...');
-        console.log('[RootPage useEffect] User authenticated, but userProfile is null/undefined. Waiting for profile or further action from AuthProvider.');
-        // Potentially, could redirect to /profile if this state persists, but usually AuthProvider handles it.
-      } else {
-         // User authenticated, userProfile exists, but profileSetupComplete is undefined (treat as incomplete)
-        setStatusMessage('Profile setup status unknown. Redirecting to profile page...');
-        console.log('[RootPage useEffect] User authenticated, profileSetupComplete is undefined. Redirecting to /profile.');
-        router.replace('/profile');
+      // User is authenticated. Now check profile.
+      if (userProfile) { // Profile is loaded
+        if (userProfile.profileSetupComplete === true) {
+          setStatusMessage('Loading your dashboard...');
+          console.log('[RootPage useEffect] User authenticated, profile complete. Dashboard should load via (app) layout.');
+          // No redirect needed from here if profile is complete, AuthenticatedAppLayout will handle it.
+          // If this page IS the dashboard, it will render its content.
+          // If '/' is supposed to be the dashboard and is wrapped by AuthenticatedAppLayout, that layout will take over.
+        } else { // profileSetupComplete is false or undefined
+          setStatusMessage('Profile setup incomplete. Redirecting to profile page...');
+          console.log('[RootPage useEffect] User authenticated, profile NOT complete. Redirecting to /profile.');
+          router.replace('/profile');
+        }
+      } else { 
+        // User is authenticated, but profile is not yet loaded (userProfile is null).
+        // This state should ideally be brief if fetchUserProfile is efficient.
+        // Or it means profile fetch failed or no profile exists.
+        setStatusMessage('Finalizing session & fetching profile...');
+        console.log('[RootPage useEffect] User authenticated, but userProfile is null (and not authLoading). This might indicate profile fetch issue or new user without profile yet.');
+        // Consider redirecting to /profile if this state persists or is for a new user scenario not handled by signup.
+        // For now, AuthProvider's fetchUserProfile is expected to set this. If it remains null, AuthenticatedAppLayout will likely redirect to /profile.
       }
     } else {
-      // No user object and not loading auth state, so user is not logged in.
+      // No user object and not authLoading, so user is definitively not logged in.
       setStatusMessage('Redirecting to login...');
       console.log('[RootPage useEffect] No user and not authLoading. Redirecting to /login.');
       router.replace('/login');
     }
   }, [user, userProfile, authLoading, router]);
 
-  // Show loader if auth is still loading, or if redirect decision is pending.
-  if (authLoading || (user && !userProfile) || (user && userProfile && userProfile.profileSetupComplete !== true && !authLoading)) {
-    // The last condition covers the case where we decided to redirect to /profile but the redirect hasn't happened yet.
+  // Show loader if auth is still loading, or if user exists but profile is still loading/being checked.
+  if (authLoading || (user && !userProfile && !authLoading) ) { 
+    // The second condition (user && !userProfile && !authLoading) covers the brief period where auth is resolved but profile fetch might still be in progress
+    // or if the profile is genuinely missing (which AuthenticatedAppLayout might handle by redirecting to /profile).
+    console.log(`[RootPage Render] Showing loader. AuthLoading: ${authLoading}, User: ${!!user}, UserProfile: ${!!userProfile}`);
     return (
       <div className="flex min-h-screen items-center justify-center p-4 bg-background">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -60,10 +65,13 @@ export default function RootPage() {
     );
   }
   
-  // If user is logged in AND profile is complete, this component's job is to let AuthenticatedAppLayout take over.
-  // It can show a loader or nothing. A loader is safer if AuthenticatedAppLayout has its own checks.
+  // If user is logged in AND profile is complete, this component (if it's the dashboard route itself) will render its content.
+  // If AuthenticatedAppLayout wraps this, AuthenticatedAppLayout will show its children.
   if (user && userProfile && userProfile.profileSetupComplete === true) {
-    console.log('[RootPage] User authenticated and profile complete. Rendering passthrough loader for AuthenticatedAppLayout.');
+    console.log('[RootPage Render] User authenticated and profile complete. Actual page content for "/" should be rendered by AuthenticatedAppLayout children or this page if it is the final destination.');
+    // This page is the entry point for authenticated users if their profile is complete.
+    // It will be wrapped by AuthenticatedAppLayout, which then renders the (app)/page.tsx (My Health Overview)
+    // So, we show a loader here while that happens.
      return (
       <div className="flex min-h-screen items-center justify-center p-4 bg-background">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -72,9 +80,10 @@ export default function RootPage() {
     );
   }
 
-
-  // Fallback loader if none of the above conditions were met to render content or redirect explicitly.
-  // This should ideally not be hit if logic is correct.
+  // Fallback if no user (and not loading), which should have been caught by redirect logic in useEffect.
+  // Or if user exists, profile exists, but profileSetupComplete is false (also caught by useEffect redirect).
+  // This state implies a redirect is imminent or has just been triggered.
+  console.log(`[RootPage Render] Fallback loader / redirecting. AuthLoading: ${authLoading}, User: ${!!user}, UserProfile Complete: ${userProfile?.profileSetupComplete}`);
   return (
     <div className="flex min-h-screen items-center justify-center p-4 bg-background">
       <Loader2 className="h-16 w-16 animate-spin text-primary" />
