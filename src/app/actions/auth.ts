@@ -81,11 +81,13 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       return { success: false, error: errorMessage, errorCode };
     }
 
+    const nowIso = new Date().toISOString();
     const initialProfile: UserProfile = {
       id: userCredential.user.uid,
       email: userCredential.user.email!,
       subscriptionTier: validatedValues.subscriptionTier,
-      lastPasswordChangeDate: new Date().toISOString(),
+      lastPasswordChangeDate: nowIso,
+      lastLoggedInDate: nowIso, // Initialize lastLoggedInDate
       acceptedLatestTerms: false,
       isAgeCertified: false,
       connectedFitnessApps: [],
@@ -186,20 +188,19 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     }
     
     const userId = userCredential.user.uid;
+    const userProfileDocRef = doc(db, "users", userId); // Define here for use in update and fetch
 
     if (!db || !db.app || typeof doc !== 'function' || typeof getDoc !== 'function' || typeof updateDoc !== 'function') {
         console.error("[LOGIN_FIRESTORE_NOT_READY] Firestore (db, doc, getDoc, or updateDoc) is not initialized correctly. DB App:", db?.app);
         console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_NO_PROFILE_FIRESTORE_UNAVAILABLE]"); 
         return { success: true, userId, userProfile: null, error: "Profile could not be fetched or updated, but login succeeded.", errorCode: 'FIRESTORE_UNAVAILABLE' };
     }
-    console.log("[LOGIN_ACTION_FIRESTORE_CHECK_PASSED] Firestore instance seems okay for profile fetch for UID:", userId);
+    console.log("[LOGIN_ACTION_FIRESTORE_CHECK_PASSED] Firestore instance seems okay for profile operations for UID:", userId);
 
-    let userProfileSnap;
     let userProfile: UserProfile;
     try {
       console.log("[LOGIN_ACTION_FIRESTORE_GETDOC_START] Attempting to fetch profile from Firestore for UID:", userId);
-      const userProfileDocRef = doc(db, "users", userId);
-      userProfileSnap = await getDoc(userProfileDocRef);
+      const userProfileSnap = await getDoc(userProfileDocRef);
 
       if (!userProfileSnap.exists()) {
         console.error(`[LOGIN_PROFILE_NOT_FOUND] User profile not found for UID: ${userId} in loginUser.`);
@@ -217,6 +218,17 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       return { success: true, userId, userProfile: null, error: `Login succeeded but profile fetch failed: ${errorMessage}.`, errorCode };
     }
     
+    // Update lastLoggedInDate
+    const lastLoggedInDate = new Date().toISOString();
+    try {
+      await updateDoc(userProfileDocRef, { lastLoggedInDate });
+      console.log("[LOGIN_ACTION_FIRESTORE_UPDATE_SUCCESS] lastLoggedInDate updated in Firestore for UID:", userId);
+      userProfile.lastLoggedInDate = lastLoggedInDate; // Update the profile object we're about to return
+    } catch (dbError: any) {
+      console.error("[LOGIN_ACTION_FIRESTORE_ERROR] Failed to update lastLoggedInDate for UID:", userId, "Error:", dbError);
+      // Continue even if this specific update fails, as login itself was successful.
+    }
+
     if (userProfile.lastPasswordChangeDate) {
       const lastPasswordChange = new Date(userProfile.lastPasswordChangeDate);
       const now = new Date();
