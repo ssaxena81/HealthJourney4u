@@ -9,7 +9,7 @@ import {
 } from 'firebase/auth';
 import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
 import { z } from 'zod';
-import type { UserProfile, SubscriptionTier } from '@/types';
+import type { UserProfile, SubscriptionTier, FitbitApiCallStats, StravaApiCallStats, GoogleFitApiCallStats, WithingsApiCallStats, WalkingRadarGoals, RunningRadarGoals, HikingRadarGoals, SwimmingRadarGoals, SleepRadarGoals, DashboardMetricIdValue } from '@/types';
 import { passwordSchema } from '@/types';
 import { doc, setDoc, getDoc, updateDoc, Timestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { differenceInYears, format } from 'date-fns';
@@ -87,7 +87,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       email: userCredential.user.email!,
       subscriptionTier: validatedValues.subscriptionTier,
       lastPasswordChangeDate: nowIso,
-      lastLoggedInDate: nowIso, // Initialize lastLoggedInDate
+      lastLoggedInDate: nowIso, 
       acceptedLatestTerms: false,
       isAgeCertified: false,
       connectedFitnessApps: [],
@@ -188,7 +188,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     }
     
     const userId = userCredential.user.uid;
-    const userProfileDocRef = doc(db, "users", userId); // Define here for use in update and fetch
+    const userProfileDocRef = doc(db, "users", userId); 
 
     if (!db || !db.app || typeof doc !== 'function' || typeof getDoc !== 'function' || typeof updateDoc !== 'function') {
         console.error("[LOGIN_FIRESTORE_NOT_READY] Firestore (db, doc, getDoc, or updateDoc) is not initialized correctly. DB App:", db?.app);
@@ -207,10 +207,63 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
         console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_NO_PROFILE_PROFILE_NOT_FOUND]");
         return { success: true, userId, userProfile: null, errorCode: "auth/profile-not-found" };
       }
-      userProfile = userProfileSnap.data() as UserProfile;
-      console.log("[LOGIN_ACTION_FIRESTORE_GETDOC_SUCCESS] Profile fetch attempt completed for UID:", userId);
+      
+      const rawProfileData = userProfileSnap.data();
+      if (!rawProfileData) {
+        console.error(`[LOGIN_PROFILE_DATA_MISSING] User profile data is unexpectedly null/undefined for UID: ${userId}.`);
+        return { success: true, userId, userProfile: null, errorCode: "auth/profile-data-missing" };
+      }
+
+      userProfile = {
+        id: userId,
+        email: userCredential.user.email!, 
+        subscriptionTier: rawProfileData.subscriptionTier || 'free',
+        lastPasswordChangeDate: (rawProfileData.lastPasswordChangeDate instanceof Timestamp
+          ? rawProfileData.lastPasswordChangeDate.toDate().toISOString()
+          : typeof rawProfileData.lastPasswordChangeDate === 'string'
+            ? rawProfileData.lastPasswordChangeDate
+            : new Date(0).toISOString()),
+        lastLoggedInDate: (rawProfileData.lastLoggedInDate instanceof Timestamp
+          ? rawProfileData.lastLoggedInDate.toDate().toISOString()
+          : typeof rawProfileData.lastLoggedInDate === 'string'
+            ? rawProfileData.lastLoggedInDate
+            : undefined),
+        acceptedLatestTerms: !!rawProfileData.acceptedLatestTerms,
+        termsVersionAccepted: typeof rawProfileData.termsVersionAccepted === 'string' ? rawProfileData.termsVersionAccepted : undefined,
+        isAgeCertified: !!rawProfileData.isAgeCertified,
+        firstName: typeof rawProfileData.firstName === 'string' ? rawProfileData.firstName : undefined,
+        middleInitial: typeof rawProfileData.middleInitial === 'string' ? rawProfileData.middleInitial : undefined,
+        lastName: typeof rawProfileData.lastName === 'string' ? rawProfileData.lastName : undefined,
+        dateOfBirth: (rawProfileData.dateOfBirth instanceof Timestamp
+          ? rawProfileData.dateOfBirth.toDate().toISOString()
+          : typeof rawProfileData.dateOfBirth === 'string'
+            ? rawProfileData.dateOfBirth
+            : undefined),
+        cellPhone: typeof rawProfileData.cellPhone === 'string' ? rawProfileData.cellPhone : undefined,
+        connectedFitnessApps: Array.isArray(rawProfileData.connectedFitnessApps) ? rawProfileData.connectedFitnessApps : [],
+        connectedDiagnosticsServices: Array.isArray(rawProfileData.connectedDiagnosticsServices) ? rawProfileData.connectedDiagnosticsServices : [],
+        connectedInsuranceProviders: Array.isArray(rawProfileData.connectedInsuranceProviders) ? rawProfileData.connectedInsuranceProviders : [],
+        fitbitApiCallStats: typeof rawProfileData.fitbitApiCallStats === 'object' && rawProfileData.fitbitApiCallStats !== null ? rawProfileData.fitbitApiCallStats as FitbitApiCallStats : undefined,
+        stravaApiCallStats: typeof rawProfileData.stravaApiCallStats === 'object' && rawProfileData.stravaApiCallStats !== null ? rawProfileData.stravaApiCallStats as StravaApiCallStats : undefined,
+        googleFitApiCallStats: typeof rawProfileData.googleFitApiCallStats === 'object' && rawProfileData.googleFitApiCallStats !== null ? rawProfileData.googleFitApiCallStats as GoogleFitApiCallStats : undefined,
+        withingsApiCallStats: typeof rawProfileData.withingsApiCallStats === 'object' && rawProfileData.withingsApiCallStats !== null ? rawProfileData.withingsApiCallStats as WithingsApiCallStats : undefined,
+        fitbitLastSuccessfulSync: typeof rawProfileData.fitbitLastSuccessfulSync === 'string' ? rawProfileData.fitbitLastSuccessfulSync : undefined,
+        stravaLastSyncTimestamp: typeof rawProfileData.stravaLastSyncTimestamp === 'number' ? rawProfileData.stravaLastSyncTimestamp : undefined,
+        googleFitLastSuccessfulSync: typeof rawProfileData.googleFitLastSuccessfulSync === 'string' ? rawProfileData.googleFitLastSuccessfulSync : undefined,
+        withingsLastSuccessfulSync: typeof rawProfileData.withingsLastSuccessfulSync === 'string' ? rawProfileData.withingsLastSuccessfulSync : undefined,
+        withingsUserId: typeof rawProfileData.withingsUserId === 'string' ? rawProfileData.withingsUserId : undefined,
+        walkingRadarGoals: typeof rawProfileData.walkingRadarGoals === 'object' && rawProfileData.walkingRadarGoals !== null ? rawProfileData.walkingRadarGoals as WalkingRadarGoals : undefined,
+        runningRadarGoals: typeof rawProfileData.runningRadarGoals === 'object' && rawProfileData.runningRadarGoals !== null ? rawProfileData.runningRadarGoals as RunningRadarGoals : undefined,
+        hikingRadarGoals: typeof rawProfileData.hikingRadarGoals === 'object' && rawProfileData.hikingRadarGoals !== null ? rawProfileData.hikingRadarGoals as HikingRadarGoals : undefined,
+        swimmingRadarGoals: typeof rawProfileData.swimmingRadarGoals === 'object' && rawProfileData.swimmingRadarGoals !== null ? rawProfileData.swimmingRadarGoals as SwimmingRadarGoals : undefined,
+        sleepRadarGoals: typeof rawProfileData.sleepRadarGoals === 'object' && rawProfileData.sleepRadarGoals !== null ? rawProfileData.sleepRadarGoals as SleepRadarGoals : undefined,
+        dashboardRadarMetrics: Array.isArray(rawProfileData.dashboardRadarMetrics) ? rawProfileData.dashboardRadarMetrics as DashboardMetricIdValue[] : undefined,
+        passwordResetCodeAttempt: typeof rawProfileData.passwordResetCodeAttempt === 'object' && rawProfileData.passwordResetCodeAttempt !== null ? rawProfileData.passwordResetCodeAttempt as { code: string; expiresAt: string; } : undefined,
+      };
+
+      console.log("[LOGIN_ACTION_FIRESTORE_GETDOC_SUCCESS] Profile constructed for UID:", userId);
     } catch (firestoreError: any) {
-      console.error("[LOGIN_FIRESTORE_ERROR] Error fetching user profile from Firestore for UID:", userId, "Raw Error:", firestoreError);
+      console.error("[LOGIN_FIRESTORE_ERROR] Error fetching/constructing user profile from Firestore for UID:", userId, "Raw Error:", firestoreError);
       const errorMessage = String(firestoreError.message || 'Database error during profile fetching.');
       const errorCode = String(firestoreError.code || 'FIRESTORE_ERROR');
       console.error(`[LOGIN_FIRESTORE_ERROR_DETAILS] Code: ${errorCode}, Message: ${errorMessage}`);
@@ -218,15 +271,13 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       return { success: true, userId, userProfile: null, error: `Login succeeded but profile fetch failed: ${errorMessage}.`, errorCode };
     }
     
-    // Update lastLoggedInDate
-    const lastLoggedInDate = new Date().toISOString();
+    const currentLoginTimeISO = new Date().toISOString();
     try {
-      await updateDoc(userProfileDocRef, { lastLoggedInDate });
+      await updateDoc(userProfileDocRef, { lastLoggedInDate: currentLoginTimeISO });
       console.log("[LOGIN_ACTION_FIRESTORE_UPDATE_SUCCESS] lastLoggedInDate updated in Firestore for UID:", userId);
-      userProfile.lastLoggedInDate = lastLoggedInDate; // Update the profile object we're about to return
+      userProfile.lastLoggedInDate = currentLoginTimeISO; 
     } catch (dbError: any) {
       console.error("[LOGIN_ACTION_FIRESTORE_ERROR] Failed to update lastLoggedInDate for UID:", userId, "Error:", dbError);
-      // Continue even if this specific update fails, as login itself was successful.
     }
 
     if (userProfile.lastPasswordChangeDate) {
