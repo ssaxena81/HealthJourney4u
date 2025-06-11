@@ -5,6 +5,7 @@ import React, { useState, useTransition, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
+// useRouter is not strictly needed if we use window.location for redirect, but keep for now if other links exist.
 import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +15,7 @@ import { loginUser } from '@/app/actions/auth';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import type { UserProfile } from '@/types';
+import { auth as firebaseAuthModule } from '@/lib/firebase/clientApp'; // For direct currentUser check
 
 const loginFormSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -24,11 +26,13 @@ type LoginFormValues = z.infer<typeof loginFormSchema>;
 
 export default function LoginForm() {
   const { toast } = useToast();
-  const router = useRouter();
+  const router = useRouter(); // Keep for other navigation (e.g. forgot password link)
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const { checkAuthState } = useAuth();
+  // checkAuthState removed from here, as we will rely on full page reload
+  const { setUserProfile: setContextUserProfile, setUser: setContextUser } = useAuth();
+
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
@@ -49,32 +53,23 @@ export default function LoginForm() {
         if (result.success && result.userProfile) {
           toast({
             title: 'Login Successful!',
-            description: 'Welcome back.',
+            description: 'Welcome back. Redirecting...',
           });
           
-          // Call checkAuthState to attempt to sync context, but don't rely on its immediate effect for this navigation.
-          console.log('[LOGIN_FORM_SUCCESS] Attempting to call checkAuthState() to sync context.');
-          try {
-            await checkAuthState();
-            console.log('[LOGIN_FORM_SUCCESS] checkAuthState() call completed.');
-          } catch (checkAuthError: any) {
-            console.error('[LOGIN_FORM_ERROR] Error during checkAuthState() call:', checkAuthError);
-            // Non-fatal for this immediate navigation, as onAuthStateChanged should eventually sync.
-          }
-          
-          // Use profile from server action for immediate redirection decision
+          // Server action returned success, and userProfile is available.
           const serverProfile = result.userProfile;
           console.log('[LOGIN_FORM_SUCCESS] Profile from server for redirection check:', serverProfile);
 
           const profileSetupComplete = serverProfile?.profileSetupComplete;
           console.log(`[LOGIN_FORM_SUCCESS] Profile setup complete status from server: ${profileSetupComplete}`);
 
+          // Forcing a full page reload to ensure client-side Firebase SDK picks up the auth state
           if (profileSetupComplete === true) {
-            console.log('[LOGIN_FORM_SUCCESS] Redirecting to dashboard page (/).');
-            router.push('/');
+            console.log('[LOGIN_FORM_SUCCESS] Redirecting (full page reload) to dashboard page (/).');
+            window.location.href = '/';
           } else {
-            console.log('[LOGIN_FORM_SUCCESS] Redirecting to profile setup page (/profile). Reason: profileSetupComplete is', profileSetupComplete);
-            router.push('/profile');
+            console.log('[LOGIN_FORM_SUCCESS] Redirecting (full page reload) to profile setup page (/profile). Reason: profileSetupComplete is', profileSetupComplete);
+            window.location.href = '/profile';
           }
 
         } else if (result.success && !result.userProfile) {
@@ -93,6 +88,7 @@ export default function LoginForm() {
       } catch (transitionError: any) {
         console.error('[LOGIN_FORM_ERROR] Error within startTransition async block:', transitionError);
         setError(transitionError.message || 'An unexpected error occurred during login process.');
+        toast({ title: 'Login Error', description: 'An unexpected client-side error occurred.', variant: 'destructive' });
       }
     });
   };
