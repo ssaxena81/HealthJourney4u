@@ -20,9 +20,6 @@ const nextConfig = {
   },
   serverExternalPackages: ['@grpc/grpc-js'], // Keep gRPC external
   transpilePackages: ['firebase'], // Transpile only the main firebase package
-  experimental: {
-    allowedDevOrigins: ['http://9004-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev'],
-  },
 };
 
 export default nextConfig;
