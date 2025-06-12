@@ -6,7 +6,7 @@ import {
   type Auth, 
   indexedDBLocalPersistence, 
   browserLocalPersistence, 
-  initializeAuth, 
+  setPersistence, // Added setPersistence
   browserPopupRedirectResolver,
   fetchSignInMethodsForEmail // Keep if used elsewhere, or remove if not. For diagnostic log.
 } from 'firebase/auth';
@@ -14,7 +14,7 @@ import { getFirestore, type Firestore, collection as diagnosticCollection } from
 
 console.log("[clientApp.ts Module Scope] Typeof imported 'initializeApp':", typeof initializeApp, ". Name:", initializeApp.name);
 console.log("[clientApp.ts Module Scope] Typeof imported 'getAuth':", typeof getAuth, ". Name:", getAuth.name);
-console.log("[clientApp.ts Module Scope] Typeof imported 'initializeAuth':", typeof initializeAuth, ". Name:", initializeAuth.name);
+console.log("[clientApp.ts Module Scope] Typeof imported 'setPersistence':", typeof setPersistence, ". Name:", setPersistence.name);
 console.log("[clientApp.ts Module Scope] Typeof imported 'indexedDBLocalPersistence':", typeof indexedDBLocalPersistence);
 console.log("[clientApp.ts Module Scope] Typeof imported 'browserLocalPersistence':", typeof browserLocalPersistence);
 console.log("[clientApp.ts Module Scope] Typeof imported 'getFirestore':", typeof getFirestore, ". Name:", getFirestore.name);
@@ -52,101 +52,81 @@ if (!allConfigKeysPresent) {
     '[clientApp.ts Module Scope] CRITICAL FIREBASE CONFIG ERROR: One or more NEXT_PUBLIC_FIREBASE_... environment variables are missing. Firebase services will NOT be initialized.'
   );
 } else {
-  if (typeof window !== 'undefined') { // CLIENT-SIDE INITIALIZATION BLOCK
-    console.log("[clientApp.ts CLIENT-SIDE] All Firebase config keys appear to be present in process.env.");
-    
-    // Ensure firebaseAppInstance is resolved client-side for initializeAuth
-    if (!getApps().length) {
-      console.log("[clientApp.ts CLIENT-SIDE] No Firebase apps initialized yet on client. Initializing new Firebase app with config.");
-      try {
-        firebaseAppInstance = initializeApp(firebaseConfig);
-        console.log("[clientApp.ts CLIENT-SIDE] Client-side initializeApp call completed. App Name:", firebaseAppInstance.name);
-      } catch (e: any) {
-        console.error('[clientApp.ts CLIENT-SIDE] Error initializing new Firebase app on client:', e.message, e.stack);
-        firebaseAppInstance = null;
-      }
-    } else {
-      console.log("[clientApp.ts CLIENT-SIDE] Firebase app already initialized on client. Getting existing Firebase app.");
-      firebaseAppInstance = getApp();
-      console.log("[clientApp.ts CLIENT-SIDE] Client-side getApp call completed. App Name:", firebaseAppInstance.name);
-    }
-
-    if (firebaseAppInstance) {
-      if (firebaseAppInstance.options && firebaseAppInstance.options.apiKey) {
-        console.log('[clientApp.ts CLIENT-SIDE] Client-side firebaseAppInstance.options.apiKey check SUCCEEDED.');
-      } else {
-        console.error('[clientApp.ts CLIENT-SIDE] Client-side firebaseAppInstance.options.apiKey check FAILED.');
-        firebaseAppInstance = null; // Invalidate if options are missing
-      }
-      
-      if (firebaseAppInstance) {
-        console.log('[clientApp.ts CLIENT-SIDE] Client-side firebaseAppInstance seems valid. Initializing Auth and Firestore for client...');
-        try {
-          // MODIFIED PERSISTENCE ORDER: Prioritize browserLocalPersistence
-          console.log('[clientApp.ts CLIENT-SIDE] Initializing Auth for client with initializeAuth, prioritizing browserLocalPersistence...');
-          auth = initializeAuth(firebaseAppInstance, {
-            persistence: [browserLocalPersistence, indexedDBLocalPersistence], // Try localStorage first
-            popupRedirectResolver: browserPopupRedirectResolver,
-          });
-          console.log('[clientApp.ts CLIENT-SIDE] initializeAuth call completed. Auth object type:', typeof auth);
-          if (auth) {
-             console.log('[clientApp.ts CLIENT-SIDE] Client Auth initialized. Current user from instance (immediately after init):', auth.currentUser?.uid || 'null');
-             // Attempt to log persistence type using internal property (for debugging only)
-             if ((auth as any)._persistenceManager && (auth as any)._persistenceManager._persistence && (auth as any)._persistenceManager._persistence.type) {
-               console.log('[clientApp.ts CLIENT-SIDE] Auth effective persistence type (path 1):', (auth as any)._persistenceManager._persistence.type);
-             } else if ((auth as any).persistenceManager && (auth as any).persistenceManager.persistence && (auth as any).persistenceManager.persistence.type) { // Alternative possible path
-               console.log('[clientApp.ts CLIENT-SIDE] Auth effective persistence type (path 2):', (auth as any).persistenceManager.persistence.type);
-             } else {
-               console.log('[clientApp.ts CLIENT-SIDE] Could not determine auth persistence type from instance structure.');
-             }
-          } else {
-             console.error('[clientApp.ts CLIENT-SIDE] initializeAuth returned null or undefined.');
-          }
-        } catch (e: any) {
-          console.error('[clientApp.ts CLIENT-SIDE] Error initializing Auth on client:', e.message, e.stack);
-          auth = null;
-        }
-
-        try {
-          db = getFirestore(firebaseAppInstance);
-          console.log('[clientApp.ts CLIENT-SIDE] getFirestore call completed for client. Firestore object type:', typeof db, 'Project ID in db.app.options:', (db as any)?.app?.options?.projectId);
-        } catch (e:any) {
-          console.error('[clientApp.ts CLIENT-SIDE] Error getting Firestore on client:', e.message, e.stack);
-          db = null;
-        }
-      }
-    } else {
-      console.error('[clientApp.ts CLIENT-SIDE] Failed to obtain/initialize firebaseAppInstance on client.');
-    }
-  } else { // SERVER-SIDE (or non-browser environment)
-    console.log("[clientApp.ts SERVER-SIDE] Running in non-browser environment.");
-    if (!getApps().length) {
+  // Initialize Firebase App
+  if (!getApps().length) {
+    console.log("[clientApp.ts Module Scope] No Firebase apps initialized yet. Initializing new Firebase app with config.");
+    try {
       firebaseAppInstance = initializeApp(firebaseConfig);
-      console.log("[clientApp.ts SERVER-SIDE] Initialized Firebase app on server. App Name:", firebaseAppInstance.name);
-    } else {
-      firebaseAppInstance = getApp();
-      console.log("[clientApp.ts SERVER-SIDE] Got existing Firebase app on server. App Name:", firebaseAppInstance.name);
+      console.log("[clientApp.ts Module Scope] initializeApp call completed. App Name:", firebaseAppInstance.name);
+    } catch (e: any) {
+      console.error('[clientApp.ts Module Scope] Error initializing new Firebase app:', e.message, e.stack);
+      firebaseAppInstance = null;
     }
-    if (firebaseAppInstance) {
-      try {
-        auth = getAuth(firebaseAppInstance); // No persistence config needed for server-side getAuth
-        console.log('[clientApp.ts SERVER-SIDE] getAuth (server context) call completed. Auth object type:', typeof auth);
-      } catch (e:any) {
-        console.error('[clientApp.ts SERVER-SIDE] Error getting Auth on server:', e.message, e.stack);
-        auth = null;
-      }
-      try {
-        db = getFirestore(firebaseAppInstance);
-        console.log('[clientApp.ts SERVER-SIDE] getFirestore (server context) call completed. DB object type:', typeof db);
-      } catch (e:any) {
-        console.error('[clientApp.ts SERVER-SIDE] Error getting Firestore on server:', e.message, e.stack);
-        db = null;
-      }
-    } else {
-      console.error('[clientApp.ts SERVER-SIDE] Failed to obtain/initialize firebaseAppInstance on server.');
-    }
+  } else {
+    console.log("[clientApp.ts Module Scope] Firebase app already initialized. Getting existing Firebase app.");
+    firebaseAppInstance = getApp();
+    console.log("[clientApp.ts Module Scope] getApp call completed. App Name:", firebaseAppInstance.name);
   }
 
+  if (firebaseAppInstance) {
+    if (firebaseAppInstance.options && firebaseAppInstance.options.apiKey) {
+      console.log('[clientApp.ts Module Scope] firebaseAppInstance.options.apiKey check SUCCEEDED.');
+    } else {
+      console.error('[clientApp.ts Module Scope] firebaseAppInstance.options.apiKey check FAILED.');
+      firebaseAppInstance = null; // Invalidate if options are missing
+    }
+    
+    if (firebaseAppInstance) {
+      console.log('[clientApp.ts Module Scope] firebaseAppInstance seems valid. Initializing Auth and Firestore...');
+      try {
+        auth = getAuth(firebaseAppInstance); // Get Auth instance
+        console.log('[clientApp.ts Module Scope] getAuth call completed. Auth object type:', typeof auth);
+        
+        // Set persistence if on client-side
+        if (typeof window !== 'undefined' && auth) {
+          console.log('[clientApp.ts CLIENT-SIDE] Attempting to set persistence with browserLocalPersistence then indexedDBLocalPersistence...');
+          setPersistence(auth, browserLocalPersistence) // Try localStorage first
+            .then(() => {
+              console.log('[clientApp.ts CLIENT-SIDE] Firebase Auth persistence set to browserLocalPersistence.');
+              if ((auth as any)._persistenceManager && (auth as any)._persistenceManager._persistence && (auth as any)._persistenceManager._persistence.type) {
+                console.log('[clientApp.ts CLIENT-SIDE] Auth effective persistence type (after setPersistence):', (auth as any)._persistenceManager._persistence.type);
+              } else if ((auth as any).persistenceManager && (auth as any).persistenceManager.persistence && (auth as any).persistenceManager.persistence.type) {
+                console.log('[clientApp.ts CLIENT-SIDE] Auth effective persistence type (after setPersistence, alt path):', (auth as any).persistenceManager.persistence.type);
+              }
+            })
+            .catch((error) => {
+              console.warn('[clientApp.ts CLIENT-SIDE] Failed to set browserLocalPersistence, trying indexedDBLocalPersistence. Error:', error.message);
+              return setPersistence(auth!, indexedDBLocalPersistence); // Fallback to indexedDB
+            })
+            .then(() => { // This will run if browserLocal succeeded or if indexedDB succeeded as fallback
+                // The previous logs already cover this, or will show if indexedDB was specifically set.
+                 const currentPersistence = (auth as any)?.currentUser?.auth?.config?.persistence || (auth as any)?.config?.persistence || (auth as any)?.persistenceManager?.persistence?.type;
+                 console.log('[clientApp.ts CLIENT-SIDE] Final check of effective persistence (may be async):', currentPersistence);
+            })
+            .catch((error) => {
+              console.error('[clientApp.ts CLIENT-SIDE] Failed to set Firebase Auth persistence for both browserLocal and indexedDB. Error:', error.message, error.stack);
+            });
+            console.log('[clientApp.ts CLIENT-SIDE] Client Auth initialized. Current user from instance (immediately after getAuth):', auth.currentUser?.uid || 'null');
+        }
+
+      } catch (e: any) {
+        console.error('[clientApp.ts Module Scope] Error initializing Auth:', e.message, e.stack);
+        auth = null;
+      }
+
+      try {
+        db = getFirestore(firebaseAppInstance);
+        console.log('[clientApp.ts Module Scope] getFirestore call completed. Firestore object type:', typeof db, 'Project ID in db.app.options:', (db as any)?.app?.options?.projectId);
+      } catch (e:any) {
+        console.error('[clientApp.ts Module Scope] Error getting Firestore:', e.message, e.stack);
+        db = null;
+      }
+    }
+  } else {
+    console.error('[clientApp.ts Module Scope] Failed to obtain/initialize firebaseAppInstance.');
+  }
+
+  // Basic validation of the auth object
   if (auth) {
     const hasOnAuthStateChanged = typeof (auth as any).onAuthStateChanged === 'function';
     if (hasOnAuthStateChanged) {
