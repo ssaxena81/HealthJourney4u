@@ -235,8 +235,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     const userId = userCredential.user.uid;
     const userProfileDocRef = doc(serverDb, "users", userId); 
 
-    let userProfile: UserProfile; // Will be constructed but sent as null for this test
-    let constructedUserProfileData: UserProfile; // For logging
+    let constructedUserProfileData: UserProfile;
 
     try {
       console.log("[LOGIN_ACTION_FIRESTORE_GETDOC_START] Attempting to fetch profile from Firestore for UID:", userId);
@@ -244,8 +243,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
 
       if (!userProfileSnap.exists()) {
         console.error(`[LOGIN_PROFILE_NOT_FOUND] User profile not found for UID: ${userId} in loginUser.`);
-        console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_PROFILE_NOT_FOUND] (userProfile will be null in client response)");
-        // Note: passwordExpired is not applicable here as we can't check it without a profile's lastPasswordChangeDate
+        console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_PROFILE_NOT_FOUND]");
         return { success: true, userId, userProfile: null, errorCode: "auth/profile-not-found" };
       }
 
@@ -302,31 +300,28 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
         dashboardRadarMetrics: Array.isArray(rawProfileData.dashboardRadarMetrics) ? rawProfileData.dashboardRadarMetrics as DashboardMetricIdValue[] : undefined,
         passwordResetCodeAttempt: typeof rawProfileData.passwordResetCodeAttempt === 'object' && rawProfileData.passwordResetCodeAttempt !== null ? rawProfileData.passwordResetCodeAttempt as { code: string; expiresAt: string; } : undefined,
       };
-      userProfile = constructedUserProfileData; // Assign to userProfile for password expiry check
-
       console.log("[LOGIN_ACTION_FIRESTORE_GETDOC_SUCCESS] Profile constructed for UID:", userId);
     } catch (firestoreError: any) {
       console.error("[LOGIN_FIRESTORE_ERROR] Error fetching/constructing user profile from Firestore for UID:", userId, "Raw Error:", firestoreError);
       const errorMessage = String(firestoreError.message || 'Database error during profile fetching.');
       const errorCode = String(firestoreError.code || 'FIRESTORE_ERROR');
       console.error(`[LOGIN_FIRESTORE_ERROR_DETAILS] Code: ${errorCode}, Message: ${errorMessage}`);
-      console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_FIRESTORE_ERROR] (userProfile will be null in client response)");
+      console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_FIRESTORE_ERROR]");
       return { success: true, userId, userProfile: null, error: `Login succeeded but profile fetch failed: ${errorMessage}.`, errorCode };
     }
 
     const currentLoginTimeISO = new Date().toISOString();
     try {
       await updateDoc(userProfileDocRef, { lastLoggedInDate: currentLoginTimeISO });
-      if (userProfile) userProfile.lastLoggedInDate = currentLoginTimeISO; // Update local copy if exists
-      if (constructedUserProfileData) constructedUserProfileData.lastLoggedInDate = currentLoginTimeISO;
+      constructedUserProfileData.lastLoggedInDate = currentLoginTimeISO; 
       console.log("[LOGIN_ACTION_FIRESTORE_UPDATE_SUCCESS] lastLoggedInDate updated in Firestore for UID:", userId);
     } catch (dbError: any) {
       console.error("[LOGIN_ACTION_FIRESTORE_ERROR] Failed to update lastLoggedInDate for UID:", userId, "Error:", dbError);
     }
 
     let passwordExpired = false;
-    if (userProfile && userProfile.lastPasswordChangeDate) {
-      const lastPasswordChange = new Date(userProfile.lastPasswordChangeDate);
+    if (constructedUserProfileData.lastPasswordChangeDate) {
+      const lastPasswordChange = new Date(constructedUserProfileData.lastPasswordChangeDate);
       const now = new Date();
       const daysSinceLastChange = (now.getTime() - lastPasswordChange.getTime()) / (1000 * 3600 * 24);
       if (daysSinceLastChange >= 90) {
@@ -334,14 +329,14 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
         console.log(`[LOGIN_ACTION_PASSWORD_EXPIRED] Password expired for user ${userId}.`);
       }
     } else {
-      passwordExpired = true; // Treat missing date as expired for safety
+      passwordExpired = true; 
       console.warn(`[LOGIN_PASSWORD_DATE_MISSING] User ${userId} missing lastPasswordChangeDate. Treating as password expired.`);
     }
 
     console.log("[LOGIN_ACTION_SUCCESS] loginUser action completed successfully for UID:", userId);
-    console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_DATA] Constructed userProfile (for server log):", JSON.stringify(constructedUserProfileData, null, 2));
-    console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_DATA] Returning object with userId, passwordExpired, and userProfile: null");
-    return { success: true, userId, passwordExpired, userProfile: null };
+    console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_FULL] Original userProfile:", JSON.stringify(constructedUserProfileData, null, 2));
+    console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_FULL] Returning FULL userProfile object.");
+    return { success: true, userId, passwordExpired, userProfile: constructedUserProfileData };
 
   } catch (error: any) {
     console.error("[LOGIN_ACTION_OUTER_CATCH_ERROR] Raw error in loginUser's outer catch block:", error.message, error.stack);
@@ -774,7 +769,7 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
         console.log("[FINALIZE_WITHINGS_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId, "with data:", connectionUpdateData);
         await updateDoc(userProfileDocRef, connectionUpdateData);
         console.log("[FINALIZE_WITHINGS_FIRESTORE_UPDATE_SUCCESS] Firestore updated with Withings connection, initial sync date, and Withings User ID for UID:", userId);
-        return { success: true, data: { withingsUserId: withingsApiUserId } };
+        return { success: true, data: { withingsUserId: withingsUserId } };
     } catch (error: any) {
         console.error("[FINALIZE_WITHINGS_RAW_ERROR] Raw error finalizing Withings connection for UID:", userId, "Error:", error.message, error.stack);
         const errorMessage = String(error.message || "Failed to finalize Withings connection.");
@@ -785,3 +780,4 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
     
  
     
+
