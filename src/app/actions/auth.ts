@@ -13,7 +13,7 @@ import { getAuth } from 'firebase/auth'; // For server-side getAuth
 import { getFirestore, type Firestore } from 'firebase/firestore'; // For server-side Firestore
 // DO NOT import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp' for server actions
 import { z } from 'zod';
-import type { UserProfile, SubscriptionTier, FitbitApiCallStats, StravaApiCallStats, GoogleFitApiCallStats, WithingsApiCallStats, WalkingRadarGoals, RunningRadarGoals, HikingRadarGoals, SwimmingRadarGoals, SleepRadarGoals, DashboardMetricIdValue } from '@/types';
+import type { UserProfile, SubscriptionTier, FitbitApiCallStats, StravaApiCallStats, GoogleFitApiCallStats, WithingsApiCallStats, WalkingRadarGoals, RunningRadarGoals, HikingRadarGoals, SwimmingRadarGoals, SleepRadarGoals, DashboardMetricIdValue, LoginResult } from '@/types';
 import { passwordSchema } from '@/types';
 import { doc, setDoc, getDoc, updateDoc, Timestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { differenceInYears, format } from 'date-fns';
@@ -37,8 +37,9 @@ const initializeServerFirebase = () => {
     !firebaseConfigServer.messagingSenderId ||
     !firebaseConfigServer.appId
   ) {
-    console.error("[ServerFirebaseHelper] CRITICAL SERVER FIREBASE CONFIG ERROR: One or more NEXT_PUBLIC_FIREBASE_... environment variables are missing.");
-    throw new Error("Server Firebase configuration is incomplete.");
+    const errorMessage = "[ServerFirebaseHelper] CRITICAL SERVER FIREBASE CONFIG ERROR: One or more NEXT_PUBLIC_FIREBASE_... environment variables are missing.";
+    console.error(errorMessage);
+    throw new Error(errorMessage); // Throw error to be caught by calling function
   }
   
   let app: FirebaseApp;
@@ -81,12 +82,12 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
   let serverDb: Firestore;
 
   try {
-    const { auth: sAuth, db: sDb } = initializeServerFirebase();
-    serverAuth = sAuth;
-    serverDb = sDb;
+    const initResult = initializeServerFirebase(); // Call helper
+    serverAuth = initResult.auth;
+    serverDb = initResult.db;
     console.log("[SIGNUP_ACTION_SERVER_FIREBASE_INIT_SUCCESS] Server-side Firebase Auth and DB initialized for signUpUser.");
   } catch (initError: any) {
-    console.error("[SIGNUP_ACTION_SERVER_FIREBASE_INIT_FAILURE]", initError.message);
+    console.error("[SIGNUP_ACTION_SERVER_FIREBASE_INIT_FAILURE]", initError.message, initError.stack);
     return {
       success: false,
       error: "Critical server error: Firebase services could not be initialized. Please contact support.",
@@ -103,7 +104,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     try {
       console.log("[SIGNUP_ACTION_CREATE_USER_START] Attempting to create user in Firebase Auth for email:", validatedValues.email);
       userCredential = await createUserWithEmailAndPassword(
-        serverAuth, // Use server-initialized auth
+        serverAuth, 
         validatedValues.email,
         validatedValues.password
       );
@@ -129,9 +130,9 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       lastPasswordChangeDate: nowIso,
       lastLoggedInDate: nowIso,
       acceptedLatestTerms: false,
-      termsVersionAccepted: undefined, // Initialize as undefined
+      termsVersionAccepted: undefined, 
       isAgeCertified: false,
-      profileSetupComplete: false, // Initialize as false
+      profileSetupComplete: false, 
       connectedFitnessApps: [],
       connectedDiagnosticsServices: [],
       connectedInsuranceProviders: [],
@@ -140,7 +141,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
 
     try {
       console.log("[SIGNUP_ACTION_FIRESTORE_SETDOC_START] Attempting to save profile to Firestore for UID:", userCredential.user.uid);
-      await setDoc(doc(serverDb, "users", userCredential.user.uid), initialProfile); // Use server-initialized db
+      await setDoc(doc(serverDb, "users", userCredential.user.uid), initialProfile); 
       console.log("[SIGNUP_ACTION_FIRESTORE_SETDOC_SUCCESS] Profile saved to Firestore successfully for UID:", userCredential.user.uid);
     } catch (firestoreError: any) {
       console.error("[SIGNUP_FIRESTORE_ERROR] Error creating user profile in Firestore for UID:", userCredential.user.uid, "Raw Error:", firestoreError);
@@ -148,8 +149,6 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       const errorCode = String(firestoreError.code || 'FIRESTORE_ERROR');
       console.error(`[SIGNUP_FIRESTORE_ERROR_DETAILS] Code: ${errorCode}, Message: ${errorMessage}`);
       console.log("[SIGNUP_ACTION_ATTEMPT_RETURN_ERROR_FIRESTORE_SETDOC_FAILED]");
-      // Consider deleting the Auth user if Firestore profile creation fails to avoid orphaned auth accounts
-      // await serverAuth.currentUser?.delete(); // Or use Admin SDK for this from a backend
       return { success: false, error: `Account created but profile setup failed: ${errorMessage}. Please contact support.`, errorCode, userId: userCredential.user.uid };
     }
 
@@ -157,7 +156,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     console.log("[SIGNUP_ACTION_ATTEMPT_RETURN_SUCCESS]");
     return { success: true, userId: userCredential.user.uid };
   } catch (error: any) {
-    console.error("[SIGNUP_ACTION_OUTER_CATCH_ERROR] Raw error in signUpUser's outer catch block:", error);
+    console.error("[SIGNUP_ACTION_OUTER_CATCH_ERROR] Raw error in signUpUser's outer catch block:", error.message, error.stack);
     let errorMessage = "An unexpected error occurred during account creation.";
     let errorCode = "UNKNOWN_SIGNUP_ERROR";
 
@@ -167,9 +166,9 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       errorCode = "VALIDATION_ERROR";
       console.log("[SIGNUP_ACTION_ATTEMPT_RETURN_ERROR_ZOD_VALIDATION]");
       return { success: false, error: errorMessage, errorCode, details: error.flatten() };
-    } else if (error.code) {
-      errorMessage = String(error.message || "Operation failed.");
-      errorCode = String(error.code);
+    } else if ((error as AuthError).code) { // Check for Firebase Auth specific error structure
+      errorMessage = String((error as AuthError).message || "Operation failed.");
+      errorCode = String((error as AuthError).code);
       console.error(`[SIGNUP_ACTION_ERROR_DETAILS_CODED] Code: ${errorCode}, Message: ${errorMessage}`);
     } else {
       errorMessage = String(error.message || "An unexpected server error occurred during sign-up.");
@@ -186,15 +185,6 @@ const LoginInputSchema = z.object({
   password: z.string().min(1, { message: "Password is required." }),
 });
 
-interface LoginResult {
-  success: boolean;
-  userId?: string;
-  error?: string;
-  errorCode?: string;
-  passwordExpired?: boolean;
-  termsNotAccepted?: boolean;
-  userProfile?: UserProfile | null;
-}
 
 export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promise<LoginResult> {
   console.log("[LOGIN_ACTION_START] loginUser action initiated for email:", values.email);
@@ -203,12 +193,12 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
   let serverDb: Firestore;
 
   try {
-    const { auth: sAuth, db: sDb } = initializeServerFirebase();
-    serverAuth = sAuth;
-    serverDb = sDb;
+    const initResult = initializeServerFirebase();
+    serverAuth = initResult.auth;
+    serverDb = initResult.db;
     console.log("[LOGIN_ACTION_SERVER_FIREBASE_INIT_SUCCESS] Server-side Firebase Auth and DB initialized for loginUser.");
   } catch (initError: any) {
-    console.error("[LOGIN_ACTION_SERVER_FIREBASE_INIT_FAILURE]", initError.message);
+    console.error("[LOGIN_ACTION_SERVER_FIREBASE_INIT_FAILURE]", initError.message, initError.stack);
     return {
       success: false,
       error: "Critical server error: Firebase services could not be initialized. Please contact support.",
@@ -224,7 +214,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     try {
       console.log("[LOGIN_ACTION_SIGNIN_START] Attempting to sign in user with Firebase Auth for email:", validatedValues.email);
       userCredential = await signInWithEmailAndPassword(
-        serverAuth, // Use server-initialized auth
+        serverAuth, 
         validatedValues.email,
         validatedValues.password
       );
@@ -243,7 +233,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     }
 
     const userId = userCredential.user.uid;
-    const userProfileDocRef = doc(serverDb, "users", userId); // Use server-initialized db
+    const userProfileDocRef = doc(serverDb, "users", userId); 
 
     let userProfile: UserProfile;
     try {
@@ -344,21 +334,24 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       return { success: true, userId, passwordExpired: true, userProfile };
     }
 
+    // Original success return:
     console.log("[LOGIN_ACTION_SUCCESS] loginUser action completed successfully for UID:", userId);
-    console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_FULL]");
-    return { success: true, userId, userProfile };
+    console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_FULL] Original userProfile:", userProfile);
+    console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_FULL] Temporarily returning super simple object for testing client reception.");
+    return { success: true, message: "Login action succeeded on server (super simple test)." };
+    // return { success: true, userId, userProfile };
 
   } catch (error: any) {
-    console.error("[LOGIN_ACTION_RAW_ERROR] Raw error in loginUser:", error);
+    console.error("[LOGIN_ACTION_OUTER_CATCH_ERROR] Raw error in loginUser's outer catch block:", error.message, error.stack);
     let errorMessage = "An unknown error occurred during login.";
     let errorCode = "UNKNOWN_LOGIN_ERROR";
     if (error instanceof z.ZodError) {
       console.error("[LOGIN_ACTION_ZOD_DETAILS] ZodError:", error.flatten());
       errorMessage = "Invalid login input.";
       errorCode = "VALIDATION_ERROR";
-    } else if (error.code) {
-      errorMessage = String(error.message || errorMessage);
-      errorCode = String(error.code);
+    } else if ((error as AuthError).code) { 
+      errorMessage = String((error as AuthError).message || errorMessage);
+      errorCode = String((error as AuthError).code);
       console.error(`[LOGIN_ACTION_ERROR_DETAILS_CODED] Code: ${errorCode}, Message: ${errorMessage}`);
     } else {
       errorMessage = String(error.message || errorMessage);
@@ -367,6 +360,10 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     console.log("[LOGIN_ACTION_ATTEMPT_RETURN_ERROR_OUTER_CATCH]");
     return { success: false, error: errorMessage, errorCode: errorCode };
   }
+  
+  // Fallback return, should ideally never be reached if logic is correct
+  console.error("[LOGIN_ACTION_UNEXPECTED_FALLTHROUGH] LoginUser function reached end without explicit return. This indicates a flaw in control flow.");
+  return { success: false, error: "Login failed due to an unexpected server-side control flow issue.", errorCode: "UNEXPECTED_FALLTHROUGH" };
 }
 
 
@@ -402,7 +399,7 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
   console.log("[SEND_RESET_CODE_START] Action initiated for email:", values.email);
   let serverDb: Firestore;
   try {
-    const { db: sDb } = initializeServerFirebase(); // Auth not needed here, only DB
+    const { db: sDb } = initializeServerFirebase(); 
     serverDb = sDb;
     const validatedValues = ForgotPasswordEmailSchema.parse(values);
     console.log("[SEND_RESET_CODE_VALIDATED] Email validated by Zod:", validatedValues.email);
@@ -419,7 +416,7 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
     const userDoc = querySnapshot.docs[0];
     const userIdForReset = userDoc.id;
     const resetCode = Math.floor(10000000 + Math.random() * 90000000).toString();
-    const expiresAt = Timestamp.fromMillis(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+    const expiresAt = Timestamp.fromMillis(Date.now() + 10 * 60 * 1000); 
 
     await updateDoc(doc(serverDb, "users", userIdForReset), {
       passwordResetCodeAttempt: { code: resetCode, expiresAt: expiresAt.toDate().toISOString() }
@@ -429,12 +426,11 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
     return { success: true, message: "If your email is registered, an 8-digit code has been sent. Please check your email/phone (or server console for simulation)." };
 
   } catch (error: any) {
-    console.error("[SEND_RESET_CODE_ACTION_RAW_ERROR] Raw error in sendPasswordResetCode:", error);
+    console.error("[SEND_RESET_CODE_ACTION_RAW_ERROR] Raw error in sendPasswordResetCode:", error.message, error.stack);
     if (error instanceof z.ZodError) {
       console.error("[SEND_RESET_CODE_ACTION_ZOD_DETAILS] ZodError:", error.flatten());
       return { success: false, error: 'Invalid input.', errorCode: 'VALIDATION_ERROR', details: error.flatten()};
     }
-    // Return a generic success message for security, even if an error occurred, to prevent email enumeration.
     return { success: true, message: "If an account with that email exists, we've sent instructions to reset your password. (Error occurred, simulated success for security)"};
   }
 }
@@ -474,7 +470,7 @@ export async function verifyPasswordResetCode(values: z.infer<typeof VerifyReset
     return { success: true };
 
   } catch (error: any) {
-    console.error("[VERIFY_RESET_CODE_ACTION_RAW_ERROR] Raw error in verifyPasswordResetCode:", error);
+    console.error("[VERIFY_RESET_CODE_ACTION_RAW_ERROR] Raw error in verifyPasswordResetCode:", error.message, error.stack);
     if (error instanceof z.ZodError) {
       console.error("[VERIFY_RESET_CODE_ACTION_ZOD_DETAILS] ZodError:", error.flatten());
       return { success: false, error: 'Invalid input.', errorCode: 'VALIDATION_ERROR', details: error.flatten()};
@@ -493,7 +489,7 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
     serverDb = sDb;
     const validatedValues = FinalResetPasswordSchema.parse(values);
 
-    const currentUser = serverAuth.currentUser; // Check current user on server-side auth instance
+    const currentUser = serverAuth.currentUser; 
 
     if (currentUser && currentUser.email === validatedValues.email) {
       console.log("[RESET_PASSWORD_LOGGED_IN_USER] Attempting password update for logged-in user on server instance:", currentUser.uid);
@@ -522,19 +518,13 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
     const userIdToReset = userDocSnap.id;
 
     console.warn(`[RESET_PASSWORD_ADMIN_SDK_REQUIRED] To reset password for unauthenticated user ${userIdToReset} via email link flow, Firebase Admin SDK (or verifying the oobCode client-side then calling applyPasswordReset) is typically used. Simulating update via server action for now.`);
-    // This part is tricky without Admin SDK. Ideally, for an oobCode flow, you'd verify the code
-    // then update. Since we have a custom code, we're assuming it was verified by verifyPasswordResetCode.
-    // The Firebase client SDK's updatePassword requires the user to be signed in.
-    // For a true "forgot password" where user is not signed in, Admin SDK `updateUser` is needed.
-    // This simplified version will just update the Firestore date, implying an Admin SDK call would happen.
+    
     console.log(`[RESET_PASSWORD_SIMULATE_ADMIN_SUCCESS] Simulating successful password reset for ${userIdToReset} via Admin SDK (not actually changing auth password here).`);
 
     try {
       console.log("[RESET_PASSWORD_UNAUTH_FIRESTORE_UPDATE_START] Updating lastPasswordChangeDate in Firestore for:", userIdToReset);
       await updateDoc(doc(serverDb, "users", userIdToReset), {
         lastPasswordChangeDate: new Date().toISOString(),
-        // It's crucial that the actual password change happens via Firebase Auth (Admin SDK for this flow)
-        // For this simulation, we're just updating the date.
       });
       console.log("[RESET_PASSWORD_UNAUTH_FIRESTORE_UPDATE_SUCCESS] lastPasswordChangeDate updated for:", userIdToReset);
       return { success: true, message: "Password has been reset successfully. (Simulated Admin SDK: actual auth password not changed by this action in unauth flow without Admin SDK)" };
@@ -544,7 +534,7 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
     }
 
   } catch (error: any) {
-    console.error("[RESET_PASSWORD_ACTION_RAW_ERROR] Raw error in resetPassword:", error);
+    console.error("[RESET_PASSWORD_ACTION_RAW_ERROR] Raw error in resetPassword:", error.message, error.stack);
     if (error instanceof z.ZodError) {
       console.error("[RESET_PASSWORD_ACTION_ZOD_DETAILS] ZodError:", error.flatten());
       return { success: false, error: 'Invalid input.', errorCode: 'VALIDATION_ERROR', details: error.flatten()};
@@ -619,13 +609,13 @@ export async function updateDemographics(userId: string, values: z.infer<typeof 
       console.log("[UPDATE_DEMOGRAPHICS_FIRESTORE_UPDATE_SUCCESS] Firestore updated successfully for UID:", userId);
       return { success: true, data: profileUpdateData };
     } catch (error: any) {
-        console.error("[UPDATE_DEMOGRAPHICS_RAW_ERROR] Raw error in updateDemographics for UID:", userId, "Error:", error);
+        console.error("[UPDATE_DEMOGRAPHICS_RAW_ERROR] Raw error in updateDemographics for UID:", userId, "Error:", error.message, error.stack);
         if (error instanceof z.ZodError) {
           console.error("[UPDATE_DEMOGRAPHICS_ZOD_ERROR_DETAILS] ZodError:", error.flatten());
           return { success: false, error: 'Invalid input from server validation.', details: error.flatten(), errorCode: 'VALIDATION_ERROR' };
         }
         const errorMessage = String(error.message || "Failed to update profile due to an unexpected error.");
-        const errorCode = String(error.code || 'UNEXPECTED_ERROR');
+        const errorCode = String((error as AuthError).code || 'UNEXPECTED_ERROR');
         console.error(`[UPDATE_DEMOGRAPHICS_ERROR_DETAILS] Code: ${errorCode}, Message: ${errorMessage}`);
         return { success: false, error: errorMessage, errorCode: errorCode };
     }
@@ -642,9 +632,9 @@ export async function updateUserTermsAcceptance(userId: string, accepted: boolea
         console.log("[UPDATE_TERMS_FIRESTORE_UPDATE_SUCCESS] Firestore updated successfully for UID:", userId);
         return { success: true };
     } catch (error: any) {
-        console.error("[UPDATE_TERMS_RAW_ERROR] Raw error in updateUserTermsAcceptance for UID:", userId, "Error:", error);
+        console.error("[UPDATE_TERMS_RAW_ERROR] Raw error in updateUserTermsAcceptance for UID:", userId, "Error:", error.message, error.stack);
         const errorMessage = String(error.message || "Failed to update terms acceptance due to an unexpected error.");
-        const errorCode = String(error.code || 'UNEXPECTED_ERROR');
+        const errorCode = String((error as AuthError).code || 'UNEXPECTED_ERROR');
         console.error(`[UPDATE_TERMS_ERROR_DETAILS] Code: ${errorCode}, Message: ${errorMessage}`);
         return { success: false, error: errorMessage, errorCode: errorCode };
     }
@@ -680,9 +670,9 @@ export async function finalizeFitbitConnection(userId: string): Promise<{success
         return { success: true };
 
     } catch (error: any) {
-        console.error("[FINALIZE_FITBIT_RAW_ERROR] Raw error finalizing Fitbit connection for UID:", userId, "Error:", error);
+        console.error("[FINALIZE_FITBIT_RAW_ERROR] Raw error finalizing Fitbit connection for UID:", userId, "Error:", error.message, error.stack);
         const errorMessage = String(error.message || "Failed to finalize Fitbit connection.");
-        const errorCode = String(error.code || 'UNEXPECTED_ERROR');
+        const errorCode = String((error as AuthError).code || 'UNEXPECTED_ERROR');
         return { success: false, error: errorMessage, errorCode: errorCode};
     }
 }
@@ -714,9 +704,9 @@ export async function finalizeStravaConnection(userId: string): Promise<{success
         console.log("[FINALIZE_STRAVA_FIRESTORE_UPDATE_SUCCESS] Firestore updated with Strava connection and initial sync timestamp for UID:", userId);
         return { success: true };
     } catch (error: any) {
-        console.error("[FINALIZE_STRAVA_RAW_ERROR] Raw error finalizing Strava connection for UID:", userId, "Error:", error);
+        console.error("[FINALIZE_STRAVA_RAW_ERROR] Raw error finalizing Strava connection for UID:", userId, "Error:", error.message, error.stack);
         const errorMessage = String(error.message || "Failed to finalize Strava connection.");
-        const errorCode = String(error.code || 'UNEXPECTED_ERROR');
+        const errorCode = String((error as AuthError).code || 'UNEXPECTED_ERROR');
         return { success: false, error: errorMessage, errorCode: errorCode};
     }
 }
@@ -748,9 +738,9 @@ export async function finalizeGoogleFitConnection(userId: string): Promise<{succ
         console.log("[FINALIZE_GOOGLE_FIT_FIRESTORE_UPDATE_SUCCESS] Firestore updated with Google Fit connection and initial sync date for UID:", userId);
         return { success: true };
     } catch (error: any) {
-        console.error("[FINALIZE_GOOGLE_FIT_RAW_ERROR] Raw error finalizing Google Fit connection for UID:", userId, "Error:", error);
+        console.error("[FINALIZE_GOOGLE_FIT_RAW_ERROR] Raw error finalizing Google Fit connection for UID:", userId, "Error:", error.message, error.stack);
         const errorMessage = String(error.message || "Failed to finalize Google Fit connection.");
-        const errorCode = String(error.code || 'UNEXPECTED_ERROR');
+        const errorCode = String((error as AuthError).code || 'UNEXPECTED_ERROR');
         return { success: false, error: errorMessage, errorCode: errorCode};
     }
 }
@@ -785,11 +775,12 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
         console.log("[FINALIZE_WITHINGS_FIRESTORE_UPDATE_SUCCESS] Firestore updated with Withings connection, initial sync date, and Withings User ID for UID:", userId);
         return { success: true, data: { withingsUserId: withingsApiUserId } };
     } catch (error: any) {
-        console.error("[FINALIZE_WITHINGS_RAW_ERROR] Raw error finalizing Withings connection for UID:", userId, "Error:", error);
+        console.error("[FINALIZE_WITHINGS_RAW_ERROR] Raw error finalizing Withings connection for UID:", userId, "Error:", error.message, error.stack);
         const errorMessage = String(error.message || "Failed to finalize Withings connection.");
-        const errorCode = String(error.code || 'UNEXPECTED_ERROR');
+        const errorCode = String((error as AuthError).code || 'UNEXPECTED_ERROR');
         return { success: false, error: errorMessage, errorCode: errorCode};
     }
 }
     
+ 
     
