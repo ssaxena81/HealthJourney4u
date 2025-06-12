@@ -15,6 +15,8 @@ import { getFirestore, type Firestore, collection as diagnosticCollection } from
 console.log("[clientApp.ts Module Scope] Typeof imported 'initializeApp':", typeof initializeApp, ". Name:", initializeApp.name);
 console.log("[clientApp.ts Module Scope] Typeof imported 'getAuth':", typeof getAuth, ". Name:", getAuth.name);
 console.log("[clientApp.ts Module Scope] Typeof imported 'initializeAuth':", typeof initializeAuth, ". Name:", initializeAuth.name);
+console.log("[clientApp.ts Module Scope] Typeof imported 'indexedDBLocalPersistence':", typeof indexedDBLocalPersistence);
+console.log("[clientApp.ts Module Scope] Typeof imported 'browserLocalPersistence':", typeof browserLocalPersistence);
 console.log("[clientApp.ts Module Scope] Typeof imported 'getFirestore':", typeof getFirestore, ". Name:", getFirestore.name);
 console.log("[clientApp.ts Module Scope] Diagnostic: typeof imported fetchSignInMethodsForEmail is", typeof fetchSignInMethodsForEmail);
 console.log("[clientApp.ts Module Scope] Diagnostic: typeof imported collection is", typeof diagnosticCollection);
@@ -33,7 +35,7 @@ if (typeof window !== 'undefined') {
     console.log('[clientApp.ts CLIENT-SIDE] Firebase Config being used:', JSON.stringify(firebaseConfig, null, 2));
 }
 
-let firebaseAppInstance: FirebaseApp | null = null; // Renamed to avoid confusion with the exported firebaseApp
+let firebaseAppInstance: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
 
@@ -52,6 +54,8 @@ if (!allConfigKeysPresent) {
 } else {
   if (typeof window !== 'undefined') { // CLIENT-SIDE INITIALIZATION BLOCK
     console.log("[clientApp.ts CLIENT-SIDE] All Firebase config keys appear to be present in process.env.");
+    
+    // Ensure firebaseAppInstance is resolved client-side for initializeAuth
     if (!getApps().length) {
       console.log("[clientApp.ts CLIENT-SIDE] No Firebase apps initialized yet on client. Initializing new Firebase app with config.");
       try {
@@ -78,8 +82,10 @@ if (!allConfigKeysPresent) {
       if (firebaseAppInstance) {
         console.log('[clientApp.ts CLIENT-SIDE] Client-side firebaseAppInstance seems valid. Initializing Auth and Firestore for client...');
         try {
+          // MODIFIED PERSISTENCE ORDER: Prioritize browserLocalPersistence
+          console.log('[clientApp.ts CLIENT-SIDE] Initializing Auth for client with initializeAuth, prioritizing browserLocalPersistence...');
           auth = initializeAuth(firebaseAppInstance, {
-            persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+            persistence: [browserLocalPersistence, indexedDBLocalPersistence], // Try localStorage first
             popupRedirectResolver: browserPopupRedirectResolver,
           });
           console.log('[clientApp.ts CLIENT-SIDE] initializeAuth call completed. Auth object type:', typeof auth);
@@ -87,9 +93,9 @@ if (!allConfigKeysPresent) {
              console.log('[clientApp.ts CLIENT-SIDE] Client Auth initialized. Current user from instance (immediately after init):', auth.currentUser?.uid || 'null');
              // Attempt to log persistence type using internal property (for debugging only)
              if ((auth as any)._persistenceManager && (auth as any)._persistenceManager._persistence && (auth as any)._persistenceManager._persistence.type) {
-               console.log('[clientApp.ts CLIENT-SIDE] Auth effective persistence type:', (auth as any)._persistenceManager._persistence.type);
+               console.log('[clientApp.ts CLIENT-SIDE] Auth effective persistence type (path 1):', (auth as any)._persistenceManager._persistence.type);
              } else if ((auth as any).persistenceManager && (auth as any).persistenceManager.persistence && (auth as any).persistenceManager.persistence.type) { // Alternative possible path
-               console.log('[clientApp.ts CLIENT-SIDE] Auth effective persistence type (alt path):', (auth as any).persistenceManager.persistence.type);
+               console.log('[clientApp.ts CLIENT-SIDE] Auth effective persistence type (path 2):', (auth as any).persistenceManager.persistence.type);
              } else {
                console.log('[clientApp.ts CLIENT-SIDE] Could not determine auth persistence type from instance structure.');
              }
@@ -123,7 +129,7 @@ if (!allConfigKeysPresent) {
     }
     if (firebaseAppInstance) {
       try {
-        auth = getAuth(firebaseAppInstance);
+        auth = getAuth(firebaseAppInstance); // No persistence config needed for server-side getAuth
         console.log('[clientApp.ts SERVER-SIDE] getAuth (server context) call completed. Auth object type:', typeof auth);
       } catch (e:any) {
         console.error('[clientApp.ts SERVER-SIDE] Error getting Auth on server:', e.message, e.stack);
@@ -141,7 +147,6 @@ if (!allConfigKeysPresent) {
     }
   }
 
-  // Validate auth object after conditional initialization
   if (auth) {
     const hasOnAuthStateChanged = typeof (auth as any).onAuthStateChanged === 'function';
     if (hasOnAuthStateChanged) {
@@ -150,20 +155,19 @@ if (!allConfigKeysPresent) {
       console.error(
         '[clientApp.ts Module Scope] Auth instance is INVALID (missing onAuthStateChanged or auth is null). Has onAuthStateChanged:', hasOnAuthStateChanged, 'Environment:', typeof window !== 'undefined' ? 'Client' : 'Server'
       );
-      auth = null; // Invalidate if not usable
+      auth = null; 
     }
   } else {
      console.error('[clientApp.ts Module Scope] Auth object is null after initialization block.');
   }
 
-  // Validate db object
   if (db && typeof db === 'object' && (db as any).app) {
     console.log(`[clientApp.ts Module Scope] Firestore instance obtained and appears VALID for project: ${(db as any).app.options.projectId}. Environment:`, typeof window !== 'undefined' ? 'Client' : 'Server');
   } else {
     console.error(
         `[clientApp.ts Module Scope] Firestore instance is considered INVALID or its app property is not accessible. Firestore operations might fail. Firestore instance received:`, db, 'Environment:', typeof window !== 'undefined' ? 'Client' : 'Server'
     );
-    db = null; // Invalidate if not usable
+    db = null; 
   }
 }
 
@@ -175,7 +179,7 @@ if (typeof window !== 'undefined') {
         if (typeof auth.onAuthStateChanged === 'function') {
             console.log('[clientApp.ts CLIENT-SIDE] Attaching DIAGNOSTIC onAuthStateChanged listener now...');
             try {
-                const diagnosticUnsubscribe = auth.onAuthStateChanged(user => { // This user is FirebaseUser | null
+                const diagnosticUnsubscribe = auth.onAuthStateChanged(user => { 
                     console.log('!!! [clientApp.ts DIAGNOSTIC onAuthStateChanged FIRED] !!! User from clientApp.ts listener:', user ? user.uid : 'null');
                 });
                 console.log('[clientApp.ts CLIENT-SIDE] DIAGNOSTIC onAuthStateChanged listener attached successfully. Unsubscribe function details:', String(diagnosticUnsubscribe).substring(0,100) + "...");
@@ -192,8 +196,6 @@ if (typeof window !== 'undefined') {
     console.log('[clientApp.ts Module Scope] Not client-side (typeof window === "undefined"), so DIAGNOSTIC listener not attached.');
 }
 
-// Exporting the potentially null firebaseAppInstance as firebaseApp for consistency if other parts of the app expect it
-// However, internal uses in this file now use firebaseAppInstance directly within their scopes.
 const firebaseApp = firebaseAppInstance; 
 console.log('[clientApp.ts Module Scope End] Exporting final state: auth is', auth ? 'Instance (basic validity check passed)' : 'NULL', ', db is', db ? 'Instance' : 'NULL', ', firebaseApp is', firebaseApp ? 'Instance' : 'NULL');
 export { firebaseApp, auth, db };
