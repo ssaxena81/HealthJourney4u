@@ -4,20 +4,18 @@ import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import {
   getAuth,
   type Auth,
-  setPersistence,
-  browserLocalPersistence,
-  indexedDBLocalPersistence,
-  // initializeAuth, // No longer using initializeAuth directly here for client
-  // browserPopupRedirectResolver, // Keep if needed for other auth methods
-  // fetchSignInMethodsForEmail // Keep for diagnostic if used elsewhere
+  // Persistence-related imports are no longer directly used here
+  // setPersistence,
+  // browserLocalPersistence,
+  // indexedDBLocalPersistence,
 } from 'firebase/auth';
 import { getFirestore, type Firestore, collection as diagnosticCollection } from 'firebase/firestore';
 
 console.log("[clientApp.ts Module Scope] Typeof imported 'initializeApp':", typeof initializeApp, ". Name:", initializeApp.name);
 console.log("[clientApp.ts Module Scope] Typeof imported 'getAuth':", typeof getAuth, ". Name:", getAuth.name);
-console.log("[clientApp.ts Module Scope] Typeof imported 'setPersistence':", typeof setPersistence, ". Name:", setPersistence.name);
-console.log("[clientApp.ts Module Scope] Typeof imported 'indexedDBLocalPersistence':", typeof indexedDBLocalPersistence);
-console.log("[clientApp.ts Module Scope] Typeof imported 'browserLocalPersistence':", typeof browserLocalPersistence);
+// console.log("[clientApp.ts Module Scope] Typeof imported 'setPersistence':", typeof setPersistence, ". Name:", setPersistence.name);
+// console.log("[clientApp.ts Module Scope] Typeof imported 'indexedDBLocalPersistence':", typeof indexedDBLocalPersistence);
+// console.log("[clientApp.ts Module Scope] Typeof imported 'browserLocalPersistence':", typeof browserLocalPersistence);
 console.log("[clientApp.ts Module Scope] Typeof imported 'getFirestore':", typeof getFirestore, ". Name:", getFirestore.name);
 // console.log("[clientApp.ts Module Scope] Diagnostic: typeof imported fetchSignInMethodsForEmail is", typeof fetchSignInMethodsForEmail);
 // console.log("[clientApp.ts Module Scope] Diagnostic: typeof imported collection is", typeof diagnosticCollection);
@@ -36,11 +34,12 @@ let firebaseApp: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
 
+// This block now only runs on the client
 if (typeof window !== 'undefined') {
   console.log('[clientApp.ts CLIENT-SIDE] Running client-side Firebase initialization.');
   console.log('[clientApp.ts CLIENT-SIDE] Firebase Config being used:', JSON.stringify(firebaseConfig, null, 2));
 
-  const allConfigKeysPresentOnClient =
+  const allConfigKeysPresent =
     firebaseConfig.apiKey &&
     firebaseConfig.authDomain &&
     firebaseConfig.projectId &&
@@ -48,9 +47,9 @@ if (typeof window !== 'undefined') {
     firebaseConfig.messagingSenderId &&
     firebaseConfig.appId;
 
-  if (!allConfigKeysPresentOnClient) {
+  if (!allConfigKeysPresent) {
     console.error(
-      '[clientApp.ts CLIENT-SIDE] CRITICAL FIREBASE CONFIG ERROR: One or more NEXT_PUBLIC_FIREBASE_... environment variables are missing. Firebase services will NOT be initialized on client.'
+      '[clientApp.ts CLIENT-SIDE] CRITICAL FIREBASE CONFIG ERROR: One or more NEXT_PUBLIC_FIREBASE_... environment variables are missing. Firebase services will NOT be initialized.'
     );
   } else {
     if (!getApps().length) {
@@ -81,15 +80,11 @@ if (typeof window !== 'undefined') {
           auth = getAuth(firebaseApp);
           console.log('[clientApp.ts CLIENT-SIDE] getAuth call completed for client. Auth object type:', typeof auth);
           
-          console.log('[clientApp.ts CLIENT-SIDE] Attempting to set persistence with browserLocalPersistence then indexedDBLocalPersistence...');
-          setPersistence(auth, [browserLocalPersistence, indexedDBLocalPersistence])
-            .then(() => {
-              const persistenceType = (auth as any)?.config?.persistence || (auth as any)?.persistenceManager?.persistence?.type;
-              console.log('[clientApp.ts CLIENT-SIDE] Firebase Auth persistence set. Effective type (may be async):', persistenceType);
-            })
-            .catch((error) => {
-              console.error('[clientApp.ts CLIENT-SIDE] Failed to set Firebase Auth persistence. Error:', error.message, error.stack);
-            });
+          // REMOVED explicit setPersistence call
+          console.log('[clientApp.ts CLIENT-SIDE] Relying on default Firebase Auth persistence.');
+          // const persistenceType = (auth as any)?.config?.persistence || (auth as any)?.persistenceManager?.persistence?.type;
+          // console.log('[clientApp.ts CLIENT-SIDE] Firebase Auth default persistence type (may be async):', persistenceType);
+
           console.log('[clientApp.ts CLIENT-SIDE] Client Auth initialized. Current user from instance (immediately after getAuth):', auth.currentUser?.uid || 'null');
         } catch (e: any) {
           console.error('[clientApp.ts CLIENT-SIDE] Error initializing client-side Auth:', e.message, e.stack);
@@ -111,7 +106,6 @@ if (typeof window !== 'undefined') {
 } else {
   console.log('[clientApp.ts SERVER-SIDE] Skipping client-side Firebase initialization.');
 }
-
 
 // --- Post-initialization checks and diagnostic listener (client-side only) ---
 if (typeof window !== 'undefined') {
@@ -153,4 +147,5 @@ if (typeof window !== 'undefined') {
 
 console.log('[clientApp.ts Module Scope End] Exporting final state: auth is', auth ? 'Instance (client-side)' : 'NULL', ', db is', db ? 'Instance (client-side)' : 'NULL', ', firebaseApp is', firebaseApp ? 'Instance (client-side)' : 'NULL');
 export { firebaseApp, auth, db };
+    
     
