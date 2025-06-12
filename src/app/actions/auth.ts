@@ -4,15 +4,55 @@
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  updatePassword as firebaseUpdatePassword, 
+  updatePassword as firebaseUpdatePassword,
   type AuthError,
+  type Auth, // For type annotation
 } from 'firebase/auth';
-import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
+import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app'; // For server-side init
+import { getAuth } from 'firebase/auth'; // For server-side getAuth
+import { getFirestore, type Firestore } from 'firebase/firestore'; // For server-side Firestore
+// DO NOT import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp' for server actions
 import { z } from 'zod';
 import type { UserProfile, SubscriptionTier, FitbitApiCallStats, StravaApiCallStats, GoogleFitApiCallStats, WithingsApiCallStats, WalkingRadarGoals, RunningRadarGoals, HikingRadarGoals, SwimmingRadarGoals, SleepRadarGoals, DashboardMetricIdValue } from '@/types';
 import { passwordSchema } from '@/types';
 import { doc, setDoc, getDoc, updateDoc, Timestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { differenceInYears, format } from 'date-fns';
+
+// Helper function for server-side Firebase initialization
+const initializeServerFirebase = () => {
+  const firebaseConfigServer = {
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  };
+
+  if (
+    !firebaseConfigServer.apiKey ||
+    !firebaseConfigServer.authDomain ||
+    !firebaseConfigServer.projectId ||
+    !firebaseConfigServer.storageBucket ||
+    !firebaseConfigServer.messagingSenderId ||
+    !firebaseConfigServer.appId
+  ) {
+    console.error("[ServerFirebaseHelper] CRITICAL SERVER FIREBASE CONFIG ERROR: One or more NEXT_PUBLIC_FIREBASE_... environment variables are missing.");
+    throw new Error("Server Firebase configuration is incomplete.");
+  }
+  
+  let app: FirebaseApp;
+  if (!getApps().length) {
+    console.log("[ServerFirebaseHelper] No Firebase apps initialized for server. Initializing new Firebase app.");
+    app = initializeApp(firebaseConfigServer);
+  } else {
+    console.log("[ServerFirebaseHelper] Firebase app already initialized for server. Getting existing app.");
+    app = getApp();
+  }
+  const authInstance: Auth = getAuth(app);
+  const dbInstance: Firestore = getFirestore(app);
+  return { app, auth: authInstance, db: dbInstance };
+};
 
 
 // --- Sign Up Schemas ---
@@ -36,24 +76,24 @@ interface SignUpResult {
 
 export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema>): Promise<SignUpResult> {
   console.log("[SIGNUP_ACTION_START] signUpUser action initiated with email:", values.email, "tier:", values.subscriptionTier);
+  
+  let serverAuth: Auth;
+  let serverDb: Firestore;
 
-  if (!firebaseAuth || !firebaseAuth.app) {
-    console.error("[SIGNUP_ACTION_CRITICAL_FAILURE] Firebase Auth service appears uninitialized or misconfigured on the server for signUpUser. firebaseAuth:", firebaseAuth);
+  try {
+    const { auth: sAuth, db: sDb } = initializeServerFirebase();
+    serverAuth = sAuth;
+    serverDb = sDb;
+    console.log("[SIGNUP_ACTION_SERVER_FIREBASE_INIT_SUCCESS] Server-side Firebase Auth and DB initialized for signUpUser.");
+  } catch (initError: any) {
+    console.error("[SIGNUP_ACTION_SERVER_FIREBASE_INIT_FAILURE]", initError.message);
     return {
       success: false,
-      error: "Critical server error: Authentication service is not ready. Please contact support.",
-      errorCode: 'SERVER_FIREBASE_AUTH_INIT_FAILURE'
+      error: "Critical server error: Firebase services could not be initialized. Please contact support.",
+      errorCode: 'SERVER_FIREBASE_INIT_FAILURE'
     };
   }
-  if (!db || !db.app || typeof doc !== 'function' || typeof setDoc !== 'function') {
-    console.error("[SIGNUP_ACTION_CRITICAL_FAILURE] Firestore service (db) appears uninitialized or misconfigured on the server for signUpUser. db:", db);
-    return {
-      success: false,
-      error: "Critical server error: Database service is not ready. Profile cannot be saved. Please contact support.",
-      errorCode: 'SERVER_FIREBASE_DB_INIT_FAILURE'
-    };
-  }
-  console.log("[SIGNUP_ACTION_FIREBASE_SERVICES_CHECK_PASSED] Firebase Auth and DB appear initialized for server action.");
+
 
   try {
     const validatedValues = SignUpDetailsInputSchema.parse(values);
@@ -63,7 +103,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     try {
       console.log("[SIGNUP_ACTION_CREATE_USER_START] Attempting to create user in Firebase Auth for email:", validatedValues.email);
       userCredential = await createUserWithEmailAndPassword(
-        firebaseAuth,
+        serverAuth, // Use server-initialized auth
         validatedValues.email,
         validatedValues.password
       );
@@ -87,7 +127,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       email: userCredential.user.email!,
       subscriptionTier: validatedValues.subscriptionTier,
       lastPasswordChangeDate: nowIso,
-      lastLoggedInDate: nowIso, 
+      lastLoggedInDate: nowIso,
       acceptedLatestTerms: false,
       isAgeCertified: false,
       profileSetupComplete: false, // Initialize as false
@@ -99,7 +139,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
 
     try {
       console.log("[SIGNUP_ACTION_FIRESTORE_SETDOC_START] Attempting to save profile to Firestore for UID:", userCredential.user.uid);
-      await setDoc(doc(db, "users", userCredential.user.uid), initialProfile);
+      await setDoc(doc(serverDb, "users", userCredential.user.uid), initialProfile); // Use server-initialized db
       console.log("[SIGNUP_ACTION_FIRESTORE_SETDOC_SUCCESS] Profile saved to Firestore successfully for UID:", userCredential.user.uid);
     } catch (firestoreError: any) {
       console.error("[SIGNUP_FIRESTORE_ERROR] Error creating user profile in Firestore for UID:", userCredential.user.uid, "Raw Error:", firestoreError);
@@ -107,6 +147,8 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       const errorCode = String(firestoreError.code || 'FIRESTORE_ERROR');
       console.error(`[SIGNUP_FIRESTORE_ERROR_DETAILS] Code: ${errorCode}, Message: ${errorMessage}`);
       console.log("[SIGNUP_ACTION_ATTEMPT_RETURN_ERROR_FIRESTORE_SETDOC_FAILED]");
+      // Consider deleting the Auth user if Firestore profile creation fails to avoid orphaned auth accounts
+      // await serverAuth.currentUser?.delete(); // Or use Admin SDK for this from a backend
       return { success: false, error: `Account created but profile setup failed: ${errorMessage}. Please contact support.`, errorCode, userId: userCredential.user.uid };
     }
 
@@ -124,11 +166,11 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       errorCode = "VALIDATION_ERROR";
       console.log("[SIGNUP_ACTION_ATTEMPT_RETURN_ERROR_ZOD_VALIDATION]");
       return { success: false, error: errorMessage, errorCode, details: error.flatten() };
-    } else if (error.code) { 
+    } else if (error.code) {
       errorMessage = String(error.message || "Operation failed.");
       errorCode = String(error.code);
       console.error(`[SIGNUP_ACTION_ERROR_DETAILS_CODED] Code: ${errorCode}, Message: ${errorMessage}`);
-    } else { 
+    } else {
       errorMessage = String(error.message || "An unexpected server error occurred during sign-up.");
       console.error(`[SIGNUP_ACTION_UNEXPECTED_ERROR_DETAILS] Message: ${errorMessage}`);
     }
@@ -149,28 +191,39 @@ interface LoginResult {
   error?: string;
   errorCode?: string;
   passwordExpired?: boolean;
-  termsNotAccepted?: boolean; 
-  userProfile?: UserProfile | null; 
+  termsNotAccepted?: boolean;
+  userProfile?: UserProfile | null;
 }
 
 export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promise<LoginResult> {
   console.log("[LOGIN_ACTION_START] loginUser action initiated for email:", values.email);
+  
+  let serverAuth: Auth;
+  let serverDb: Firestore;
+
+  try {
+    const { auth: sAuth, db: sDb } = initializeServerFirebase();
+    serverAuth = sAuth;
+    serverDb = sDb;
+    console.log("[LOGIN_ACTION_SERVER_FIREBASE_INIT_SUCCESS] Server-side Firebase Auth and DB initialized for loginUser.");
+  } catch (initError: any) {
+    console.error("[LOGIN_ACTION_SERVER_FIREBASE_INIT_FAILURE]", initError.message);
+    return {
+      success: false,
+      error: "Critical server error: Firebase services could not be initialized. Please contact support.",
+      errorCode: 'SERVER_FIREBASE_INIT_FAILURE'
+    };
+  }
+
   try {
     const validatedValues = LoginInputSchema.parse(values);
     console.log("[LOGIN_ACTION_VALIDATION_PASSED] Input validation passed for email:", validatedValues.email);
-
-    if (!firebaseAuth || !firebaseAuth.app) {
-      console.error("[LOGIN_FIREBASE_AUTH_NOT_READY] Firebase Auth is not initialized correctly in loginUser. DB App:", db?.app);
-      console.log("[LOGIN_ACTION_ATTEMPT_RETURN_ERROR_AUTH_UNAVAILABLE]");
-      return { success: false, error: "Authentication service is not available.", errorCode: 'AUTH_UNAVAILABLE' };
-    }
-     console.log("[LOGIN_ACTION_FIREBASE_AUTH_CHECK_PASSED] Firebase Auth instance seems okay for email:", validatedValues.email);
 
     let userCredential;
     try {
       console.log("[LOGIN_ACTION_SIGNIN_START] Attempting to sign in user with Firebase Auth for email:", validatedValues.email);
       userCredential = await signInWithEmailAndPassword(
-        firebaseAuth,
+        serverAuth, // Use server-initialized auth
         validatedValues.email,
         validatedValues.password
       );
@@ -187,16 +240,9 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       console.log("[LOGIN_ACTION_ATTEMPT_RETURN_ERROR_SIGNIN_FAILED]");
       return { success: false, error: errorMessage, errorCode };
     }
-    
-    const userId = userCredential.user.uid;
-    const userProfileDocRef = doc(db, "users", userId); 
 
-    if (!db || !db.app || typeof doc !== 'function' || typeof getDoc !== 'function' || typeof updateDoc !== 'function') {
-        console.error("[LOGIN_FIRESTORE_NOT_READY] Firestore (db, doc, getDoc, or updateDoc) is not initialized correctly. DB App:", db?.app);
-        console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_NO_PROFILE_FIRESTORE_UNAVAILABLE]"); 
-        return { success: true, userId, userProfile: null, error: "Profile could not be fetched or updated, but login succeeded.", errorCode: 'FIRESTORE_UNAVAILABLE' };
-    }
-    console.log("[LOGIN_ACTION_FIRESTORE_CHECK_PASSED] Firestore instance seems okay for profile operations for UID:", userId);
+    const userId = userCredential.user.uid;
+    const userProfileDocRef = doc(serverDb, "users", userId); // Use server-initialized db
 
     let userProfile: UserProfile;
     try {
@@ -208,7 +254,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
         console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_NO_PROFILE_PROFILE_NOT_FOUND]");
         return { success: true, userId, userProfile: null, errorCode: "auth/profile-not-found" };
       }
-      
+
       const rawProfileData = userProfileSnap.data();
       if (!rawProfileData) {
         console.error(`[LOGIN_PROFILE_DATA_MISSING] User profile data is unexpectedly null/undefined for UID: ${userId}.`);
@@ -217,7 +263,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
 
       userProfile = {
         id: userId,
-        email: userCredential.user.email!, 
+        email: userCredential.user.email!,
         subscriptionTier: rawProfileData.subscriptionTier || 'free',
         lastPasswordChangeDate: (rawProfileData.lastPasswordChangeDate instanceof Timestamp
           ? rawProfileData.lastPasswordChangeDate.toDate().toISOString()
@@ -232,7 +278,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
         acceptedLatestTerms: !!rawProfileData.acceptedLatestTerms,
         termsVersionAccepted: typeof rawProfileData.termsVersionAccepted === 'string' ? rawProfileData.termsVersionAccepted : undefined,
         isAgeCertified: !!rawProfileData.isAgeCertified,
-        profileSetupComplete: typeof rawProfileData.profileSetupComplete === 'boolean' ? rawProfileData.profileSetupComplete : false, // Default to false if undefined
+        profileSetupComplete: typeof rawProfileData.profileSetupComplete === 'boolean' ? rawProfileData.profileSetupComplete : false,
         firstName: typeof rawProfileData.firstName === 'string' ? rawProfileData.firstName : undefined,
         middleInitial: typeof rawProfileData.middleInitial === 'string' ? rawProfileData.middleInitial : undefined,
         lastName: typeof rawProfileData.lastName === 'string' ? rawProfileData.lastName : undefined,
@@ -272,12 +318,12 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_NO_PROFILE_FIRESTORE_ERROR]");
       return { success: true, userId, userProfile: null, error: `Login succeeded but profile fetch failed: ${errorMessage}.`, errorCode };
     }
-    
+
     const currentLoginTimeISO = new Date().toISOString();
     try {
       await updateDoc(userProfileDocRef, { lastLoggedInDate: currentLoginTimeISO });
       console.log("[LOGIN_ACTION_FIRESTORE_UPDATE_SUCCESS] lastLoggedInDate updated in Firestore for UID:", userId);
-      userProfile.lastLoggedInDate = currentLoginTimeISO; 
+      userProfile.lastLoggedInDate = currentLoginTimeISO;
     } catch (dbError: any) {
       console.error("[LOGIN_ACTION_FIRESTORE_ERROR] Failed to update lastLoggedInDate for UID:", userId, "Error:", dbError);
     }
@@ -296,7 +342,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_PASSWORD_DATE_MISSING]");
       return { success: true, userId, passwordExpired: true, userProfile };
     }
-        
+
     console.log("[LOGIN_ACTION_SUCCESS] loginUser action completed successfully for UID:", userId);
     console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_FULL]");
     return { success: true, userId, userProfile };
@@ -334,7 +380,7 @@ const VerifyResetCodeSchema = z.object({
 });
 
 const FinalResetPasswordSchema = z.object({
-  email: z.string().email(), 
+  email: z.string().email(),
   newPassword: passwordSchema,
   confirmNewPassword: passwordSchema,
 }).refine(data => data.newPassword === data.confirmNewPassword, {
@@ -353,22 +399,14 @@ interface ForgotPasswordResult {
 
 export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswordEmailSchema>): Promise<ForgotPasswordResult> {
   console.log("[SEND_RESET_CODE_START] Action initiated for email:", values.email);
+  let serverDb: Firestore;
   try {
+    const { db: sDb } = initializeServerFirebase(); // Auth not needed here, only DB
+    serverDb = sDb;
     const validatedValues = ForgotPasswordEmailSchema.parse(values);
     console.log("[SEND_RESET_CODE_VALIDATED] Email validated by Zod:", validatedValues.email);
 
-    if (!firebaseAuth || !firebaseAuth.app) {
-        console.warn("[SEND_RESET_CODE_FIREBASE_NOT_READY] Firebase Auth not properly initialized in sendPasswordResetCode.");
-        return { success: false, error: "Password reset service is temporarily unavailable.", errorCode: 'AUTH_UNAVAILABLE' };
-    }
-    console.log("[SEND_RESET_CODE_FIREBASE_READY] Firebase Auth instance seems okay.");
-
-    if (!db || !db.app || typeof collection !== 'function' || typeof query !== 'function' || typeof where !== 'function' || typeof getDocs !== 'function' || typeof doc !== 'function' || typeof updateDoc !== 'function') {
-        console.error("[SEND_RESET_CODE_FIRESTORE_NOT_READY] Firestore not available. DB App:", db?.app);
-        return { success: false, error: "Database service for password reset is unavailable.", errorCode: 'DB_UNAVAILABLE'};
-    }
-    
-    const usersRef = collection(db, "users");
+    const usersRef = collection(serverDb, "users");
     const q = query(usersRef, where("email", "==", validatedValues.email));
     const querySnapshot = await getDocs(q);
 
@@ -376,13 +414,13 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
         console.log("[SEND_RESET_CODE_USER_NOT_IN_FIRESTORE] User with email not found in Firestore. Sending generic message to avoid enumeration.");
         return { success: true, message: "If your email is registered, an 8-digit code has been sent. Please check your email/phone (or server console for simulation)." };
     }
-    
-    const userDoc = querySnapshot.docs[0]; 
+
+    const userDoc = querySnapshot.docs[0];
     const userIdForReset = userDoc.id;
     const resetCode = Math.floor(10000000 + Math.random() * 90000000).toString();
     const expiresAt = Timestamp.fromMillis(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
 
-    await updateDoc(doc(db, "users", userIdForReset), {
+    await updateDoc(doc(serverDb, "users", userIdForReset), {
       passwordResetCodeAttempt: { code: resetCode, expiresAt: expiresAt.toDate().toISOString() }
     });
 
@@ -395,21 +433,20 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
       console.error("[SEND_RESET_CODE_ACTION_ZOD_DETAILS] ZodError:", error.flatten());
       return { success: false, error: 'Invalid input.', errorCode: 'VALIDATION_ERROR', details: error.flatten()};
     }
-    return { success: true, message: "If an account with that email exists, we've sent instructions to reset your password. (Simulation - Error occurred)"};
+    // Return a generic success message for security, even if an error occurred, to prevent email enumeration.
+    return { success: true, message: "If an account with that email exists, we've sent instructions to reset your password. (Error occurred, simulated success for security)"};
   }
 }
 
 export async function verifyPasswordResetCode(values: z.infer<typeof VerifyResetCodeSchema>): Promise<ForgotPasswordResult> {
   console.log("[VERIFY_RESET_CODE_START] Action initiated for email:", values.email, "with code (first 2 chars):", values.code.substring(0,2));
+  let serverDb: Firestore;
   try {
+    const { db: sDb } = initializeServerFirebase();
+    serverDb = sDb;
     const validatedValues = VerifyResetCodeSchema.parse(values);
-    
-    if (!db || !db.app || typeof collection !== 'function' || typeof query !== 'function' || typeof where !== 'function' || typeof getDocs !== 'function' || typeof doc !== 'function' || typeof updateDoc !== 'function') {
-        console.error("[VERIFY_RESET_CODE_FIRESTORE_NOT_READY] Firestore not available. DB App:", db?.app);
-        return { success: false, error: "Database service for password reset is unavailable.", errorCode: 'DB_UNAVAILABLE'};
-    }
 
-    const usersRef = collection(db, "users");
+    const usersRef = collection(serverDb, "users");
     const q = query(usersRef, where("email", "==", validatedValues.email));
     const querySnapshot = await getDocs(q);
 
@@ -424,14 +461,14 @@ export async function verifyPasswordResetCode(values: z.infer<typeof VerifyReset
       return { success: false, error: "No password reset attempt found or code is missing.", errorCode: 'RESET_CODE_NO_ATTEMPT' };
     }
     if (new Date() > new Date(userProfile.passwordResetCodeAttempt.expiresAt)) {
-      await updateDoc(doc(db, "users", userDocSnap.id), { passwordResetCodeAttempt: null });
+      await updateDoc(doc(serverDb, "users", userDocSnap.id), { passwordResetCodeAttempt: null });
       return { success: false, error: "Password reset code has expired. Please request a new one.", errorCode: 'RESET_CODE_EXPIRED' };
     }
     if (userProfile.passwordResetCodeAttempt.code !== validatedValues.code) {
       return { success: false, error: "Invalid verification code.", errorCode: 'RESET_CODE_INVALID' };
     }
-    
-    await updateDoc(doc(db, "users", userDocSnap.id), { passwordResetCodeAttempt: null }); 
+
+    await updateDoc(doc(serverDb, "users", userDocSnap.id), { passwordResetCodeAttempt: null });
     console.log("[VERIFY_RESET_CODE_SUCCESS] Code matched and cleared for email:", validatedValues.email);
     return { success: true };
 
@@ -447,45 +484,32 @@ export async function verifyPasswordResetCode(values: z.infer<typeof VerifyReset
 
 export async function resetPassword(values: z.infer<typeof FinalResetPasswordSchema>): Promise<ForgotPasswordResult> {
   console.log("[RESET_PASSWORD_START] Action initiated for email:", values.email);
+  let serverAuth: Auth;
+  let serverDb: Firestore;
   try {
+    const { auth: sAuth, db: sDb } = initializeServerFirebase();
+    serverAuth = sAuth;
+    serverDb = sDb;
     const validatedValues = FinalResetPasswordSchema.parse(values);
 
-    if (!firebaseAuth) {
-        console.warn("[RESET_PASSWORD_FIREBASE_AUTH_NULL] firebaseAuth is null. Cannot proceed with password reset.");
-        return { success: false, error: "Authentication service is not available.", errorCode: 'AUTH_UNAVAILABLE' };
-    }
-    
-    const currentUser = firebaseAuth.currentUser;
-
-    if (!firebaseAuth.app) {
-        console.warn("[RESET_PASSWORD_FIREBASE_APP_NULL] firebaseAuth.app is null. Firebase Auth not properly initialized in resetPassword.");
-        return { success: false, error: "Password reset service is temporarily unavailable due to configuration issues.", errorCode: 'AUTH_UNAVAILABLE_APP_SCOPE' };
-    }
+    const currentUser = serverAuth.currentUser; // Check current user on server-side auth instance
 
     if (currentUser && currentUser.email === validatedValues.email) {
-      console.log("[RESET_PASSWORD_LOGGED_IN_USER] Attempting password update for logged-in user:", currentUser.uid);
+      console.log("[RESET_PASSWORD_LOGGED_IN_USER] Attempting password update for logged-in user on server instance:", currentUser.uid);
       await firebaseUpdatePassword(currentUser, validatedValues.newPassword);
       console.log("[RESET_PASSWORD_LOGGED_IN_USER_SUCCESS] Password updated via Firebase Auth for:", currentUser.uid);
-      if (db && db.app && typeof doc === 'function' && typeof updateDoc === 'function') {
-        try {
-          console.log("[RESET_PASSWORD_LOGGED_IN_USER_FIRESTORE_UPDATE_START] Updating lastPasswordChangeDate in Firestore for:", currentUser.uid);
-          await updateDoc(doc(db, "users", currentUser.uid), { lastPasswordChangeDate: new Date().toISOString() });
-          console.log("[RESET_PASSWORD_LOGGED_IN_USER_FIRESTORE_UPDATE_SUCCESS] lastPasswordChangeDate updated for:", currentUser.uid);
-        } catch (dbError: any) {
-          console.error("[RESET_PASSWORD_LOGGED_IN_USER_FIRESTORE_ERROR] Failed to update lastPasswordChangeDate for UID:", currentUser.uid, "Error:", dbError);
-        }
-      } else {
-         console.warn("[RESET_PASSWORD_DB_NOT_READY_FOR_DATE_UPDATE] DB not available to update lastPasswordChangeDate for current user password reset.");
+      try {
+        console.log("[RESET_PASSWORD_LOGGED_IN_USER_FIRESTORE_UPDATE_START] Updating lastPasswordChangeDate in Firestore for:", currentUser.uid);
+        await updateDoc(doc(serverDb, "users", currentUser.uid), { lastPasswordChangeDate: new Date().toISOString() });
+        console.log("[RESET_PASSWORD_LOGGED_IN_USER_FIRESTORE_UPDATE_SUCCESS] lastPasswordChangeDate updated for:", currentUser.uid);
+      } catch (dbError: any) {
+        console.error("[RESET_PASSWORD_LOGGED_IN_USER_FIRESTORE_ERROR] Failed to update lastPasswordChangeDate for UID:", currentUser.uid, "Error:", dbError);
       }
       return { success: true, message: "Password has been reset successfully." };
     }
 
     console.log("[RESET_PASSWORD_UNAUTH_FLOW_INITIATED] Unauthenticated password reset initiated for email:", validatedValues.email);
-    if (!db || !db.app || typeof collection !== 'function' || typeof query !== 'function' || typeof where !== 'function' || typeof getDocs !== 'function' || typeof doc !== 'function' || typeof updateDoc !== 'function') {
-      console.error("[RESET_PASSWORD_UNAUTH_FIRESTORE_NOT_READY] Firestore not available for unauth reset. DB App:", db?.app);
-      return { success: false, error: "Database service unavailable for password reset.", errorCode: 'DB_UNAVAILABLE'};
-    }
-    const usersRef = collection(db, "users");
+    const usersRef = collection(serverDb, "users");
     const q = query(usersRef, where("email", "==", validatedValues.email));
     const querySnapshot = await getDocs(q);
 
@@ -496,14 +520,23 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
     const userDocSnap = querySnapshot.docs[0];
     const userIdToReset = userDocSnap.id;
 
-    console.warn(`[RESET_PASSWORD_ADMIN_SDK_REQUIRED] To reset password for unauthenticated user ${userIdToReset}, Firebase Admin SDK must be used on the server. This is a placeholder.`);
-    console.log(`[RESET_PASSWORD_SIMULATE_ADMIN_SUCCESS] Simulating successful password reset for ${userIdToReset} using Admin SDK.`);
-    
+    console.warn(`[RESET_PASSWORD_ADMIN_SDK_REQUIRED] To reset password for unauthenticated user ${userIdToReset} via email link flow, Firebase Admin SDK (or verifying the oobCode client-side then calling applyPasswordReset) is typically used. Simulating update via server action for now.`);
+    // This part is tricky without Admin SDK. Ideally, for an oobCode flow, you'd verify the code
+    // then update. Since we have a custom code, we're assuming it was verified by verifyPasswordResetCode.
+    // The Firebase client SDK's updatePassword requires the user to be signed in.
+    // For a true "forgot password" where user is not signed in, Admin SDK `updateUser` is needed.
+    // This simplified version will just update the Firestore date, implying an Admin SDK call would happen.
+    console.log(`[RESET_PASSWORD_SIMULATE_ADMIN_SUCCESS] Simulating successful password reset for ${userIdToReset} via Admin SDK (not actually changing auth password here).`);
+
     try {
       console.log("[RESET_PASSWORD_UNAUTH_FIRESTORE_UPDATE_START] Updating lastPasswordChangeDate in Firestore for:", userIdToReset);
-      await updateDoc(doc(db, "users", userIdToReset), { lastPasswordChangeDate: new Date().toISOString() });
+      await updateDoc(doc(serverDb, "users", userIdToReset), {
+        lastPasswordChangeDate: new Date().toISOString(),
+        // It's crucial that the actual password change happens via Firebase Auth (Admin SDK for this flow)
+        // For this simulation, we're just updating the date.
+      });
       console.log("[RESET_PASSWORD_UNAUTH_FIRESTORE_UPDATE_SUCCESS] lastPasswordChangeDate updated for:", userIdToReset);
-      return { success: true, message: "Password has been reset successfully. (Simulated Admin SDK)" };
+      return { success: true, message: "Password has been reset successfully. (Simulated Admin SDK: actual auth password not changed by this action in unauth flow without Admin SDK)" };
     } catch (dbError: any) {
       console.error("[RESET_PASSWORD_UNAUTH_FIRESTORE_ERROR] Failed to update lastPasswordChangeDate for UID:", userIdToReset, "Error:", dbError);
       return { success: false, error: "Password reset seemed to succeed, but failed to update profile data.", errorCode: 'PROFILE_UPDATE_FAILED_AFTER_RESET' };
@@ -522,7 +555,7 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
     if (errorCode === 'auth/requires-recent-login') {
       return { success: false, error: 'This operation is sensitive and requires recent authentication. Please log in again before changing your password.', errorCode };
     }
-    if (errorCode === 'auth/user-not-found') { 
+    if (errorCode === 'auth/user-not-found') {
       return { success: false, error: 'No user found with this email address.', errorCode };
     }
      if (errorCode === 'auth/weak-password') {
@@ -565,28 +598,25 @@ const DemographicsSchemaServer = z.object({
 
 export async function updateDemographics(userId: string, values: z.infer<typeof DemographicsSchemaServer>): Promise<{success: boolean, error?: string, data?: Partial<UserProfile>, details?: z.inferFlattenedErrors<typeof DemographicsSchemaServer>, errorCode?: string}> {
     console.log("[UPDATE_DEMOGRAPHICS_START] Updating demographics for UID:", userId, "with values:", values);
+    let serverDb: Firestore;
     try {
-        const validatedValues = DemographicsSchemaServer.parse(values);
-        console.log("[UPDATE_DEMOGRAPHICS_VALIDATION_PASSED] Server-side validation passed for UID:", userId);
+      const { db: sDb } = initializeServerFirebase();
+      serverDb = sDb;
+      const validatedValues = DemographicsSchemaServer.parse(values);
+      console.log("[UPDATE_DEMOGRAPHICS_VALIDATION_PASSED] Server-side validation passed for UID:", userId);
 
-        if (!db || !db.app || typeof doc !== 'function' || typeof updateDoc !== 'function') {
-            console.error("[UPDATE_DEMOGRAPHICS_FIRESTORE_NOT_READY] Firestore (db, doc, or updateDoc) is not initialized correctly. DB App:", db?.app);
-            return { success: false, error: "Profile update failed: Database service unavailable.", errorCode: 'DB_UNAVAILABLE' };
-        }
-
-        const profileUpdateData: Partial<UserProfile> = {
-            firstName: validatedValues.firstName,
-            middleInitial: validatedValues.middleInitial,
-            lastName: validatedValues.lastName,
-            dateOfBirth: validatedValues.dateOfBirth,
-            cellPhone: validatedValues.cellPhone,
-            isAgeCertified: validatedValues.isAgeCertified,
-            // Do not update profileSetupComplete here directly; it's handled by a separate action
-        };
-        console.log("[UPDATE_DEMOGRAPHICS_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId);
-        await updateDoc(doc(db, "users", userId), profileUpdateData); 
-        console.log("[UPDATE_DEMOGRAPHICS_FIRESTORE_UPDATE_SUCCESS] Firestore updated successfully for UID:", userId);
-        return { success: true, data: profileUpdateData };
+      const profileUpdateData: Partial<UserProfile> = {
+          firstName: validatedValues.firstName,
+          middleInitial: validatedValues.middleInitial,
+          lastName: validatedValues.lastName,
+          dateOfBirth: validatedValues.dateOfBirth,
+          cellPhone: validatedValues.cellPhone,
+          isAgeCertified: validatedValues.isAgeCertified,
+      };
+      console.log("[UPDATE_DEMOGRAPHICS_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId);
+      await updateDoc(doc(serverDb, "users", userId), profileUpdateData);
+      console.log("[UPDATE_DEMOGRAPHICS_FIRESTORE_UPDATE_SUCCESS] Firestore updated successfully for UID:", userId);
+      return { success: true, data: profileUpdateData };
     } catch (error: any) {
         console.error("[UPDATE_DEMOGRAPHICS_RAW_ERROR] Raw error in updateDemographics for UID:", userId, "Error:", error);
         if (error instanceof z.ZodError) {
@@ -602,13 +632,12 @@ export async function updateDemographics(userId: string, values: z.infer<typeof 
 
 export async function updateUserTermsAcceptance(userId: string, accepted: boolean, version: string): Promise<{success: boolean, error?: string, errorCode?: string}> {
     console.log("[UPDATE_TERMS_START] Updating terms acceptance for UID:", userId, "Accepted:", accepted, "Version:", version);
+    let serverDb: Firestore;
     try {
-        if (!db || !db.app || typeof doc !== 'function' || typeof updateDoc !== 'function') {
-            console.error("[UPDATE_TERMS_FIRESTORE_NOT_READY] Firestore not available. DB App:", db?.app);
-            return { success: false, error: "Database service unavailable.", errorCode: 'DB_UNAVAILABLE'};
-        }
+        const { db: sDb } = initializeServerFirebase();
+        serverDb = sDb;
         console.log("[UPDATE_TERMS_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId);
-        await updateDoc(doc(db, "users", userId), { acceptedLatestTerms: accepted, termsVersionAccepted: version });
+        await updateDoc(doc(serverDb, "users", userId), { acceptedLatestTerms: accepted, termsVersionAccepted: version });
         console.log("[UPDATE_TERMS_FIRESTORE_UPDATE_SUCCESS] Firestore updated successfully for UID:", userId);
         return { success: true };
     } catch (error: any) {
@@ -623,13 +652,11 @@ export async function updateUserTermsAcceptance(userId: string, accepted: boolea
 
 export async function finalizeFitbitConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string, data?: any}> {
     console.log("[FINALIZE_FITBIT_CONNECTION_START] Finalizing Fitbit connection for UID:", userId);
+    let serverDb: Firestore;
     try {
-        if (!db || !db.app || typeof doc !== 'function' || typeof updateDoc !== 'function' || typeof getDoc !== 'function') {
-            console.error("[FINALIZE_FITBIT_FIRESTORE_NOT_READY] Firestore not available. DB App:", db?.app);
-            return { success: false, error: "Database service unavailable.", errorCode: 'DB_UNAVAILABLE'};
-        }
-
-        const userProfileDocRef = doc(db, "users", userId);
+        const { db: sDb } = initializeServerFirebase();
+        serverDb = sDb;
+        const userProfileDocRef = doc(serverDb, "users", userId);
         const userProfileSnap = await getDoc(userProfileDocRef);
 
         if (!userProfileSnap.exists()) {
@@ -643,9 +670,9 @@ export async function finalizeFitbitConnection(userId: string): Promise<{success
 
         const connectionUpdateData: Partial<UserProfile> = {
             connectedFitnessApps: [...existingConnections.filter(app => app.id !== 'fitbit'), { id: 'fitbit', name: 'Fitbit', connectedAt: now.toISOString() }],
-            fitbitLastSuccessfulSync: todayDateString, 
+            fitbitLastSuccessfulSync: todayDateString,
         };
-        
+
         console.log("[FINALIZE_FITBIT_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId);
         await updateDoc(userProfileDocRef, connectionUpdateData);
         console.log("[FINALIZE_FITBIT_FIRESTORE_UPDATE_SUCCESS] Firestore updated with Fitbit connection and initial sync date for UID:", userId);
@@ -661,12 +688,11 @@ export async function finalizeFitbitConnection(userId: string): Promise<{success
 
 export async function finalizeStravaConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string, data?: any}> {
     console.log("[FINALIZE_STRAVA_CONNECTION_START] Finalizing Strava connection for UID:", userId);
+    let serverDb: Firestore;
     try {
-        if (!db || !db.app || typeof doc !== 'function' || typeof updateDoc !== 'function' || typeof getDoc !== 'function') {
-            console.error("[FINALIZE_STRAVA_FIRESTORE_NOT_READY] Firestore not available. DB App:", db?.app);
-            return { success: false, error: "Database service unavailable.", errorCode: 'DB_UNAVAILABLE'};
-        }
-        const userProfileDocRef = doc(db, "users", userId);
+        const { db: sDb } = initializeServerFirebase();
+        serverDb = sDb;
+        const userProfileDocRef = doc(serverDb, "users", userId);
         const userProfileSnap = await getDoc(userProfileDocRef);
 
         if (!userProfileSnap.exists()) {
@@ -679,9 +705,9 @@ export async function finalizeStravaConnection(userId: string): Promise<{success
 
         const connectionUpdateData: Partial<UserProfile> = {
              connectedFitnessApps: [...existingConnections.filter(app => app.id !== 'strava'), { id: 'strava', name: 'Strava', connectedAt: now.toISOString() }],
-             stravaLastSyncTimestamp: Math.floor(now.getTime() / 1000), 
+             stravaLastSyncTimestamp: Math.floor(now.getTime() / 1000),
         };
-        
+
         console.log("[FINALIZE_STRAVA_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId);
         await updateDoc(userProfileDocRef, connectionUpdateData);
         console.log("[FINALIZE_STRAVA_FIRESTORE_UPDATE_SUCCESS] Firestore updated with Strava connection and initial sync timestamp for UID:", userId);
@@ -696,12 +722,11 @@ export async function finalizeStravaConnection(userId: string): Promise<{success
 
 export async function finalizeGoogleFitConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string, data?: any}> {
     console.log("[FINALIZE_GOOGLE_FIT_CONNECTION_START] Finalizing Google Fit connection for UID:", userId);
+    let serverDb: Firestore;
      try {
-        if (!db || !db.app || typeof doc !== 'function' || typeof updateDoc !== 'function' || typeof getDoc !== 'function') {
-            console.error("[FINALIZE_GOOGLE_FIT_FIRESTORE_NOT_READY] Firestore not available. DB App:", db?.app);
-            return { success: false, error: "Database service unavailable.", errorCode: 'DB_UNAVAILABLE'};
-        }
-        const userProfileDocRef = doc(db, "users", userId);
+        const { db: sDb } = initializeServerFirebase();
+        serverDb = sDb;
+        const userProfileDocRef = doc(serverDb, "users", userId);
         const userProfileSnap = await getDoc(userProfileDocRef);
 
         if (!userProfileSnap.exists()) {
@@ -714,9 +739,9 @@ export async function finalizeGoogleFitConnection(userId: string): Promise<{succ
 
         const connectionUpdateData: Partial<UserProfile> = {
             connectedFitnessApps: [...existingConnections.filter(app => app.id !== 'google-fit'), { id: 'google-fit', name: 'Google Fit', connectedAt: now.toISOString() }],
-            googleFitLastSuccessfulSync: now.toISOString(), 
+            googleFitLastSuccessfulSync: now.toISOString(),
         };
-        
+
         console.log("[FINALIZE_GOOGLE_FIT_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId);
         await updateDoc(userProfileDocRef, connectionUpdateData);
         console.log("[FINALIZE_GOOGLE_FIT_FIRESTORE_UPDATE_SUCCESS] Firestore updated with Google Fit connection and initial sync date for UID:", userId);
@@ -731,12 +756,11 @@ export async function finalizeGoogleFitConnection(userId: string): Promise<{succ
 
 export async function finalizeWithingsConnection(userId: string, withingsApiUserId?: string): Promise<{success: boolean, error?: string, errorCode?: string, data?: {withingsUserId?: string}} > {
     console.log("[FINALIZE_WITHINGS_CONNECTION_START] Finalizing Withings connection for UID:", userId);
+    let serverDb: Firestore;
     try {
-        if (!db || !db.app || typeof doc !== 'function' || typeof updateDoc !== 'function' || typeof getDoc !== 'function') {
-            console.error("[FINALIZE_WITHINGS_FIRESTORE_NOT_READY] Firestore not available. DB App:", db?.app);
-            return { success: false, error: "Database service unavailable.", errorCode: 'DB_UNAVAILABLE'};
-        }
-        const userProfileDocRef = doc(db, "users", userId);
+        const { db: sDb } = initializeServerFirebase();
+        serverDb = sDb;
+        const userProfileDocRef = doc(serverDb, "users", userId);
         const userProfileSnap = await getDoc(userProfileDocRef);
 
         if (!userProfileSnap.exists()) {
@@ -754,7 +778,7 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
         if (withingsApiUserId) {
             connectionUpdateData.withingsUserId = withingsApiUserId;
         }
-        
+
         console.log("[FINALIZE_WITHINGS_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId, "with data:", connectionUpdateData);
         await updateDoc(userProfileDocRef, connectionUpdateData);
         console.log("[FINALIZE_WITHINGS_FIRESTORE_UPDATE_SUCCESS] Firestore updated with Withings connection, initial sync date, and Withings User ID for UID:", userId);
@@ -767,5 +791,3 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
     }
 }
     
-    
-
