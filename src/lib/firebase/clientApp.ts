@@ -33,7 +33,7 @@ if (typeof window !== 'undefined') {
     console.log('[clientApp.ts CLIENT-SIDE] Firebase Config being used:', JSON.stringify(firebaseConfig, null, 2));
 }
 
-let firebaseApp: FirebaseApp | null = null;
+let firebaseAppInstance: FirebaseApp | null = null; // Renamed to avoid confusion with the exported firebaseApp
 let auth: Auth | null = null;
 let db: Firestore | null = null;
 
@@ -50,105 +50,120 @@ if (!allConfigKeysPresent) {
     '[clientApp.ts Module Scope] CRITICAL FIREBASE CONFIG ERROR: One or more NEXT_PUBLIC_FIREBASE_... environment variables are missing. Firebase services will NOT be initialized.'
   );
 } else {
-  if (typeof window !== 'undefined') {
+  if (typeof window !== 'undefined') { // CLIENT-SIDE INITIALIZATION BLOCK
     console.log("[clientApp.ts CLIENT-SIDE] All Firebase config keys appear to be present in process.env.");
-  }
-
-  if (!getApps().length) {
-    try {
-      if (typeof window !== 'undefined') console.log("[clientApp.ts CLIENT-SIDE] Initializing new Firebase app with config.");
-      firebaseApp = initializeApp(firebaseConfig);
-      if (typeof window !== 'undefined') console.log("[clientApp.ts CLIENT-SIDE] initializeApp call completed.");
-    } catch (e: any) {
-      console.error('[clientApp.ts Module Scope] Error initializing new Firebase app:', e.message, e.stack);
-      firebaseApp = null;
-    }
-  } else {
-    if (typeof window !== 'undefined') console.log("[clientApp.ts CLIENT-SIDE] Getting existing Firebase app.");
-    firebaseApp = getApp();
-    if (typeof window !== 'undefined') console.log("[clientApp.ts CLIENT-SIDE] getApp call completed.");
-  }
-
-  if (firebaseApp) {
-    if (typeof window !== 'undefined') console.log('[clientApp.ts CLIENT-SIDE] Firebase initializeApp/getApp SUCCEEDED. App Name:', firebaseApp.name);
-    if (firebaseApp.options && firebaseApp.options.apiKey) {
-      if (typeof window !== 'undefined') console.log('[clientApp.ts CLIENT-SIDE] firebaseApp.options.apiKey check SUCCEEDED.');
+    if (!getApps().length) {
+      console.log("[clientApp.ts CLIENT-SIDE] No Firebase apps initialized yet on client. Initializing new Firebase app with config.");
+      try {
+        firebaseAppInstance = initializeApp(firebaseConfig);
+        console.log("[clientApp.ts CLIENT-SIDE] Client-side initializeApp call completed. App Name:", firebaseAppInstance.name);
+      } catch (e: any) {
+        console.error('[clientApp.ts CLIENT-SIDE] Error initializing new Firebase app on client:', e.message, e.stack);
+        firebaseAppInstance = null;
+      }
     } else {
-      console.error('[clientApp.ts Module Scope] firebaseApp.options.apiKey check FAILED. firebaseApp.options:', firebaseApp.options);
-      firebaseApp = null;
+      console.log("[clientApp.ts CLIENT-SIDE] Firebase app already initialized on client. Getting existing Firebase app.");
+      firebaseAppInstance = getApp();
+      console.log("[clientApp.ts CLIENT-SIDE] Client-side getApp call completed. App Name:", firebaseAppInstance.name);
     }
-  } else {
-    console.error('[clientApp.ts Module Scope] Firebase initializeApp/getApp FAILED to return a valid app object.');
-  }
 
-  if (firebaseApp) {
-    if (typeof window !== 'undefined') console.log('[clientApp.ts CLIENT-SIDE] firebaseApp seems valid. Proceeding to initialize Auth and Firestore.');
-    
-    // Initialize Auth
-    try {
-      if (typeof window !== 'undefined') { // CLIENT-SIDE
-        console.log('[clientApp.ts CLIENT-SIDE] Initializing Auth for client with initializeAuth...');
-        auth = initializeAuth(firebaseApp, {
-          persistence: [indexedDBLocalPersistence, browserLocalPersistence],
-          popupRedirectResolver: browserPopupRedirectResolver,
-        });
-        console.log('[clientApp.ts CLIENT-SIDE] initializeAuth call completed. Auth object type:', typeof auth);
-        if (auth) {
-           console.log('[clientApp.ts CLIENT-SIDE] Client Auth initialized. Current user from instance (immediately after init):', auth.currentUser?.uid || 'null');
-           // Attempt to log persistence type using internal property (for debugging only)
-           // This structure might change between Firebase SDK versions.
-           if ((auth as any)._persistenceManager && (auth as any)._persistenceManager._persistence && (auth as any)._persistenceManager._persistence.type) {
-             console.log('[clientApp.ts CLIENT-SIDE] Auth effective persistence type:', (auth as any)._persistenceManager._persistence.type);
-           } else if ((auth as any).persistenceManager && (auth as any).persistenceManager.persistence && (auth as any).persistenceManager.persistence.type) { // Alternative possible path
-             console.log('[clientApp.ts CLIENT-SIDE] Auth effective persistence type (alt path):', (auth as any).persistenceManager.persistence.type);
-           } else {
-             console.log('[clientApp.ts CLIENT-SIDE] Could not determine auth persistence type from instance structure.');
-           }
-        }
-      } else { // SERVER-SIDE
-        console.log('[clientApp.ts SERVER-SIDE] Getting Auth for server with getAuth...');
-        auth = getAuth(firebaseApp);
-        console.log('[clientApp.ts SERVER-SIDE] getAuth (server context) call completed. Auth object type:', typeof auth);
-         if (auth) {
-           console.log('[clientApp.ts SERVER-SIDE] Server Auth obtained. Current user from instance (immediately after getAuth):', auth.currentUser?.uid || 'null');
-         }
+    if (firebaseAppInstance) {
+      if (firebaseAppInstance.options && firebaseAppInstance.options.apiKey) {
+        console.log('[clientApp.ts CLIENT-SIDE] Client-side firebaseAppInstance.options.apiKey check SUCCEEDED.');
+      } else {
+        console.error('[clientApp.ts CLIENT-SIDE] Client-side firebaseAppInstance.options.apiKey check FAILED.');
+        firebaseAppInstance = null; // Invalidate if options are missing
       }
       
-      const hasOnAuthStateChanged = !!(auth && typeof (auth as any).onAuthStateChanged === 'function');
-      if (hasOnAuthStateChanged) {
-        if (typeof window !== 'undefined') console.log('[clientApp.ts CLIENT-SIDE] Auth instance obtained and has onAuthStateChanged, considered VALID for basic auth operations.');
-      } else {
-        console.error(
-          '[clientApp.ts Module Scope] Auth instance is INVALID (missing onAuthStateChanged or auth is null). Has onAuthStateChanged:', hasOnAuthStateChanged
-        );
+      if (firebaseAppInstance) {
+        console.log('[clientApp.ts CLIENT-SIDE] Client-side firebaseAppInstance seems valid. Initializing Auth and Firestore for client...');
+        try {
+          auth = initializeAuth(firebaseAppInstance, {
+            persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+            popupRedirectResolver: browserPopupRedirectResolver,
+          });
+          console.log('[clientApp.ts CLIENT-SIDE] initializeAuth call completed. Auth object type:', typeof auth);
+          if (auth) {
+             console.log('[clientApp.ts CLIENT-SIDE] Client Auth initialized. Current user from instance (immediately after init):', auth.currentUser?.uid || 'null');
+             // Attempt to log persistence type using internal property (for debugging only)
+             if ((auth as any)._persistenceManager && (auth as any)._persistenceManager._persistence && (auth as any)._persistenceManager._persistence.type) {
+               console.log('[clientApp.ts CLIENT-SIDE] Auth effective persistence type:', (auth as any)._persistenceManager._persistence.type);
+             } else if ((auth as any).persistenceManager && (auth as any).persistenceManager.persistence && (auth as any).persistenceManager.persistence.type) { // Alternative possible path
+               console.log('[clientApp.ts CLIENT-SIDE] Auth effective persistence type (alt path):', (auth as any).persistenceManager.persistence.type);
+             } else {
+               console.log('[clientApp.ts CLIENT-SIDE] Could not determine auth persistence type from instance structure.');
+             }
+          } else {
+             console.error('[clientApp.ts CLIENT-SIDE] initializeAuth returned null or undefined.');
+          }
+        } catch (e: any) {
+          console.error('[clientApp.ts CLIENT-SIDE] Error initializing Auth on client:', e.message, e.stack);
+          auth = null;
+        }
+
+        try {
+          db = getFirestore(firebaseAppInstance);
+          console.log('[clientApp.ts CLIENT-SIDE] getFirestore call completed for client. Firestore object type:', typeof db, 'Project ID in db.app.options:', (db as any)?.app?.options?.projectId);
+        } catch (e:any) {
+          console.error('[clientApp.ts CLIENT-SIDE] Error getting Firestore on client:', e.message, e.stack);
+          db = null;
+        }
+      }
+    } else {
+      console.error('[clientApp.ts CLIENT-SIDE] Failed to obtain/initialize firebaseAppInstance on client.');
+    }
+  } else { // SERVER-SIDE (or non-browser environment)
+    console.log("[clientApp.ts SERVER-SIDE] Running in non-browser environment.");
+    if (!getApps().length) {
+      firebaseAppInstance = initializeApp(firebaseConfig);
+      console.log("[clientApp.ts SERVER-SIDE] Initialized Firebase app on server. App Name:", firebaseAppInstance.name);
+    } else {
+      firebaseAppInstance = getApp();
+      console.log("[clientApp.ts SERVER-SIDE] Got existing Firebase app on server. App Name:", firebaseAppInstance.name);
+    }
+    if (firebaseAppInstance) {
+      try {
+        auth = getAuth(firebaseAppInstance);
+        console.log('[clientApp.ts SERVER-SIDE] getAuth (server context) call completed. Auth object type:', typeof auth);
+      } catch (e:any) {
+        console.error('[clientApp.ts SERVER-SIDE] Error getting Auth on server:', e.message, e.stack);
         auth = null;
       }
-    } catch (e: any) {
-      console.error('[clientApp.ts Module Scope] Error initializing/getting Auth:', e.message, e.stack);
-      auth = null;
-    }
-
-    // Initialize Firestore
-    try {
-      if (typeof window !== 'undefined') console.log('[clientApp.ts CLIENT-SIDE] Attempting to get Firestore instance from firebaseApp:', firebaseApp.name);
-      db = getFirestore(firebaseApp);
-      if (typeof window !== 'undefined') console.log('[clientApp.ts CLIENT-SIDE] getFirestore call completed. Firestore object type:', typeof db, 'Project ID in db.app.options:', (db as any)?.app?.options?.projectId);
-
-      if (db && typeof db === 'object' && (db as any).app) {
-        if (typeof window !== 'undefined') console.log(`[clientApp.ts CLIENT-SIDE] Firestore instance obtained and appears VALID for project: ${(db as any).app.options.projectId}.`);
-      } else {
-        console.error(
-            `[clientApp.ts Module Scope] Firestore instance from getFirestore() is considered INVALID or its app property is not accessible. Firestore operations might fail. Firestore instance received:`, db
-        );
+      try {
+        db = getFirestore(firebaseAppInstance);
+        console.log('[clientApp.ts SERVER-SIDE] getFirestore (server context) call completed. DB object type:', typeof db);
+      } catch (e:any) {
+        console.error('[clientApp.ts SERVER-SIDE] Error getting Firestore on server:', e.message, e.stack);
+        db = null;
       }
-    } catch (e: any) {
-      console.error('[clientApp.ts Module Scope] Error calling getFirestore():', e.message, e.stack);
-      db = null;
+    } else {
+      console.error('[clientApp.ts SERVER-SIDE] Failed to obtain/initialize firebaseAppInstance on server.');
+    }
+  }
+
+  // Validate auth object after conditional initialization
+  if (auth) {
+    const hasOnAuthStateChanged = typeof (auth as any).onAuthStateChanged === 'function';
+    if (hasOnAuthStateChanged) {
+      console.log('[clientApp.ts Module Scope] Auth instance obtained and has onAuthStateChanged, considered VALID for basic auth operations. Environment:', typeof window !== 'undefined' ? 'Client' : 'Server');
+    } else {
+      console.error(
+        '[clientApp.ts Module Scope] Auth instance is INVALID (missing onAuthStateChanged or auth is null). Has onAuthStateChanged:', hasOnAuthStateChanged, 'Environment:', typeof window !== 'undefined' ? 'Client' : 'Server'
+      );
+      auth = null; // Invalidate if not usable
     }
   } else {
-    console.error('[clientApp.ts Module Scope] firebaseApp object is null or invalid. Auth and Firestore NOT initialized.');
-    auth = null;
-    db = null;
+     console.error('[clientApp.ts Module Scope] Auth object is null after initialization block.');
+  }
+
+  // Validate db object
+  if (db && typeof db === 'object' && (db as any).app) {
+    console.log(`[clientApp.ts Module Scope] Firestore instance obtained and appears VALID for project: ${(db as any).app.options.projectId}. Environment:`, typeof window !== 'undefined' ? 'Client' : 'Server');
+  } else {
+    console.error(
+        `[clientApp.ts Module Scope] Firestore instance is considered INVALID or its app property is not accessible. Firestore operations might fail. Firestore instance received:`, db, 'Environment:', typeof window !== 'undefined' ? 'Client' : 'Server'
+    );
+    db = null; // Invalidate if not usable
   }
 }
 
@@ -160,7 +175,7 @@ if (typeof window !== 'undefined') {
         if (typeof auth.onAuthStateChanged === 'function') {
             console.log('[clientApp.ts CLIENT-SIDE] Attaching DIAGNOSTIC onAuthStateChanged listener now...');
             try {
-                const diagnosticUnsubscribe = auth.onAuthStateChanged(user => {
+                const diagnosticUnsubscribe = auth.onAuthStateChanged(user => { // This user is FirebaseUser | null
                     console.log('!!! [clientApp.ts DIAGNOSTIC onAuthStateChanged FIRED] !!! User from clientApp.ts listener:', user ? user.uid : 'null');
                 });
                 console.log('[clientApp.ts CLIENT-SIDE] DIAGNOSTIC onAuthStateChanged listener attached successfully. Unsubscribe function details:', String(diagnosticUnsubscribe).substring(0,100) + "...");
@@ -177,6 +192,9 @@ if (typeof window !== 'undefined') {
     console.log('[clientApp.ts Module Scope] Not client-side (typeof window === "undefined"), so DIAGNOSTIC listener not attached.');
 }
 
-console.log('[clientApp.ts Module Scope End] Exporting final state: auth is', auth ? 'Instance (basic validity check passed)' : 'NULL', ', db is', db ? 'Instance' : 'NULL');
+// Exporting the potentially null firebaseAppInstance as firebaseApp for consistency if other parts of the app expect it
+// However, internal uses in this file now use firebaseAppInstance directly within their scopes.
+const firebaseApp = firebaseAppInstance; 
+console.log('[clientApp.ts Module Scope End] Exporting final state: auth is', auth ? 'Instance (basic validity check passed)' : 'NULL', ', db is', db ? 'Instance' : 'NULL', ', firebaseApp is', firebaseApp ? 'Instance' : 'NULL');
 export { firebaseApp, auth, db };
-
+    
