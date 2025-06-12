@@ -129,6 +129,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       lastPasswordChangeDate: nowIso,
       lastLoggedInDate: nowIso,
       acceptedLatestTerms: false,
+      termsVersionAccepted: undefined, // Initialize as undefined
       isAgeCertified: false,
       profileSetupComplete: false, // Initialize as false
       connectedFitnessApps: [],
@@ -790,4 +791,5 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
         return { success: false, error: errorMessage, errorCode: errorCode};
     }
 }
+    
     
