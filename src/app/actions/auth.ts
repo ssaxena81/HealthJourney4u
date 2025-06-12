@@ -235,14 +235,17 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     const userId = userCredential.user.uid;
     const userProfileDocRef = doc(serverDb, "users", userId); 
 
-    let userProfile: UserProfile;
+    let userProfile: UserProfile; // Will be constructed but sent as null for this test
+    let constructedUserProfileData: UserProfile; // For logging
+
     try {
       console.log("[LOGIN_ACTION_FIRESTORE_GETDOC_START] Attempting to fetch profile from Firestore for UID:", userId);
       const userProfileSnap = await getDoc(userProfileDocRef);
 
       if (!userProfileSnap.exists()) {
         console.error(`[LOGIN_PROFILE_NOT_FOUND] User profile not found for UID: ${userId} in loginUser.`);
-        console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_NO_PROFILE_PROFILE_NOT_FOUND]");
+        console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_PROFILE_NOT_FOUND] (userProfile will be null in client response)");
+        // Note: passwordExpired is not applicable here as we can't check it without a profile's lastPasswordChangeDate
         return { success: true, userId, userProfile: null, errorCode: "auth/profile-not-found" };
       }
 
@@ -252,7 +255,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
         return { success: true, userId, userProfile: null, errorCode: "auth/profile-data-missing" };
       }
 
-      userProfile = {
+      constructedUserProfileData = {
         id: userId,
         email: userCredential.user.email!,
         subscriptionTier: rawProfileData.subscriptionTier || 'free',
@@ -299,6 +302,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
         dashboardRadarMetrics: Array.isArray(rawProfileData.dashboardRadarMetrics) ? rawProfileData.dashboardRadarMetrics as DashboardMetricIdValue[] : undefined,
         passwordResetCodeAttempt: typeof rawProfileData.passwordResetCodeAttempt === 'object' && rawProfileData.passwordResetCodeAttempt !== null ? rawProfileData.passwordResetCodeAttempt as { code: string; expiresAt: string; } : undefined,
       };
+      userProfile = constructedUserProfileData; // Assign to userProfile for password expiry check
 
       console.log("[LOGIN_ACTION_FIRESTORE_GETDOC_SUCCESS] Profile constructed for UID:", userId);
     } catch (firestoreError: any) {
@@ -306,40 +310,38 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       const errorMessage = String(firestoreError.message || 'Database error during profile fetching.');
       const errorCode = String(firestoreError.code || 'FIRESTORE_ERROR');
       console.error(`[LOGIN_FIRESTORE_ERROR_DETAILS] Code: ${errorCode}, Message: ${errorMessage}`);
-      console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_NO_PROFILE_FIRESTORE_ERROR]");
+      console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_FIRESTORE_ERROR] (userProfile will be null in client response)");
       return { success: true, userId, userProfile: null, error: `Login succeeded but profile fetch failed: ${errorMessage}.`, errorCode };
     }
 
     const currentLoginTimeISO = new Date().toISOString();
     try {
       await updateDoc(userProfileDocRef, { lastLoggedInDate: currentLoginTimeISO });
+      if (userProfile) userProfile.lastLoggedInDate = currentLoginTimeISO; // Update local copy if exists
+      if (constructedUserProfileData) constructedUserProfileData.lastLoggedInDate = currentLoginTimeISO;
       console.log("[LOGIN_ACTION_FIRESTORE_UPDATE_SUCCESS] lastLoggedInDate updated in Firestore for UID:", userId);
-      userProfile.lastLoggedInDate = currentLoginTimeISO;
     } catch (dbError: any) {
       console.error("[LOGIN_ACTION_FIRESTORE_ERROR] Failed to update lastLoggedInDate for UID:", userId, "Error:", dbError);
     }
 
-    if (userProfile.lastPasswordChangeDate) {
+    let passwordExpired = false;
+    if (userProfile && userProfile.lastPasswordChangeDate) {
       const lastPasswordChange = new Date(userProfile.lastPasswordChangeDate);
       const now = new Date();
       const daysSinceLastChange = (now.getTime() - lastPasswordChange.getTime()) / (1000 * 3600 * 24);
       if (daysSinceLastChange >= 90) {
+        passwordExpired = true;
         console.log(`[LOGIN_ACTION_PASSWORD_EXPIRED] Password expired for user ${userId}.`);
-        console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_PASSWORD_EXPIRED]");
-        return { success: true, userId, passwordExpired: true, userProfile };
       }
     } else {
+      passwordExpired = true; // Treat missing date as expired for safety
       console.warn(`[LOGIN_PASSWORD_DATE_MISSING] User ${userId} missing lastPasswordChangeDate. Treating as password expired.`);
-      console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_PASSWORD_DATE_MISSING]");
-      return { success: true, userId, passwordExpired: true, userProfile };
     }
 
-    // Original success return:
     console.log("[LOGIN_ACTION_SUCCESS] loginUser action completed successfully for UID:", userId);
-    console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_FULL] Original userProfile:", userProfile);
-    console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_FULL] Temporarily returning super simple object for testing client reception.");
-    return { success: true, message: "Login action succeeded on server (super simple test)." };
-    // return { success: true, userId, userProfile };
+    console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_DATA] Constructed userProfile (for server log):", JSON.stringify(constructedUserProfileData, null, 2));
+    console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_DATA] Returning object with userId, passwordExpired, and userProfile: null");
+    return { success: true, userId, passwordExpired, userProfile: null };
 
   } catch (error: any) {
     console.error("[LOGIN_ACTION_OUTER_CATCH_ERROR] Raw error in loginUser's outer catch block:", error.message, error.stack);
@@ -361,7 +363,6 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     return { success: false, error: errorMessage, errorCode: errorCode };
   }
   
-  // Fallback return, should ideally never be reached if logic is correct
   console.error("[LOGIN_ACTION_UNEXPECTED_FALLTHROUGH] LoginUser function reached end without explicit return. This indicates a flaw in control flow.");
   return { success: false, error: "Login failed due to an unexpected server-side control flow issue.", errorCode: "UNEXPECTED_FALLTHROUGH" };
 }
