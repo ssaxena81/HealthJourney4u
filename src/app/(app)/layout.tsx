@@ -409,8 +409,9 @@ export default function AuthenticatedAppLayout({
   }
 
   // If profile setup is not complete (safeguard if useEffect redirect hasn't happened)
-  if (userProfile.profileSetupComplete !== true) {
-    console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] Safeguard: Profile setup incomplete. Redirecting to /profile (or useEffect will handle).`);
+  // AND we are not already on the profile page
+  if (userProfile.profileSetupComplete !== true && pathname !== '/profile') {
+    console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] Safeguard: Profile setup incomplete & not on /profile. Redirecting (or useEffect will handle).`);
      return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -425,6 +426,7 @@ export default function AuthenticatedAppLayout({
     return (
       <Dialog open={showTermsModal} onOpenChange={(open) => {
         if (!open && (!termsAcceptedCheckbox || !userProfile?.acceptedLatestTerms)) {
+          // Prevent closing modal if terms are not yet accepted by clicking outside or pressing Esc
           return;
         }
         setShowTermsModal(open);
@@ -462,11 +464,13 @@ export default function AuthenticatedAppLayout({
     );
   }
 
-  // All checks passed, user is authenticated, profile complete, terms accepted. Render the app.
-  console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] All checks passed. Rendering AppLayoutClient.`);
+  // All checks passed, user is authenticated, profile complete (or on profile page), terms accepted. Render the app.
+  console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] All checks passed or on designated setup page. Rendering AppLayoutClient.`);
   return (
       <AppLayoutClient onSyncAllClick={handleSyncAllData}>
         {children}
       </AppLayoutClient>
   );
 }
+
+        
