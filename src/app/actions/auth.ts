@@ -244,6 +244,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       if (!userProfileSnap.exists()) {
         console.error(`[LOGIN_PROFILE_NOT_FOUND] User profile not found for UID: ${userId} in loginUser.`);
         console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_PROFILE_NOT_FOUND]");
+        // Success: true, but profile is null, indicating profile setup is needed.
         return { success: true, userId, userProfile: null, errorCode: "auth/profile-not-found" };
       }
 
@@ -261,12 +262,12 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
           ? rawProfileData.lastPasswordChangeDate.toDate().toISOString()
           : typeof rawProfileData.lastPasswordChangeDate === 'string'
             ? rawProfileData.lastPasswordChangeDate
-            : new Date(0).toISOString()),
+            : new Date(0).toISOString()), // Fallback if missing, though should always be set
         lastLoggedInDate: (rawProfileData.lastLoggedInDate instanceof Timestamp
           ? rawProfileData.lastLoggedInDate.toDate().toISOString()
           : typeof rawProfileData.lastLoggedInDate === 'string'
             ? rawProfileData.lastLoggedInDate
-            : undefined),
+            : undefined), // Can be undefined if first login
         acceptedLatestTerms: !!rawProfileData.acceptedLatestTerms,
         termsVersionAccepted: typeof rawProfileData.termsVersionAccepted === 'string' ? rawProfileData.termsVersionAccepted : undefined,
         isAgeCertified: !!rawProfileData.isAgeCertified,
@@ -307,6 +308,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       const errorCode = String(firestoreError.code || 'FIRESTORE_ERROR');
       console.error(`[LOGIN_FIRESTORE_ERROR_DETAILS] Code: ${errorCode}, Message: ${errorMessage}`);
       console.log("[LOGIN_ACTION_ATTEMPT_RETURN_SUCCESS_FIRESTORE_ERROR]");
+      // Success: true, but profile is null, this also signals profile setup might be needed or there was an issue.
       return { success: true, userId, userProfile: null, error: `Login succeeded but profile fetch failed: ${errorMessage}.`, errorCode };
     }
 
@@ -317,6 +319,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       console.log("[LOGIN_ACTION_FIRESTORE_UPDATE_SUCCESS] lastLoggedInDate updated in Firestore for UID:", userId);
     } catch (dbError: any) {
       console.error("[LOGIN_ACTION_FIRESTORE_ERROR] Failed to update lastLoggedInDate for UID:", userId, "Error:", dbError);
+      // Continue even if this fails, as login itself was successful.
     }
 
     let passwordExpired = false;
@@ -329,6 +332,8 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
         console.log(`[LOGIN_ACTION_PASSWORD_EXPIRED] Password expired for user ${userId}.`);
       }
     } else {
+      // If lastPasswordChangeDate is missing, consider it expired to force a reset.
+      // This should ideally not happen if the profile is created correctly during signup.
       passwordExpired = true; 
       console.warn(`[LOGIN_PASSWORD_DATE_MISSING] User ${userId} missing lastPasswordChangeDate. Treating as password expired.`);
     }
@@ -358,6 +363,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     return { success: false, error: errorMessage, errorCode: errorCode };
   }
   
+  // Fallback return, should ideally never be reached if logic is correct
   console.error("[LOGIN_ACTION_UNEXPECTED_FALLTHROUGH] LoginUser function reached end without explicit return. This indicates a flaw in control flow.");
   return { success: false, error: "Login failed due to an unexpected server-side control flow issue.", errorCode: "UNEXPECTED_FALLTHROUGH" };
 }
@@ -781,3 +787,6 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
  
     
 
+
+
+    
