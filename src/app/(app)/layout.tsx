@@ -113,6 +113,12 @@ export default function AuthenticatedAppLayout({
 
   const isLoading = authLoading || profileLoading;
 
+  console.log(`[AuthenticatedAppLayout useEffect - MAIN] Pathname: ${router.pathname}. Timestamp: ${new Date().toISOString()}`);
+  console.log(`  AuthLoading: ${authLoading}, ProfileLoading: ${profileLoading}`);
+  console.log(`  User Exists: ${!!user} (UID: ${user?.uid})`);
+  console.log(`  UserProfile Exists: ${!!userProfile} (ID: ${userProfile?.id}, SetupComplete: ${userProfile?.profileSetupComplete})`);
+  console.log(`  Accepted Terms: ${userProfile?.acceptedLatestTerms}, Version: ${userProfile?.termsVersionAccepted} (Latest: ${LATEST_TERMS_VERSION})`);
+
   // --- AUTOMATIC DATA SYNC LOGIC ---
   useEffect(() => {
     const checkAndTriggerAutoSync = async () => {
@@ -206,7 +212,7 @@ export default function AuthenticatedAppLayout({
     `);
 
     if (isLoading) {
-      console.log('[AuthenticatedAppLayout useEffect] Still loading auth/profile state. No action.');
+      console.log('[AuthenticatedAppLayout useEffect - MAIN] Still loading auth/profile state. No action.');
       return;
     }
 
@@ -252,7 +258,7 @@ export default function AuthenticatedAppLayout({
       console.log('[AuthenticatedAppLayout useEffect] All checks passed. User can proceed to view content.');
     }
 
-  }, [user, userProfile, isLoading, authLoading, profileLoading, router]);
+  }, [user, userProfile, isLoading, authLoading, profileLoading, router, /* other deps */]);
 
   const handleScrollTerms = (event: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
