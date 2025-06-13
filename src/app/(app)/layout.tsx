@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useEffect, useState, useTransition } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation'; // Added usePathname
 import { useAuth } from '@/hooks/useAuth';
 import AppLayoutClient from '@/components/layout/app-layout-client';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -12,10 +12,10 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 import type { UserProfile } from '@/types';
 import { updateUserTermsAcceptance } from '@/app/actions/auth';
-import { syncAllConnectedData } from '@/app/actions/syncActions'; 
+import { syncAllConnectedData } from '@/app/actions/syncActions';
 import { Loader2 } from 'lucide-react';
 import { useToast } from '@/hooks/use-toast';
-import { isAfter, subHours, parseISO } from 'date-fns'; // Added parseISO
+import { isAfter, subHours, parseISO } from 'date-fns';
 
 // TODO: This LATEST_TERMS_AND_CONDITIONS and LATEST_TERMS_VERSION should eventually be fetched
 // from Firestore using a server action like `getTermsAndConditionsConfig()` from `src/app/actions/adminConfigActions.ts`.
@@ -60,7 +60,7 @@ Our Privacy Policy describes in detail the data we collect, how we use it, and y
 11. Terms of Use
         a) By using the App, you agree to be bound by these Terms.
         b) We may update these Terms at any time.
-        c) These Terms apply throughout the continental United States.   
+        c) These Terms apply throughout the continental United States.
         d) All trademarks used in the App are the property of their respective owners.
         e) The App may access or display third-party content.
         f) We do not guarantee timeliness or accuracy of content.
@@ -95,7 +95,7 @@ Before connecting your insurance or medical accounts (e.g., UnitedHealthcare, La
 19. Limitations on Medical Data Storage
 We do not store raw lab results, clinical notes, or full medical records unless explicitly authorized by you. If authorized, data is encrypted and only retained as needed for your selected services.
 `;
-const LATEST_TERMS_VERSION = "1.0"; // This should also be fetched dynamically with the terms text.
+const LATEST_TERMS_VERSION = "1.0";
 
 export default function AuthenticatedAppLayout({
   children,
@@ -104,6 +104,7 @@ export default function AuthenticatedAppLayout({
 }>) {
   const { user, loading: authLoading, userProfile, setUserProfile, loading: profileLoading } = useAuth();
   const router = useRouter();
+  const pathname = usePathname(); // Get current pathname
   const { toast } = useToast();
   const [isSyncing, startSyncTransition] = useTransition();
   const [showTermsModal, setShowTermsModal] = useState(false);
@@ -111,21 +112,17 @@ export default function AuthenticatedAppLayout({
   const [termsAcceptedCheckbox, setTermsAcceptedCheckbox] = useState(false);
   const [isSavingTerms, setIsSavingTerms] = useState(false);
 
-  const isLoading = authLoading || profileLoading;
+  const combinedLoading = authLoading || profileLoading;
 
-  console.log(`[AuthenticatedAppLayout useEffect - MAIN] Pathname: ${router.pathname}. Timestamp: ${new Date().toISOString()}`);
-  console.log(`  AuthLoading: ${authLoading}, ProfileLoading: ${profileLoading}`);
-  console.log(`  User Exists: ${!!user} (UID: ${user?.uid})`);
-  console.log(`  UserProfile Exists: ${!!userProfile} (ID: ${userProfile?.id}, SetupComplete: ${userProfile?.profileSetupComplete})`);
-  console.log(`  Accepted Terms: ${userProfile?.acceptedLatestTerms}, Version: ${userProfile?.termsVersionAccepted} (Latest: ${LATEST_TERMS_VERSION})`);
+  console.log(`[AuthenticatedAppLayout TOP RENDER - Path: ${pathname}] CombinedLoading: ${combinedLoading}, AuthLoading: ${authLoading}, ProfileLoading: ${profileLoading}, User: ${!!user}, UserProfile: ${!!userProfile}`);
 
   // --- AUTOMATIC DATA SYNC LOGIC ---
   useEffect(() => {
     const checkAndTriggerAutoSync = async () => {
       if (user && userProfile && userProfile.connectedFitnessApps && userProfile.connectedFitnessApps.length > 0) {
-        let shouldSync = true; 
+        let shouldSync = true;
         const twentyFourHoursAgo = subHours(new Date(), 24);
-        
+
         let mostRecentOverallSync: Date | null = null;
         if (userProfile.fitbitLastSuccessfulSync) {
             const lastFitbitSyncDate = parseISO(userProfile.fitbitLastSuccessfulSync);
@@ -148,10 +145,8 @@ export default function AuthenticatedAppLayout({
 
         if (mostRecentOverallSync && isAfter(mostRecentOverallSync, twentyFourHoursAgo)) {
             shouldSync = false;
-            console.log('[AutoSync] Data for at least one connected service synced recently via specific sync timestamps, skipping general auto-sync.');
+            console.log(`[AutoSync - Path: ${pathname}] Data for at least one connected service synced recently via specific sync timestamps, skipping general auto-sync.`);
         } else if (!mostRecentOverallSync && !userProfile.fitbitLastSuccessfulSync && !userProfile.stravaLastSyncTimestamp && !userProfile.googleFitLastSuccessfulSync) {
-            // This condition means it's likely the very first time for this user, or all sync timestamps are missing.
-            // Fallback to API call stats if specific sync timestamps are ALL missing
             let mostRecentApiCall: Date | null = null;
             if (userProfile.fitbitApiCallStats?.dailyActivitySummary?.lastCalledAt) {
                 const lastFitbitApi = new Date(userProfile.fitbitApiCallStats.dailyActivitySummary.lastCalledAt);
@@ -167,71 +162,75 @@ export default function AuthenticatedAppLayout({
             }
             if (mostRecentApiCall && isAfter(mostRecentApiCall, twentyFourHoursAgo)) {
                  shouldSync = false;
-                 console.log('[AutoSync] Data for at least one connected service API called recently (via API call stats), skipping general auto-sync.');
+                 console.log(`[AutoSync - Path: ${pathname}] Data for at least one connected service API called recently (via API call stats), skipping general auto-sync.`);
             }
         }
 
-
         if (shouldSync) {
-          console.log('[AutoSync] Triggering automatic data sync.');
+          console.log(`[AutoSync - Path: ${pathname}] Triggering automatic data sync.`);
           toast({
             title: "Auto-Syncing Data",
             description: "Refreshing data from your connected apps in the background...",
             duration: 5000,
           });
-          await handleSyncAllData(true); 
+          await handleSyncAllData(true);
         } else {
-          console.log('[AutoSync] Auto-sync not needed, data is recent.');
+          console.log(`[AutoSync - Path: ${pathname}] Auto-sync not needed, data is recent.`);
         }
       } else {
-        console.log('[AutoSync] Conditions not met for auto-sync (no user, no profile, or no connected apps). User:', !!user, 'Profile:', !!userProfile, 'Connected Apps:', userProfile?.connectedFitnessApps?.length);
+        console.log(`[AutoSync - Path: ${pathname}] Conditions not met for auto-sync. User: ${!!user}, Profile: ${!!userProfile}, Connected Apps: ${userProfile?.connectedFitnessApps?.length}`);
       }
     };
 
-    if (!isLoading && user && userProfile) { 
-      console.log('[AuthenticatedAppLayout] Auto-sync check: User and profile loaded.');
+    if (!combinedLoading && user && userProfile) {
+      console.log(`[AuthenticatedAppLayout AutoSync useEffect - Path: ${pathname}] User and profile loaded. Checking auto-sync.`);
       checkAndTriggerAutoSync();
     } else {
-      console.log('[AuthenticatedAppLayout] Auto-sync check: Conditions not met (isLoading:', isLoading, 'User:', !!user, 'Profile:', !!userProfile, ')');
+      console.log(`[AuthenticatedAppLayout AutoSync useEffect - Path: ${pathname}] Conditions not met for auto-sync check. CombinedLoading: ${combinedLoading}, User: ${!!user}, Profile: ${!!userProfile}`);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userProfile, isLoading, user]); 
+  }, [userProfile, combinedLoading, user, pathname]);
 
 
   useEffect(() => {
-    console.log(`[AuthenticatedAppLayout useEffect] Status Update:
-      isLoading: ${isLoading}
-      authLoading: ${authLoading}
-      profileLoading: ${profileLoading}
-      User Exists: ${!!user}
-      UserProfile Exists: ${!!userProfile}
-      Accepted Terms: ${userProfile?.acceptedLatestTerms}
-      Terms Version: ${userProfile?.termsVersionAccepted} (Latest: ${LATEST_TERMS_VERSION})
-      Last Password Change: ${userProfile?.lastPasswordChangeDate}
-      Profile Setup Complete: ${userProfile?.profileSetupComplete}
-    `);
+    console.log(`[AuthenticatedAppLayout MAIN useEffect - Path: ${pathname}] Timestamp: ${new Date().toISOString()}`);
+    console.log(`  AuthLoading: ${authLoading}, ProfileLoading: ${profileLoading}, CombinedLoading: ${combinedLoading}`);
+    console.log(`  User Exists: ${!!user} (UID: ${user?.uid})`);
+    console.log(`  UserProfile Exists: ${!!userProfile} (ID: ${userProfile?.id}, SetupComplete: ${userProfile?.profileSetupComplete})`);
+    console.log(`  Accepted Terms: ${userProfile?.acceptedLatestTerms}, Version: ${userProfile?.termsVersionAccepted} (Latest: ${LATEST_TERMS_VERSION})`);
+    console.log(`  Current Pathname (from usePathname): ${pathname}`);
 
-    if (isLoading) {
-      console.log('[AuthenticatedAppLayout useEffect - MAIN] Still loading auth/profile state. No action.');
+
+    if (combinedLoading) {
+      console.log(`[AuthenticatedAppLayout MAIN useEffect - Path: ${pathname}] Still loading auth/profile state. No redirection/modal action yet.`);
       return;
     }
+
+    // --- All loading is false from this point ---
 
     if (!user) {
-      console.log('[AuthenticatedAppLayout useEffect] No user, redirecting to /login.');
-      router.replace('/login');
+      console.log(`[AuthenticatedAppLayout MAIN useEffect - Path: ${pathname}] No user AND not loading. Redirecting to /login.`);
+      if (pathname !== '/login') { // Avoid redirect loop if already on login
+        router.replace('/login');
+      }
       return;
     }
 
+    // User is authenticated, now check profile status
     if (!userProfile) {
-      console.log('[AuthenticatedAppLayout useEffect] User exists, but no profile data (and not loading profile). Redirecting to /profile to initialize.');
-      router.replace('/profile');
+      console.log(`[AuthenticatedAppLayout MAIN useEffect - Path: ${pathname}] User exists, but no profile data (and not loading profile). Redirecting to /profile to initialize.`);
+      if (pathname !== '/profile') { // Avoid redirect loop
+         router.replace('/profile');
+      }
       return;
     }
 
     // Check 1: Profile Setup Complete
     if (userProfile.profileSetupComplete !== true) {
-        console.log('[AuthenticatedAppLayout useEffect] Profile setup not complete. Redirecting to /profile.');
-        router.replace('/profile');
+        console.log(`[AuthenticatedAppLayout MAIN useEffect - Path: ${pathname}] Profile setup not complete. Redirecting to /profile.`);
+        if (pathname !== '/profile') {
+            router.replace('/profile');
+        }
         return;
     }
 
@@ -240,29 +239,34 @@ export default function AuthenticatedAppLayout({
       const lastChange = new Date(userProfile.lastPasswordChangeDate);
       const daysSinceChange = (new Date().getTime() - lastChange.getTime()) / (1000 * 3600 * 24);
       if (daysSinceChange >= 90) {
-        console.log('[AuthenticatedAppLayout useEffect] Password expired (or >90 days old), redirecting to /reset-password-required.');
-        router.replace('/reset-password-required');
+        console.log(`[AuthenticatedAppLayout MAIN useEffect - Path: ${pathname}] Password expired (or >90 days old), redirecting to /reset-password-required.`);
+        if (pathname !== '/reset-password-required') {
+            router.replace('/reset-password-required');
+        }
         return;
       }
     } else {
-      console.warn("[AuthenticatedAppLayout useEffect] User profile missing lastPasswordChangeDate. Redirecting to password reset.");
-      router.replace('/reset-password-required');
+      console.warn(`[AuthenticatedAppLayout MAIN useEffect - Path: ${pathname}] User profile missing lastPasswordChangeDate. Redirecting to password reset.`);
+      if (pathname !== '/reset-password-required') {
+        router.replace('/reset-password-required');
+      }
       return;
     }
 
     // Check 3: Terms Acceptance (Only if profile setup is complete and password is not expired)
     if (!userProfile.acceptedLatestTerms || userProfile.termsVersionAccepted !== LATEST_TERMS_VERSION) {
-      console.log('[AuthenticatedAppLayout useEffect] Terms not accepted or version mismatch. Showing terms modal.');
+      console.log(`[AuthenticatedAppLayout MAIN useEffect - Path: ${pathname}] Terms not accepted or version mismatch. Showing terms modal.`);
       setShowTermsModal(true);
     } else {
-      console.log('[AuthenticatedAppLayout useEffect] All checks passed. User can proceed to view content.');
+      console.log(`[AuthenticatedAppLayout MAIN useEffect - Path: ${pathname}] All checks passed. User can proceed to view content.`);
+      setShowTermsModal(false); // Ensure modal is hidden if terms are accepted
     }
 
-  }, [user, userProfile, isLoading, authLoading, profileLoading, router, /* other deps */]);
+  }, [user, userProfile, combinedLoading, authLoading, profileLoading, router, pathname]);
 
   const handleScrollTerms = (event: React.UIEvent<HTMLDivElement>) => {
     const { scrollTop, scrollHeight, clientHeight } = event.currentTarget;
-    if (scrollHeight - scrollTop <= clientHeight + 10) { 
+    if (scrollHeight - scrollTop <= clientHeight + 10) {
       setTermsScrolledToEnd(true);
     }
   };
@@ -277,8 +281,8 @@ export default function AuthenticatedAppLayout({
           setUserProfile(prev => prev ? ({ ...prev, acceptedLatestTerms: true, termsVersionAccepted: LATEST_TERMS_VERSION }) : null);
         }
         setShowTermsModal(false);
-        setTermsScrolledToEnd(false); 
-        setTermsAcceptedCheckbox(false); 
+        setTermsScrolledToEnd(false);
+        setTermsAcceptedCheckbox(false);
         toast({ title: "Terms Accepted", description: "Thank you for accepting the terms." });
       } else {
         console.error("Failed to update terms acceptance:", result.error, result.errorCode);
@@ -298,10 +302,10 @@ export default function AuthenticatedAppLayout({
         toast({
           title: "Syncing Data...",
           description: "Attempting to fetch latest data from all connected apps.",
-          duration: 8000, 
+          duration: 8000,
         });
       }
-      
+
       const result = await syncAllConnectedData();
       let authErrorServiceName: string | null = null;
 
@@ -312,7 +316,7 @@ export default function AuthenticatedAppLayout({
           if (res.success) {
             if (res.activitiesProcessed && res.activitiesProcessed > 0) {
                 messages.push(`${res.service}: Synced ${res.activitiesProcessed} item(s).`);
-            } else if (res.message && res.message.includes("No new") ) { 
+            } else if (res.message && res.message.includes("No new") ) {
                  messages.push(`${res.service}: No new data found.`);
             } else {
                 messages.push(`${res.service}: Synced successfully.`);
@@ -321,7 +325,7 @@ export default function AuthenticatedAppLayout({
             allIndividualSyncsSucceeded = false;
             messages.push(`${res.service}: ${res.message || 'Failed'}`);
             if (res.errorCode?.includes('AUTH_ERROR') || res.errorCode?.includes('AUTH_EXPIRED')) {
-                authErrorServiceName = res.service.split(' ')[0]; 
+                authErrorServiceName = res.service.split(' ')[0];
             }
           }
         });
@@ -330,7 +334,7 @@ export default function AuthenticatedAppLayout({
           if (!isAutoSync) {
             toast({ title: "Sync Complete", description: "All connected apps synced successfully." });
           } else {
-             console.log("[AutoSync] Automatic sync completed successfully.");
+             console.log(`[SyncAll - Path: ${pathname}] Automatic sync completed successfully.`);
           }
         } else if (result.results.length > 0) {
           toast({
@@ -350,7 +354,7 @@ export default function AuthenticatedAppLayout({
               </div>
             ),
             duration: authErrorServiceName ? 15000 : 10000,
-            variant: authErrorServiceName ? "destructive" : "default", 
+            variant: authErrorServiceName ? "destructive" : "default",
             action: authErrorServiceName ? (
                 <Button variant="outline" size="sm" onClick={() => router.push('/profile')}>
                     Go to Profile
@@ -360,7 +364,7 @@ export default function AuthenticatedAppLayout({
         } else if (!isAutoSync && result.results.length === 0) {
           toast({ title: "No Services Synced", description: "No connected services were available to sync at this time." });
         }
-      } else { 
+      } else {
         toast({
           title: "Sync Orchestration Failed",
           description: result.error || "Could not sync data from apps due to a system error.",
@@ -370,9 +374,9 @@ export default function AuthenticatedAppLayout({
     });
   };
 
-
-  if (isLoading) {
-    console.log('[AuthenticatedAppLayout] Rendering loading spinner because isLoading is true.');
+  // Conditional rendering based on combinedLoading first
+  if (combinedLoading) {
+    console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] Rendering loading spinner because combinedLoading is true.`);
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -381,17 +385,21 @@ export default function AuthenticatedAppLayout({
     );
   }
 
+  // If not loading, but no user, implies redirect will/should happen from useEffect.
+  // This state should be brief. Show loader or minimal redirecting message.
   if (!user) {
-    console.log('[AuthenticatedAppLayout] Rendering redirect to login because no user (and not loading).');
+    console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] No user AND not loading. Redirecting to login (or useEffect will handle).`);
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
-        <p className="text-foreground">Redirecting to login...</p>
+        <Loader2 className="h-16 w-16 animate-spin text-primary" />
+        <p className="ml-4 text-lg text-foreground">Redirecting to login...</p>
       </div>
     );
   }
   
-  if (!userProfile && !profileLoading) { 
-    console.log('[AuthenticatedAppLayout] Rendering redirect to profile because user exists but no profile (and not loading profile).');
+  // User exists, but no profile (and not loading profile). Redirect to profile setup.
+  if (!userProfile) {
+    console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] User exists, but no profile AND not loading profile. Redirecting (or useEffect will handle).`);
      return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -400,11 +408,9 @@ export default function AuthenticatedAppLayout({
     );
   }
 
-  // If profile setup is not complete, redirect to profile page (this is a safeguard)
-  if (userProfile && userProfile.profileSetupComplete !== true) {
-    console.log('[AuthenticatedAppLayout] Safeguard: Profile setup incomplete. Redirecting to /profile.');
-    // A loader might be shown here briefly before RootPage or this component redirects.
-    // We can show a loader or simply let the redirect happen.
+  // If profile setup is not complete (safeguard if useEffect redirect hasn't happened)
+  if (userProfile.profileSetupComplete !== true) {
+    console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] Safeguard: Profile setup incomplete. Redirecting to /profile (or useEffect will handle).`);
      return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <Loader2 className="h-16 w-16 animate-spin text-primary" />
@@ -413,13 +419,13 @@ export default function AuthenticatedAppLayout({
     );
   }
 
-
+  // If terms modal needs to be shown
   if (showTermsModal) {
-    console.log('[AuthenticatedAppLayout] Rendering Terms Modal.');
+    console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] Rendering Terms Modal.`);
     return (
       <Dialog open={showTermsModal} onOpenChange={(open) => {
         if (!open && (!termsAcceptedCheckbox || !userProfile?.acceptedLatestTerms)) {
-          return; 
+          return;
         }
         setShowTermsModal(open);
       }}>
@@ -455,28 +461,12 @@ export default function AuthenticatedAppLayout({
       </Dialog>
     );
   }
-  
-  // Check all conditions before rendering AppLayoutClient
-  const canRenderApp = user && 
-                       userProfile && 
-                       userProfile.profileSetupComplete === true &&
-                       (userProfile.acceptedLatestTerms && userProfile.termsVersionAccepted === LATEST_TERMS_VERSION) &&
-                       (userProfile.lastPasswordChangeDate && (new Date().getTime() - new Date(userProfile.lastPasswordChangeDate).getTime()) / (1000 * 3600 * 24) < 90);
 
-  if (canRenderApp) {
-    console.log('[AuthenticatedAppLayout] All checks passed. Rendering AppLayoutClient.');
-    return (
-        <AppLayoutClient onSyncAllClick={handleSyncAllData}>
-          {children}
-        </AppLayoutClient>
-    );
-  }
-
-  console.log('[AuthenticatedAppLayout] Fallback: Conditions not met to render AppLayoutClient or T&C modal. Showing loader. User/Profile/T&C/Password may not be fully resolved or meet criteria.');
+  // All checks passed, user is authenticated, profile complete, terms accepted. Render the app.
+  console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] All checks passed. Rendering AppLayoutClient.`);
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <Loader2 className="h-16 w-16 animate-spin text-primary" />
-      <p className="ml-4 text-lg text-foreground">Verifying session...</p>
-    </div>
+      <AppLayoutClient onSyncAllClick={handleSyncAllData}>
+        {children}
+      </AppLayoutClient>
   );
 }
