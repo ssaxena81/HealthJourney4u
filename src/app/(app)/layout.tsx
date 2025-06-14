@@ -18,7 +18,7 @@ import AppLayoutClient from '@/components/layout/app-layout-client';
 import { updateUserTermsAcceptance } from '@/app/actions/auth';
 import { useToast } from '@/hooks/use-toast';
 import { syncAllConnectedData } from '@/app/actions/syncActions';
-import type { SyncResult, SyncAllResults } from '@/app/actions/syncActions'; // Ensure SyncAllResults is imported if needed elsewhere, or just use its structure directly
+import type { SyncResult, SyncAllResults } from '@/app/actions/syncActions'; // Ensure SyncAllResults is imported
 
 const LATEST_TERMS_VERSION = "1.0";
 
@@ -27,7 +27,7 @@ export default function AuthenticatedAppLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const { user, userProfile, loading, checkAuthState, setUserProfile } = useAuth(); // Use loading directly
+  const { user, userProfile, loading, checkAuthState, setUserProfile } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const { toast } = useToast();
@@ -36,7 +36,7 @@ export default function AuthenticatedAppLayout({
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const combinedLoading = loading; // Simplified: combinedLoading is now just the loading state from useAuth
+  const combinedLoading = loading;
 
   console.log(`[AuthenticatedAppLayout TOP RENDER - Path: ${pathname}] Timestamp: ${new Date().toISOString()}`);
   console.log(`  CombinedLoading: ${combinedLoading}`);
@@ -58,8 +58,8 @@ export default function AuthenticatedAppLayout({
     console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] CombinedLoading is FALSE. Proceeding with checks.`);
 
     // Check 1: No User
+    console.log(`[AuthenticatedAppLayout useEffect DECISION POINT - Path: ${pathname}] CombinedLoading: ${combinedLoading}. Ready to check user.`);
     if (!user) {
-      console.log(`[AuthenticatedAppLayout useEffect DECISION POINT - Path: ${pathname}] CombinedLoading: ${combinedLoading}. Ready to check user.`);
       console.log(`[AuthenticatedAppLayout useEffect DECISION - Path: ${pathname}] User is NULL. Current path: ${pathname}.`);
       if (pathname !== '/login') {
         console.log(`  Redirecting to /login.`);
@@ -83,7 +83,7 @@ export default function AuthenticatedAppLayout({
       return;
     }
     console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] UserProfile is PRESENT (ID: ${userProfile.id}).`);
-    
+
     // Check 3: Password Expiry (User and UserProfile exist)
     if (userProfile.lastPasswordChangeDate) {
       const lastPasswordChange = new Date(userProfile.lastPasswordChangeDate);
@@ -97,7 +97,7 @@ export default function AuthenticatedAppLayout({
         } else {
             console.log(`  Already on /reset-password-required. Modal might show if not dismissed.`);
         }
-        return; 
+        return;
       }
     } else {
       console.warn(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Last password change date missing for user ${userProfile.id}. Consider forcing reset.`);
@@ -109,7 +109,7 @@ export default function AuthenticatedAppLayout({
     if (userProfile.acceptedLatestTerms !== true || userProfile.termsVersionAccepted !== LATEST_TERMS_VERSION) {
       console.log(`[AuthenticatedAppLayout useEffect DECISION - Path: ${pathname}] Terms NOT ACCEPTED or version mismatch. Current path: ${pathname}.`);
       setShowTermsModal(true);
-      return; 
+      return;
     } else {
       setShowTermsModal(false); // Ensure modal is hidden if terms are accepted
     }
@@ -178,13 +178,13 @@ export default function AuthenticatedAppLayout({
     setIsSyncing(true);
     toast({ title: "Sync Started", description: "Fetching latest data from connected services...", duration: 3000 });
 
-    const response: SyncAllResults = await syncAllConnectedData(); // Correctly typed response
-    let overallSuccess = response.success; // Use overall success from SyncAllResults if available, or derive
+    const response: SyncAllResults = await syncAllConnectedData();
+    let overallSuccess = response.success;
     let successCount = 0;
     let errorCount = 0;
 
     if (response.results && Array.isArray(response.results)) {
-      response.results.forEach(result => { // Iterate over response.results
+      response.results.forEach((result: SyncResult) => { // Explicitly type result here
           if (result.success) {
               successCount++;
               toast({
@@ -194,10 +194,9 @@ export default function AuthenticatedAppLayout({
               });
           } else {
               errorCount++;
-              overallSuccess = false; // If any individual sync fails, overall might be considered false
+              overallSuccess = false;
               toast({
                   title: `Sync Error: ${result.service}`,
-                  // Use result.message or result.errorCode for description
                   description: result.message || result.errorCode || "An unknown error occurred.",
                   variant: "destructive"
               });
@@ -208,7 +207,7 @@ export default function AuthenticatedAppLayout({
 
     if (!response.results || response.results.length === 0) {
          toast({ title: "Sync Complete", description: response.error || "No services were actively synced or configured for sync.", variant: response.error ? "destructive" : "default"});
-    } else if (overallSuccess && errorCount === 0) { // Check errorCount too
+    } else if (overallSuccess && errorCount === 0) {
         toast({ title: "Sync Successful", description: `All connected services synced successfully. ${successCount} services updated.`, duration: 5000 });
     } else {
         toast({ title: "Sync Partially Successful", description: `${successCount} services synced, ${errorCount} encountered errors. Check individual notifications.`, variant: "default", duration: 7000 });
@@ -227,7 +226,6 @@ export default function AuthenticatedAppLayout({
     );
   }
 
-  // Fallback rendering checks - useEffect should ideally handle redirects before these are hit significantly.
   if (!user) {
     console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] User is NULL (and not combinedLoading). useEffect should redirect to /login.`);
     return (
@@ -237,7 +235,7 @@ export default function AuthenticatedAppLayout({
       </div>
     );
   }
-  
+
   if (!userProfile) {
     console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] UserProfile is NULL (User: ${user.uid}, and not combinedLoading). useEffect should redirect to /profile for setup.`);
     return (
@@ -248,8 +246,6 @@ export default function AuthenticatedAppLayout({
     );
   }
 
-  // This case implies profile setup isn't complete, AND we are NOT on the profile page.
-  // The useEffect should handle redirecting to /profile. This is a visual fallback.
   if (userProfile.profileSetupComplete !== true && pathname !== '/profile') {
     console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] Profile setup INCOMPLETE and NOT on /profile page. useEffect should redirect. Displaying interim loader.`);
      return (

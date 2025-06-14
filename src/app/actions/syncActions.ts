@@ -4,9 +4,9 @@
 import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import type { UserProfile } from '@/types';
-import { 
-    fetchAndStoreFitbitDailyActivity, 
-    fetchAndStoreFitbitHeartRate, 
+import {
+    fetchAndStoreFitbitDailyActivity,
+    fetchAndStoreFitbitHeartRate,
     fetchAndStoreFitbitSleep,
     fetchAndStoreFitbitSwimmingData,
     fetchAndStoreFitbitLoggedActivities
@@ -15,7 +15,7 @@ import { fetchAndStoreStravaRecentActivities } from './stravaActions';
 import { fetchAndStoreGoogleFitActivities } from './googleFitActions';
 import { format, subDays, eachDayOfInterval, parseISO, isBefore } from 'date-fns';
 
-export interface SyncResult { // Added export here
+export interface SyncResult {
   service: string;
   success: boolean;
   message?: string;
@@ -23,7 +23,7 @@ export interface SyncResult { // Added export here
   activitiesProcessed?: number;
 }
 
-interface SyncAllResults {
+export interface SyncAllResults { // Added export here
   success: boolean; // Overall success, maybe true if at least one attempt was made
   results: SyncResult[];
   error?: string; // For general errors orchestrating the sync
@@ -78,11 +78,11 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
     console.log('[SyncActions] Attempting to sync Fitbit data...');
     let fitbitSyncSuccess = true;
     let totalFitbitActivitiesProcessed = 0;
-    
+
     const lastSyncFitbit = userProfile.fitbitLastSuccessfulSync ? parseISO(userProfile.fitbitLastSuccessfulSync) : subDays(today, 7);
     // Limit backfill to 7 days to prevent overly long syncs. A full historical backfill is a larger feature.
     const fitbitStartDate = isBefore(lastSyncFitbit, subDays(today, 7)) ? subDays(today, 7) : lastSyncFitbit;
-    
+
     const datesToSyncFitbit = eachDayOfInterval({
       start: fitbitStartDate,
       end: today,
@@ -94,36 +94,36 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
       try {
         // Fetching all types of data for each day in the range
         const activityRes = await fetchAndStoreFitbitDailyActivity(dateStr);
-        if (!activityRes.success) { 
-            fitbitSyncSuccess = false; 
+        if (!activityRes.success) {
+            fitbitSyncSuccess = false;
             syncResults.push({ service: `Fitbit Daily Activity (${dateStr})`, ...activityRes });
             if (activityRes.errorCode === 'FITBIT_AUTH_ERROR' || activityRes.errorCode === 'FITBIT_AUTH_EXPIRED_POST_REFRESH') throw new Error('Fitbit Auth Error');
         } else { totalFitbitActivitiesProcessed += activityRes.data ? 1 : 0; }
 
         const heartRes = await fetchAndStoreFitbitHeartRate(dateStr);
-        if (!heartRes.success) { 
-            fitbitSyncSuccess = false; 
+        if (!heartRes.success) {
+            fitbitSyncSuccess = false;
             syncResults.push({ service: `Fitbit Heart Rate (${dateStr})`, ...heartRes });
              if (heartRes.errorCode === 'FITBIT_AUTH_ERROR' || heartRes.errorCode === 'FITBIT_AUTH_EXPIRED_POST_REFRESH') throw new Error('Fitbit Auth Error');
         } else { totalFitbitActivitiesProcessed += heartRes.data ? 1 : 0; }
-        
+
         const sleepRes = await fetchAndStoreFitbitSleep(dateStr);
-        if (!sleepRes.success) { 
-            fitbitSyncSuccess = false; 
+        if (!sleepRes.success) {
+            fitbitSyncSuccess = false;
             syncResults.push({ service: `Fitbit Sleep (${dateStr})`, ...sleepRes });
              if (sleepRes.errorCode === 'FITBIT_AUTH_ERROR' || sleepRes.errorCode === 'FITBIT_AUTH_EXPIRED_POST_REFRESH') throw new Error('Fitbit Auth Error');
         } else { totalFitbitActivitiesProcessed += sleepRes.activitiesProcessed || 0; }
 
         const swimmingRes = await fetchAndStoreFitbitSwimmingData(dateStr);
-        if (!swimmingRes.success) { 
-            fitbitSyncSuccess = false; 
+        if (!swimmingRes.success) {
+            fitbitSyncSuccess = false;
             syncResults.push({ service: `Fitbit Swimming (${dateStr})`, ...swimmingRes });
              if (swimmingRes.errorCode === 'FITBIT_AUTH_ERROR' || swimmingRes.errorCode === 'FITBIT_AUTH_EXPIRED_POST_REFRESH') throw new Error('Fitbit Auth Error');
         } else { totalFitbitActivitiesProcessed += swimmingRes.activitiesProcessed || 0; }
-        
+
         const loggedActivitiesRes = await fetchAndStoreFitbitLoggedActivities(dateStr);
-        if (!loggedActivitiesRes.success) { 
-            fitbitSyncSuccess = false; 
+        if (!loggedActivitiesRes.success) {
+            fitbitSyncSuccess = false;
             syncResults.push({ service: `Fitbit Logged Activities (${dateStr})`, ...loggedActivitiesRes });
              if (loggedActivitiesRes.errorCode === 'FITBIT_AUTH_ERROR' || loggedActivitiesRes.errorCode === 'FITBIT_AUTH_EXPIRED_POST_REFRESH') throw new Error('Fitbit Auth Error');
         } else { totalFitbitActivitiesProcessed += loggedActivitiesRes.activitiesProcessed || 0; }
@@ -135,7 +135,7 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
         if (error.message === 'Fitbit Auth Error') break; // Stop Fitbit sync if auth fails
       }
     }
-    
+
     if (fitbitSyncSuccess && datesToSyncFitbit.length > 0) {
         await updateDoc(userProfileDocRef, { fitbitLastSuccessfulSync: todayDateString });
         console.log(`[SyncActions] Fitbit: Updated fitbitLastSuccessfulSync to ${todayDateString}.`);
@@ -156,14 +156,14 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
     try {
       // Strava's 'after' parameter takes a Unix timestamp (seconds).
       // If userProfile.stravaLastSyncTimestamp exists, use it. Otherwise, fetch for the last 7 days.
-      const afterTimestamp = userProfile.stravaLastSyncTimestamp 
+      const afterTimestamp = userProfile.stravaLastSyncTimestamp
                              ? userProfile.stravaLastSyncTimestamp + 1 // Fetch activities *after* the last synced one
-                             : Math.floor(subDays(today, 7).getTime() / 1000); 
+                             : Math.floor(subDays(today, 7).getTime() / 1000);
 
       console.log(`[SyncActions] Strava: Fetching activities after timestamp: ${afterTimestamp}`);
-      
-      const stravaRes = await fetchAndStoreStravaRecentActivities({ 
-          after: afterTimestamp, 
+
+      const stravaRes = await fetchAndStoreStravaRecentActivities({
+          after: afterTimestamp,
           per_page: 50 // Fetch a reasonable number of recent activities
       });
       syncResults.push({ service: 'Strava Activities', ...stravaRes });
@@ -187,7 +187,7 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
       overallSyncSuccess = false;
     }
   }
-  
+
   // Google Fit Sync
   if (userProfile.connectedFitnessApps?.some(app => app.id === 'google-fit')) {
     console.log('[SyncActions] Attempting to sync Google Fit data...');
@@ -216,5 +216,3 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
   console.log('[SyncActions] Completed syncAllConnectedData. Results:', JSON.stringify(syncResults, null, 2));
   return { success: overallSyncSuccess, results: syncResults };
 }
-
-    
