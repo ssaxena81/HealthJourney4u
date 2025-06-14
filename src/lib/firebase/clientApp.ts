@@ -1,24 +1,24 @@
 
 // src/lib/firebase/clientApp.ts
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
+import { fetchSignInMethodsForEmail } from 'firebase/auth';
 import {
   getAuth,
   type Auth,
-  // Persistence-related imports are no longer directly used here
-  // setPersistence,
-  // browserLocalPersistence,
-  // indexedDBLocalPersistence,
+  setPersistence,
+  browserLocalPersistence,
+  indexedDBLocalPersistence,
 } from 'firebase/auth';
 import { getFirestore, type Firestore, collection as diagnosticCollection } from 'firebase/firestore';
 
 console.log("[clientApp.ts Module Scope] Typeof imported 'initializeApp':", typeof initializeApp, ". Name:", initializeApp.name);
 console.log("[clientApp.ts Module Scope] Typeof imported 'getAuth':", typeof getAuth, ". Name:", getAuth.name);
-// console.log("[clientApp.ts Module Scope] Typeof imported 'setPersistence':", typeof setPersistence, ". Name:", setPersistence.name);
-// console.log("[clientApp.ts Module Scope] Typeof imported 'indexedDBLocalPersistence':", typeof indexedDBLocalPersistence);
-// console.log("[clientApp.ts Module Scope] Typeof imported 'browserLocalPersistence':", typeof browserLocalPersistence);
+console.log("[clientApp.ts Module Scope] Typeof imported 'setPersistence':", typeof setPersistence, ". Name:", setPersistence.name);
+console.log("[clientApp.ts Module Scope] Typeof imported 'indexedDBLocalPersistence':", typeof indexedDBLocalPersistence);
+console.log("[clientApp.ts Module Scope] Typeof imported 'browserLocalPersistence':", typeof browserLocalPersistence);
 console.log("[clientApp.ts Module Scope] Typeof imported 'getFirestore':", typeof getFirestore, ". Name:", getFirestore.name);
-// console.log("[clientApp.ts Module Scope] Diagnostic: typeof imported fetchSignInMethodsForEmail is", typeof fetchSignInMethodsForEmail);
-// console.log("[clientApp.ts Module Scope] Diagnostic: typeof imported collection is", typeof diagnosticCollection);
+console.log("[clientApp.ts Module Scope] Diagnostic: typeof imported fetchSignInMethodsForEmail is", typeof fetchSignInMethodsForEmail);
+console.log("[clientApp.ts Module Scope] Diagnostic: typeof imported collection is", typeof diagnosticCollection);
 
 
 const firebaseConfig = {
@@ -34,7 +34,6 @@ let firebaseApp: FirebaseApp | null = null;
 let auth: Auth | null = null;
 let db: Firestore | null = null;
 
-// This block now only runs on the client
 if (typeof window !== 'undefined') {
   console.log('[clientApp.ts CLIENT-SIDE] Running client-side Firebase initialization.');
   console.log('[clientApp.ts CLIENT-SIDE] Firebase Config being used:', JSON.stringify(firebaseConfig, null, 2));

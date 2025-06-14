@@ -5,17 +5,14 @@ import React, { useState, useTransition, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useRouter } from 'next/navigation'; // useRouter for client-side navigation
+import { useRouter } from 'next/navigation'; 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { loginUser } from '@/app/actions/auth';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
-// UserProfile type might still be useful if the server action eventually returns it fully.
-// import type { UserProfile } from '@/types'; 
-// Auth context is not directly used for setting user/profile here anymore,
-// relying on AuthProvider and onAuthStateChanged after navigation.
+import type { UserProfile } from '@/types'; // Kept for structure if loginUser returns it fully
 
 const loginFormSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -26,7 +23,7 @@ type LoginFormValues = z.infer<typeof loginFormSchema>;
 
 export default function LoginForm() {
   const { toast } = useToast();
-  const router = useRouter(); // Initialize useRouter
+  const router = useRouter(); 
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -45,9 +42,9 @@ export default function LoginForm() {
     startTransition(async () => {
       try {
         const result = await loginUser(values);
-        console.log('[LOGIN_FORM_SUBMIT_RESULT] Received result from loginUser action:', JSON.stringify(result, null, 2));
+        console.log('[LOGIN_FORM_SUBMIT_RESULT] Received result from loginUser action:', result);
 
-        if (result.success && result.userProfile) { // This is the ideal success case
+        if (result && result.success && result.userProfile) {
           toast({
             title: 'Login Successful!',
             description: 'Welcome back. Redirecting...',
@@ -61,29 +58,21 @@ export default function LoginForm() {
 
           if (profileSetupComplete === true) {
             console.log('[LOGIN_FORM_SUCCESS] Redirecting (client-side) to dashboard page (/).');
-            router.push('/'); // Use router.push for client-side navigation
+            router.push('/');
           } else {
             console.log(`[LOGIN_FORM_SUCCESS] Redirecting (client-side) to profile setup page (/profile). Reason: profileSetupComplete is ${profileSetupComplete}`);
-            router.push('/profile'); // Use router.push
+            router.push('/profile');
           }
-        } else if (result.success && result.userId && result.userProfile === null) { 
-          // This case was for testing, where userProfile was explicitly null
-          // It implies profile setup is needed.
+        } else if (result && result.success && result.userId && result.userProfile === null) { 
           console.log('[LOGIN_FORM_SUCCESS_PROFILE_NULL] Login succeeded, got userId, profile is null. Redirecting to /profile for setup.');
           toast({ title: 'Login Successful', description: 'Redirecting to complete profile setup.' });
-          router.push('/profile'); // Use router.push
-        } else if (result.success && result.message && !result.userId && !result.userProfile) { 
-            // This was the "super simple test" case
-            console.warn('[LOGIN_FORM_WARNING_SUPER_SIMPLE] Login action returned minimal success. This was a test state.');
-            setError('Test login succeeded but full data not returned. Please contact support or try again if this is unexpected.');
-            toast({ title: 'Test Login Succeeded', description: 'Full user data not available in this test response.', variant: 'default' });
-            // No redirect here as it's a test state that shouldn't go to profile/dashboard
+          router.push('/profile');
         } else {
-          console.log('[LOGIN_FORM_FAILURE] Login action reported failure. Result:', result);
-          setError(result.error || 'An unknown error occurred.');
+          console.log('[LOGIN_FORM_FAILURE] Login action reported failure or unexpected result structure. Result:', result);
+          setError(result?.error || 'An unknown error occurred during login.');
           toast({
             title: 'Login Failed',
-            description: result.error || 'Please check your credentials.',
+            description: result?.error || 'Please check your credentials.',
             variant: 'destructive',
           });
         }
