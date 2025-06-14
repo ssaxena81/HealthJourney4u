@@ -2,8 +2,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { usePathname, useRouter }
-from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation'; // Ensure usePathname is imported
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -21,8 +20,7 @@ import { useToast } from '@/hooks/use-toast';
 import { syncAllConnectedData } from '@/app/actions/syncActions';
 import type { SyncResult } from '@/app/actions/syncActions';
 
-// Define LATEST_TERMS_VERSION, ensure it's consistent or fetched
-const LATEST_TERMS_VERSION = "1.0"; // Replace with actual or fetched version
+const LATEST_TERMS_VERSION = "1.0";
 
 export default function AuthenticatedAppLayout({
   children,
@@ -31,99 +29,127 @@ export default function AuthenticatedAppLayout({
 }>) {
   const { user, userProfile, loading: authLoading, profileLoading, checkAuthState, setUserProfile } = useAuth();
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = usePathname(); // Get current pathname
   const { toast } = useToast();
 
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  // Combined loading state
   const combinedLoading = authLoading || profileLoading;
 
-  console.log(`[AuthenticatedAppLayout RENDER] Path: ${pathname}, CombinedLoading: ${combinedLoading}, User: ${!!user}, UserProfile: ${!!userProfile}, AuthLoading: ${authLoading}, ProfileLoading: ${profileLoading}`);
+  console.log(`[AuthenticatedAppLayout TOP RENDER - Path: ${pathname}] Timestamp: ${new Date().toISOString()}`);
+  console.log(`  AuthLoading: ${authLoading}, ProfileLoading: ${profileLoading}, CombinedLoading: ${combinedLoading}`);
+  console.log(`  User Exists: ${!!user} (UID: ${user?.uid})`);
+  console.log(`  UserProfile Exists: ${!!userProfile} (ID: ${userProfile?.id}, SetupComplete: ${userProfile?.profileSetupComplete})`);
 
   useEffect(() => {
-    console.log(`[AuthenticatedAppLayout useEffect RUN] Path: ${pathname}, CombinedLoading: ${combinedLoading}, User: ${!!user}, UserProfile: ${!!userProfile}, ProfileSetupComplete: ${userProfile?.profileSetupComplete}`);
+    console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Timestamp: ${new Date().toISOString()}`);
+    console.log(`  AuthLoading: ${authLoading}, ProfileLoading: ${profileLoading}, CombinedLoading: ${combinedLoading}`);
+    console.log(`  User Exists: ${!!user} (UID: ${user?.uid})`);
+    console.log(`  UserProfile Exists: ${!!userProfile} (ID: ${userProfile?.id}, SetupComplete: ${userProfile?.profileSetupComplete})`);
+    console.log(`  Accepted Terms: ${userProfile?.acceptedLatestTerms}, Version: ${userProfile?.termsVersionAccepted} (Latest: ${LATEST_TERMS_VERSION})`);
+
 
     if (combinedLoading) {
-      console.log(`[AuthenticatedAppLayout useEffect - WAITING] Path: ${pathname}. Still loading auth/profile. No action.`);
+      console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] CombinedLoading is TRUE. Waiting...`);
       return;
     }
+    console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] CombinedLoading is FALSE. Proceeding with checks.`);
 
-    // AFTER LOADING IS COMPLETE:
-    console.log(`[AuthenticatedAppLayout useEffect - LOADED] Path: ${pathname}. Auth and profile loading complete. User: ${user?.uid}, Profile: ${userProfile?.id}`);
-
-    // 1. Check for authenticated user
+    // Check 1: No User
     if (!user) {
-      console.log(`[AuthenticatedAppLayout useEffect - NO USER] Path: ${pathname}. User is null. Redirecting to /login.`);
+      console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] User is NULL. Current path: ${pathname}.`);
       if (pathname !== '/login') {
+        console.log(`  Redirecting to /login.`);
         router.replace('/login');
+      } else {
+        console.log(`  Already on /login. No redirect needed.`);
       }
       return;
     }
+    console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] User is PRESENT (UID: ${user.uid}).`);
 
-    // 2. User exists, check for profile
+    // Check 2: No User Profile (but user exists)
     if (!userProfile) {
-      console.log(`[AuthenticatedAppLayout useEffect - NO PROFILE] Path: ${pathname}. User exists, but no profile. Redirecting to /profile for setup.`);
+      console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] UserProfile is NULL (User UID: ${user.uid}). Current path: ${pathname}.`);
       if (pathname !== '/profile') {
+        console.log(`  Redirecting to /profile for setup.`);
         router.replace('/profile');
+      } else {
+        console.log(`  Already on /profile. No redirect needed.`);
       }
       return;
     }
-
-    // 3. User and Profile exist, check password expiry
+    console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] UserProfile is PRESENT (ID: ${userProfile.id}).`);
+    
+    // Check 3: Password Expiry (User and UserProfile exist)
     if (userProfile.lastPasswordChangeDate) {
       const lastPasswordChange = new Date(userProfile.lastPasswordChangeDate);
       const now = new Date();
       const daysSinceLastChange = (now.getTime() - lastPasswordChange.getTime()) / (1000 * 3600 * 24);
       if (daysSinceLastChange >= 90) {
-        console.log(`[AuthenticatedAppLayout useEffect - PASSWORD EXPIRED] Path: ${pathname}. Password expired. Showing reset modal.`);
+        console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Password EXPIRED. Current path: ${pathname}.`);
         if (pathname !== '/reset-password-required') {
-          setShowPasswordResetModal(true); // Show modal, navigation handled by modal action
+            console.log(`  Showing password reset modal and will navigate via modal button.`);
+            setShowPasswordResetModal(true);
+        } else {
+            console.log(`  Already on /reset-password-required. Modal might show if not dismissed.`);
         }
-        return; // Stop further checks if password reset is required
+        return; 
       }
     } else {
-      console.warn(`[AuthenticatedAppLayout useEffect - NO PASSWORD CHANGE DATE] Path: ${pathname}. Last password change date missing. Consider forcing reset.`);
-      // Potentially treat as expired or prompt user. For now, logging and proceeding.
-      // setShowPasswordResetModal(true);
+      console.warn(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Last password change date missing for user ${userProfile.id}. Consider forcing reset.`);
+      // setShowPasswordResetModal(true); // Optionally force reset if date is missing
     }
+    console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Password not expired or date missing (logged warning).`);
 
-    // 4. Check Terms and Conditions
+
+    // Check 4: Terms and Conditions
     if (userProfile.acceptedLatestTerms !== true || userProfile.termsVersionAccepted !== LATEST_TERMS_VERSION) {
-      console.log(`[AuthenticatedAppLayout useEffect - TERMS NOT ACCEPTED] Path: ${pathname}. Terms not accepted or version mismatch. Showing terms modal.`);
+      console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Terms NOT ACCEPTED or version mismatch. Current path: ${pathname}.`);
       setShowTermsModal(true);
-      return; // Stop further checks if terms modal is shown
+      return; 
     } else {
-      setShowTermsModal(false); // Ensure it's closed if terms are fine
+      setShowTermsModal(false);
     }
-    
-    // 5. Check profile setup completion (if not already on /profile)
+    console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Terms are ACCEPTED.`);
+
+    // Check 5: Profile Setup Completion
     if (userProfile.profileSetupComplete !== true) {
-      console.log(`[AuthenticatedAppLayout useEffect - PROFILE NOT COMPLETE] Path: ${pathname}. Profile setup incomplete. Redirecting to /profile.`);
+      console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Profile setup INCOMPLETE. Current path: ${pathname}.`);
       if (pathname !== '/profile') {
+        console.log(`  Redirecting to /profile.`);
         router.replace('/profile');
+      } else {
+        console.log(`  Already on /profile. No redirect needed.`);
       }
       return;
     }
+    console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Profile setup is COMPLETE.`);
 
-    console.log(`[AuthenticatedAppLayout useEffect - ALL CHECKS PASSED] Path: ${pathname}. User authenticated, profile complete, terms accepted, password not expired.`);
+    console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] All checks passed. User: ${user.uid}, Profile: ${userProfile.id}.`);
 
-  }, [user, userProfile, authLoading, profileLoading, router, pathname]);
+  }, [user, userProfile, combinedLoading, authLoading, profileLoading, router, pathname, setUserProfile /* Added setUserProfile as it's used in handleAcceptTerms which is in scope */]);
 
   const handleAcceptTerms = async () => {
     if (!user || !userProfile) return;
     const result = await updateUserTermsAcceptance(user.uid, true, LATEST_TERMS_VERSION);
     if (result.success) {
       toast({ title: "Terms Accepted", description: "Thank you for accepting the terms and conditions." });
-      setUserProfile(prev => prev ? ({ ...prev, acceptedLatestTerms: true, termsVersionAccepted: LATEST_TERMS_VERSION }) : null);
+      // Critical: Update local userProfile state
+      if (setUserProfile) {
+        setUserProfile(prev => prev ? ({ ...prev, acceptedLatestTerms: true, termsVersionAccepted: LATEST_TERMS_VERSION }) : null);
+      }
       setShowTermsModal(false);
-      // Re-run checks or simply let the normal flow continue
+      // After accepting terms, if profile setup is still incomplete and not on profile, redirect.
+      // This re-evaluates the useEffect conditions.
       if (userProfile.profileSetupComplete !== true && pathname !== '/profile') {
+        console.log('[AuthenticatedAppLayout handleAcceptTerms] Terms accepted, profile incomplete, redirecting to /profile.');
         router.replace('/profile');
-      } else if (userProfile.profileSetupComplete === true && pathname === '/profile') {
-        // If profile is complete and they were on /profile just for terms, send to dashboard
+      } else if (userProfile.profileSetupComplete === true && (pathname === '/profile' || pathname ==='/')) {
+        // If profile is complete AND they were on /profile (perhaps just for terms) or on root, ensure they go to the main app view.
+        console.log('[AuthenticatedAppLayout handleAcceptTerms] Terms accepted, profile complete, ensuring navigation to / (dashboard).');
         router.replace('/');
       }
     } else {
@@ -181,11 +207,11 @@ export default function AuthenticatedAppLayout({
         toast({ title: "Sync Partially Successful", description: `${successCount} services synced, ${errorCount} encountered errors. Check individual notifications.`, variant: "default", duration: 7000 });
     }
     setIsSyncing(false);
-    await checkAuthState(); // Refresh auth state and profile to get latest sync timestamps
+    await checkAuthState();
   };
 
-
   if (combinedLoading) {
+    console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] CombinedLoading is TRUE. Displaying main loader.`);
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -194,34 +220,37 @@ export default function AuthenticatedAppLayout({
     );
   }
 
-  // If, after loading, there's no user, something is wrong (useEffect should redirect)
-  // This is a fallback visual state.
-  if (!user && !combinedLoading) {
-     console.log(`[AuthenticatedAppLayout RENDER - NO USER FALLBACK] Path: ${pathname}. No user and not loading. Redirect to /login expected from useEffect.`);
+  // --- Post-loading checks for rendering ---
+  // These are fallbacks; useEffect should handle redirects.
+  // If these are hit, it means a redirect is likely imminent or there's a rapid state change.
+
+  if (!user) {
+    console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] User is NULL (and not combinedLoading). useEffect should redirect to /login.`);
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
         <Loader2 className="h-12 w-12 animate-spin text-destructive" />
-        <p className="ml-4 text-lg text-destructive">Session expired or not found. Redirecting...</p>
+        <p className="ml-4 text-lg text-destructive">Session not found. Redirecting to login...</p>
       </div>
     );
   }
   
-  // If user exists, but profile doesn't (and not loading profile), also problematic.
-  if (user && !userProfile && !profileLoading && !authLoading) {
-    console.log(`[AuthenticatedAppLayout RENDER - NO PROFILE FALLBACK] Path: ${pathname}. User exists, no profile, not loading. Redirect to /profile expected from useEffect.`);
-     return (
+  if (!userProfile) {
+    console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] UserProfile is NULL (User: ${user.uid}, and not combinedLoading). useEffect should redirect to /profile.`);
+    return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
         <Loader2 className="h-12 w-12 animate-spin text-amber-500" />
         <p className="ml-4 text-lg text-amber-600">Profile data missing. Redirecting to setup...</p>
       </div>
     );
   }
-  
-  // If user and profile exist, but setup is not complete AND we are NOT on /profile page
-  // This can happen if a direct navigation attempt is made to another page before profile setup
-  if (user && userProfile && userProfile.profileSetupComplete !== true && pathname !== '/profile') {
-    console.log(`[AuthenticatedAppLayout RENDER - PROFILE INCOMPLETE & NOT ON /profile] Path: ${pathname}. Redirect to /profile expected from useEffect.`);
-    return (
+
+  // If terms are not accepted, the modal will show. The useEffect handles this.
+  // If profile setup is not complete and we are NOT on /profile, useEffect redirects.
+  // If we are on /profile and setup is not complete, we should render the profile page.
+  // This explicit check is a safeguard in case useEffect redirect is slow or there's a specific scenario.
+  if (userProfile.profileSetupComplete !== true && pathname !== '/profile') {
+    console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] Profile setup INCOMPLETE and NOT on /profile page. useEffect should redirect.`);
+     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
         <p className="ml-4 text-lg text-foreground">Profile setup incomplete. Redirecting...</p>
@@ -229,7 +258,8 @@ export default function AuthenticatedAppLayout({
     );
   }
 
-
+  // If all checks pass (or modals are handling their state), render the app.
+  console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] All checks passed or modals handle state. Rendering AppLayoutClient.`);
   return (
     <>
       <AppLayoutClient onSyncAllClick={handleSyncAll} >
@@ -245,7 +275,6 @@ export default function AuthenticatedAppLayout({
             </DialogDescription>
           </DialogHeader>
           <div className="py-4">
-            {/* Placeholder for terms content - ideally fetched or imported */}
             <p className="text-sm text-muted-foreground">
               The full terms and conditions text would be displayed here.
               For now, this is a placeholder. By clicking "Accept", you agree to version {LATEST_TERMS_VERSION}.
@@ -266,7 +295,7 @@ export default function AuthenticatedAppLayout({
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button type="button" onClick={() => router.push('/reset-password-required')}>Reset Password</Button>
+            <Button type="button" onClick={() => { setShowPasswordResetModal(false); router.push('/reset-password-required'); }}>Reset Password</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -274,3 +303,4 @@ export default function AuthenticatedAppLayout({
   );
 }
 
+    
