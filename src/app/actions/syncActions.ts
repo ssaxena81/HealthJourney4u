@@ -15,7 +15,7 @@ import { fetchAndStoreStravaRecentActivities } from './stravaActions';
 import { fetchAndStoreGoogleFitActivities } from './googleFitActions';
 import { format, subDays, eachDayOfInterval, parseISO, isBefore } from 'date-fns';
 
-interface SyncResult {
+export interface SyncResult { // Added export here
   service: string;
   success: boolean;
   message?: string;
