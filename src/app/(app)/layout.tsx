@@ -2,7 +2,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation'; // Ensure usePathname is imported
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -18,7 +18,7 @@ import AppLayoutClient from '@/components/layout/app-layout-client';
 import { updateUserTermsAcceptance } from '@/app/actions/auth';
 import { useToast } from '@/hooks/use-toast';
 import { syncAllConnectedData } from '@/app/actions/syncActions';
-import type { SyncResult } from '@/app/actions/syncActions';
+import type { SyncResult, SyncAllResults } from '@/app/actions/syncActions'; // Ensure SyncAllResults is imported if needed elsewhere, or just use its structure directly
 
 const LATEST_TERMS_VERSION = "1.0";
 
@@ -27,25 +27,25 @@ export default function AuthenticatedAppLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const { user, userProfile, loading: authLoading, profileLoading, checkAuthState, setUserProfile } = useAuth();
+  const { user, userProfile, loading, checkAuthState, setUserProfile } = useAuth(); // Use loading directly
   const router = useRouter();
-  const pathname = usePathname(); // Get current pathname
+  const pathname = usePathname();
   const { toast } = useToast();
 
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [showPasswordResetModal, setShowPasswordResetModal] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
 
-  const combinedLoading = authLoading || profileLoading;
+  const combinedLoading = loading; // Simplified: combinedLoading is now just the loading state from useAuth
 
   console.log(`[AuthenticatedAppLayout TOP RENDER - Path: ${pathname}] Timestamp: ${new Date().toISOString()}`);
-  console.log(`  AuthLoading: ${authLoading}, ProfileLoading: ${profileLoading}, CombinedLoading: ${combinedLoading}`);
+  console.log(`  CombinedLoading: ${combinedLoading}`);
   console.log(`  User Exists: ${!!user} (UID: ${user?.uid})`);
   console.log(`  UserProfile Exists: ${!!userProfile} (ID: ${userProfile?.id}, SetupComplete: ${userProfile?.profileSetupComplete})`);
 
   useEffect(() => {
     console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Timestamp: ${new Date().toISOString()}`);
-    console.log(`  AuthLoading: ${authLoading}, ProfileLoading: ${profileLoading}, CombinedLoading: ${combinedLoading}`);
+    console.log(`  CombinedLoading: ${combinedLoading}`);
     console.log(`  User Exists: ${!!user} (UID: ${user?.uid})`);
     console.log(`  UserProfile Exists: ${!!userProfile} (ID: ${userProfile?.id}, SetupComplete: ${userProfile?.profileSetupComplete})`);
     console.log(`  Accepted Terms: ${userProfile?.acceptedLatestTerms}, Version: ${userProfile?.termsVersionAccepted} (Latest: ${LATEST_TERMS_VERSION})`);
@@ -59,7 +59,8 @@ export default function AuthenticatedAppLayout({
 
     // Check 1: No User
     if (!user) {
-      console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] User is NULL. Current path: ${pathname}.`);
+      console.log(`[AuthenticatedAppLayout useEffect DECISION POINT - Path: ${pathname}] CombinedLoading: ${combinedLoading}. Ready to check user.`);
+      console.log(`[AuthenticatedAppLayout useEffect DECISION - Path: ${pathname}] User is NULL. Current path: ${pathname}.`);
       if (pathname !== '/login') {
         console.log(`  Redirecting to /login.`);
         router.replace('/login');
@@ -72,12 +73,12 @@ export default function AuthenticatedAppLayout({
 
     // Check 2: No User Profile (but user exists)
     if (!userProfile) {
-      console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] UserProfile is NULL (User UID: ${user.uid}). Current path: ${pathname}.`);
+      console.log(`[AuthenticatedAppLayout useEffect DECISION POINT - Path: ${pathname}] User present, UserProfile is NULL. Current path: ${pathname}.`);
       if (pathname !== '/profile') {
-        console.log(`  Redirecting to /profile for setup.`);
+        console.log(`  Redirecting to /profile for setup as UserProfile is missing.`);
         router.replace('/profile');
       } else {
-        console.log(`  Already on /profile. No redirect needed.`);
+        console.log(`  Already on /profile. No redirect needed (UserProfile missing).`);
       }
       return;
     }
@@ -89,7 +90,7 @@ export default function AuthenticatedAppLayout({
       const now = new Date();
       const daysSinceLastChange = (now.getTime() - lastPasswordChange.getTime()) / (1000 * 3600 * 24);
       if (daysSinceLastChange >= 90) {
-        console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Password EXPIRED. Current path: ${pathname}.`);
+        console.log(`[AuthenticatedAppLayout useEffect DECISION - Path: ${pathname}] Password EXPIRED. Current path: ${pathname}.`);
         if (pathname !== '/reset-password-required') {
             console.log(`  Showing password reset modal and will navigate via modal button.`);
             setShowPasswordResetModal(true);
@@ -100,55 +101,57 @@ export default function AuthenticatedAppLayout({
       }
     } else {
       console.warn(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Last password change date missing for user ${userProfile.id}. Consider forcing reset.`);
-      // setShowPasswordResetModal(true); // Optionally force reset if date is missing
     }
     console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Password not expired or date missing (logged warning).`);
 
 
     // Check 4: Terms and Conditions
     if (userProfile.acceptedLatestTerms !== true || userProfile.termsVersionAccepted !== LATEST_TERMS_VERSION) {
-      console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Terms NOT ACCEPTED or version mismatch. Current path: ${pathname}.`);
+      console.log(`[AuthenticatedAppLayout useEffect DECISION - Path: ${pathname}] Terms NOT ACCEPTED or version mismatch. Current path: ${pathname}.`);
       setShowTermsModal(true);
       return; 
     } else {
-      setShowTermsModal(false);
+      setShowTermsModal(false); // Ensure modal is hidden if terms are accepted
     }
     console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Terms are ACCEPTED.`);
 
     // Check 5: Profile Setup Completion
     if (userProfile.profileSetupComplete !== true) {
-      console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Profile setup INCOMPLETE. Current path: ${pathname}.`);
+      console.log(`[AuthenticatedAppLayout useEffect DECISION - Path: ${pathname}] Profile setup INCOMPLETE. Current path: ${pathname}.`);
       if (pathname !== '/profile') {
-        console.log(`  Redirecting to /profile.`);
+        console.log(`  Redirecting to /profile because profile setup is incomplete.`);
         router.replace('/profile');
       } else {
-        console.log(`  Already on /profile. No redirect needed.`);
+        console.log(`  Already on /profile. No redirect needed (profile setup incomplete).`);
       }
       return;
     }
     console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] Profile setup is COMPLETE.`);
 
+    // If user is on /login or /signup page but is fully authenticated and profile complete, redirect to dashboard
+    if (user && userProfile && userProfile.profileSetupComplete === true && (pathname === '/login' || pathname === '/signup')) {
+        console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] User is authenticated, profile complete, but on an auth page. Redirecting to /.`);
+        router.replace('/');
+        return;
+    }
+
     console.log(`[AuthenticatedAppLayout useEffect - Path: ${pathname}] All checks passed. User: ${user.uid}, Profile: ${userProfile.id}.`);
 
-  }, [user, userProfile, combinedLoading, authLoading, profileLoading, router, pathname, setUserProfile /* Added setUserProfile as it's used in handleAcceptTerms which is in scope */]);
+  }, [user, userProfile, combinedLoading, router, pathname, setUserProfile]);
 
   const handleAcceptTerms = async () => {
     if (!user || !userProfile) return;
     const result = await updateUserTermsAcceptance(user.uid, true, LATEST_TERMS_VERSION);
     if (result.success) {
       toast({ title: "Terms Accepted", description: "Thank you for accepting the terms and conditions." });
-      // Critical: Update local userProfile state
       if (setUserProfile) {
         setUserProfile(prev => prev ? ({ ...prev, acceptedLatestTerms: true, termsVersionAccepted: LATEST_TERMS_VERSION }) : null);
       }
       setShowTermsModal(false);
-      // After accepting terms, if profile setup is still incomplete and not on profile, redirect.
-      // This re-evaluates the useEffect conditions.
       if (userProfile.profileSetupComplete !== true && pathname !== '/profile') {
         console.log('[AuthenticatedAppLayout handleAcceptTerms] Terms accepted, profile incomplete, redirecting to /profile.');
         router.replace('/profile');
       } else if (userProfile.profileSetupComplete === true && (pathname === '/profile' || pathname ==='/')) {
-        // If profile is complete AND they were on /profile (perhaps just for terms) or on root, ensure they go to the main app view.
         console.log('[AuthenticatedAppLayout handleAcceptTerms] Terms accepted, profile complete, ensuring navigation to / (dashboard).');
         router.replace('/');
       }
@@ -175,39 +178,43 @@ export default function AuthenticatedAppLayout({
     setIsSyncing(true);
     toast({ title: "Sync Started", description: "Fetching latest data from connected services...", duration: 3000 });
 
-    const results: SyncResult[] = await syncAllConnectedData();
-    let overallSuccess = true;
+    const response: SyncAllResults = await syncAllConnectedData(); // Correctly typed response
+    let overallSuccess = response.success; // Use overall success from SyncAllResults if available, or derive
     let successCount = 0;
     let errorCount = 0;
 
-    results.forEach(result => {
-        if (result.success) {
-            successCount++;
-            toast({
-                title: `Sync Success: ${result.service}`,
-                description: result.message || `${result.activitiesProcessed || 0} activities/items processed.`,
-                variant: "default"
-            });
-        } else {
-            errorCount++;
-            overallSuccess = false;
-            toast({
-                title: `Sync Error: ${result.service}`,
-                description: result.error || "An unknown error occurred.",
-                variant: "destructive"
-            });
-        }
-    });
+    if (response.results && Array.isArray(response.results)) {
+      response.results.forEach(result => { // Iterate over response.results
+          if (result.success) {
+              successCount++;
+              toast({
+                  title: `Sync Success: ${result.service}`,
+                  description: result.message || `${result.activitiesProcessed || 0} activities/items processed.`,
+                  variant: "default"
+              });
+          } else {
+              errorCount++;
+              overallSuccess = false; // If any individual sync fails, overall might be considered false
+              toast({
+                  title: `Sync Error: ${result.service}`,
+                  // Use result.message or result.errorCode for description
+                  description: result.message || result.errorCode || "An unknown error occurred.",
+                  variant: "destructive"
+              });
+          }
+      });
+    }
 
-    if (results.length === 0) {
-         toast({ title: "Sync Complete", description: "No services were actively synced or configured for sync.", variant: "default"});
-    } else if (overallSuccess) {
+
+    if (!response.results || response.results.length === 0) {
+         toast({ title: "Sync Complete", description: response.error || "No services were actively synced or configured for sync.", variant: response.error ? "destructive" : "default"});
+    } else if (overallSuccess && errorCount === 0) { // Check errorCount too
         toast({ title: "Sync Successful", description: `All connected services synced successfully. ${successCount} services updated.`, duration: 5000 });
     } else {
         toast({ title: "Sync Partially Successful", description: `${successCount} services synced, ${errorCount} encountered errors. Check individual notifications.`, variant: "default", duration: 7000 });
     }
     setIsSyncing(false);
-    await checkAuthState();
+    await checkAuthState(); // Refresh auth state and profile
   };
 
   if (combinedLoading) {
@@ -220,10 +227,7 @@ export default function AuthenticatedAppLayout({
     );
   }
 
-  // --- Post-loading checks for rendering ---
-  // These are fallbacks; useEffect should handle redirects.
-  // If these are hit, it means a redirect is likely imminent or there's a rapid state change.
-
+  // Fallback rendering checks - useEffect should ideally handle redirects before these are hit significantly.
   if (!user) {
     console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] User is NULL (and not combinedLoading). useEffect should redirect to /login.`);
     return (
@@ -235,21 +239,19 @@ export default function AuthenticatedAppLayout({
   }
   
   if (!userProfile) {
-    console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] UserProfile is NULL (User: ${user.uid}, and not combinedLoading). useEffect should redirect to /profile.`);
+    console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] UserProfile is NULL (User: ${user.uid}, and not combinedLoading). useEffect should redirect to /profile for setup.`);
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
         <Loader2 className="h-12 w-12 animate-spin text-amber-500" />
-        <p className="ml-4 text-lg text-amber-600">Profile data missing. Redirecting to setup...</p>
+        <p className="ml-4 text-lg text-amber-600">Profile data missing. Redirecting to profile setup...</p>
       </div>
     );
   }
 
-  // If terms are not accepted, the modal will show. The useEffect handles this.
-  // If profile setup is not complete and we are NOT on /profile, useEffect redirects.
-  // If we are on /profile and setup is not complete, we should render the profile page.
-  // This explicit check is a safeguard in case useEffect redirect is slow or there's a specific scenario.
+  // This case implies profile setup isn't complete, AND we are NOT on the profile page.
+  // The useEffect should handle redirecting to /profile. This is a visual fallback.
   if (userProfile.profileSetupComplete !== true && pathname !== '/profile') {
-    console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] Profile setup INCOMPLETE and NOT on /profile page. useEffect should redirect.`);
+    console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] Profile setup INCOMPLETE and NOT on /profile page. useEffect should redirect. Displaying interim loader.`);
      return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -258,7 +260,6 @@ export default function AuthenticatedAppLayout({
     );
   }
 
-  // If all checks pass (or modals are handling their state), render the app.
   console.log(`[AuthenticatedAppLayout RENDER - Path: ${pathname}] All checks passed or modals handle state. Rendering AppLayoutClient.`);
   return (
     <>
@@ -302,5 +303,3 @@ export default function AuthenticatedAppLayout({
     </>
   );
 }
-
-    
