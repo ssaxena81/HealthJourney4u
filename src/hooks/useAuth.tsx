@@ -15,15 +15,15 @@ console.log("[useAuth.tsx Module Scope] firebaseAuthModule:", firebaseAuthModule
 const AuthContext = createContext<{
   user: FirebaseUser | null;
   userProfile: UserProfile | null;
-  setUserProfile: React.Dispatch<React.SetStateAction<UserProfile | null>> | null;
+  setUserProfile: React.Dispatch<React.SetStateAction<UserProfile | null>> | null; // Keep this for direct profile updates if needed elsewhere
   loading: boolean;
   logout: () => Promise<void>;
-  checkAuthState: () => Promise<void>;
+  checkAuthState: () => Promise<void>; // Make this part of the context
 }>({
   user: null,
   userProfile: null,
   setUserProfile: null,
-  loading: true,
+  loading: true, // Start with loading true
   logout: defaultLogoutStub,
   checkAuthState: defaultCheckAuthStateStub,
 });
@@ -42,7 +42,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (!db) {
       console.warn("[AuthProvider fetchUserProfile] Firestore (db) is not initialized. Cannot fetch profile.");
       setUserProfileState(null);
-      return;
+      return; // Explicitly return undefined
     }
     try {
       const userDocRef = doc(db, "users", fbUser.uid);
@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.error(`[AuthProvider fetchUserProfile] ERROR fetching profile for UID: ${fbUser.uid}`, error);
       setUserProfileState(null);
     }
-  }, []);
+  }, []); // Empty dependency array as db should be stable module-level var
 
   const contextLogout = useCallback(async () => {
     console.log(`[AuthProvider contextLogout] Called. Timestamp: ${new Date().toISOString()}`);
@@ -68,10 +68,13 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return;
     }
     try {
+      setLoading(true); // Indicate loading during logout
       await signOut(firebaseAuthInstance);
-      console.log("[AuthProvider contextLogout] signOut successful.");
+      // onAuthStateChanged will handle setting user to null and profile to null
+      console.log("[AuthProvider contextLogout] signOut successful. onAuthStateChanged will update state.");
     } catch (error) {
       console.error("[AuthProvider contextLogout] Error signing out:", error);
+      setLoading(false); // Ensure loading is false if signout fails
     }
   }, [firebaseAuthInstance]);
 
@@ -84,22 +87,24 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       setLoading(false);
       return;
     }
-    setLoading(true); // Set loading true for manual check
+    setLoading(true);
+    console.log(`[AuthProvider contextCheckAuthState] Set loading to TRUE.`);
     const currentFbUser = firebaseAuthInstance.currentUser;
     console.log(`[AuthProvider contextCheckAuthState] firebaseAuthInstance.currentUser UID: ${currentFbUser?.uid || 'null'}`);
     if (currentFbUser) {
-      setUser(currentFbUser);
-      await fetchUserProfile(currentFbUser);
+      setUser(currentFbUser); // Update user state from current Firebase user
+      await fetchUserProfile(currentFbUser); // Fetch profile for this user
     } else {
       setUser(null);
       setUserProfileState(null);
     }
     setLoading(false);
-    console.log(`[AuthProvider contextCheckAuthState] Finished. Loading: ${false}, User UID: ${currentFbUser?.uid || 'null'}`);
-  }, [firebaseAuthInstance, fetchUserProfile]);
+    console.log(`[AuthProvider contextCheckAuthState] Finished. Loading state is now FALSE. User UID: ${user?.uid || currentFbUser?.uid || 'null'}, Profile ID: ${userProfile?.id || 'null'}`);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [firebaseAuthInstance, fetchUserProfile]); // user and userProfile removed from deps to avoid re-creating function unnecessarily. Relies on values at call time or module scope.
 
   useEffect(() => {
-    console.log(`[AuthProvider useEffect for onAuthStateChanged] Setting up listener. Timestamp: ${new Date().toISOString()}`);
+    console.log(`[AuthProvider useEffect for onAuthStateChanged] Setting up listener. Current firebaseAuthInstance.currentUser UID (before attach): ${firebaseAuthInstance?.currentUser?.uid || 'null'}. Timestamp: ${new Date().toISOString()}`);
     console.log("  firebaseAuthInstance available:", !!firebaseAuthInstance, "typeof onAuthStateChanged:", typeof firebaseAuthInstance?.onAuthStateChanged);
 
     if (!firebaseAuthInstance || typeof firebaseAuthInstance.onAuthStateChanged !== 'function') {
@@ -109,22 +114,23 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
 
     const unsubscribe = onAuthStateChanged(firebaseAuthInstance, async (fbUser) => {
-      console.log(`[AuthProvider onAuthStateChanged CALLBACK FIRED] Received fbUser UID: ${fbUser?.uid || 'null'}. Timestamp: ${new Date().toISOString()}`);
-      setLoading(true); // Indicate that auth state is being processed
+      setLoading(true); // Set loading true immediately upon auth state change detection
+      console.log(`[AuthProvider onAuthStateChanged CALLBACK FIRED] Received fbUser UID: ${fbUser?.uid || 'null'}. Loading is now TRUE. Timestamp: ${new Date().toISOString()}`);
 
       if (fbUser) {
-        console.log(`  [onAuthStateChanged] User is PRESENT. UID: ${fbUser.uid}`);
+        console.log(`  [onAuthStateChanged] User is PRESENT. UID: ${fbUser.uid}. Setting user state.`);
         setUser(fbUser);
+        console.log(`  [onAuthStateChanged] Calling fetchUserProfile for UID: ${fbUser.uid}`);
         await fetchUserProfile(fbUser);
       } else {
-        console.log("  [onAuthStateChanged] User is NULL.");
+        console.log("  [onAuthStateChanged] User is NULL. Resetting user and profile state.");
         setUser(null);
         setUserProfileState(null);
       }
-      setLoading(false); // Set loading to false AFTER all processing for this auth state change is complete
+      setLoading(false);
       // Use a timeout to log context state *after* React has a chance to process state updates
       setTimeout(() => {
-          console.log(`  [onAuthStateChanged POST-SETTIMEOUT] Context check: User UID: ${firebaseAuthInstance.currentUser?.uid || 'null'}, Profile ID: ${userProfile?.id || 'null'}`);
+          console.log(`  [onAuthStateChanged POST-SETTIMEOUT] Context check: User UID: ${firebaseAuthInstance.currentUser?.uid || 'null'}, Profile ID: ${userProfile?.id || 'null'}, Loading: ${loading}`);
       }, 0);
       console.log(`  [onAuthStateChanged] Finished processing. Loading state is now false.`);
     });
@@ -134,18 +140,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.log("[AuthProvider useEffect] CLEANING UP onAuthStateChanged listener.");
       unsubscribe();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [firebaseAuthInstance, fetchUserProfile]); // Dependencies for setting up the listener
 
   const contextValue = useMemo(() => {
     return {
       user,
       userProfile,
-      setUserProfile: setUserProfileState,
+      setUserProfile: setUserProfileState, // Expose the state setter for profile
       loading,
       logout: contextLogout,
       checkAuthState: contextCheckAuthState,
     };
-  }, [user, userProfile, loading, contextLogout, contextCheckAuthState]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, userProfile, loading, contextLogout, contextCheckAuthState]); // Removed setUserProfileState as it shouldn't be a dep for memoizing the context object itself.
 
   console.log(`[AuthProvider RENDER] Timestamp: ${new Date().toISOString()}. Context: User UID: ${contextValue.user?.uid || 'null'}, Loading: ${contextValue.loading}, Profile ID: ${contextValue.userProfile?.id || 'null'}`);
   return (
@@ -162,3 +170,4 @@ export const useAuth = () => {
   }
   return context;
 };
+    

@@ -12,7 +12,8 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { loginUser } from '@/app/actions/auth';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
-import type { UserProfile } from '@/types'; // Kept for structure if loginUser returns it fully
+import type { UserProfile } from '@/types'; 
+import { useAuth } from '@/hooks/useAuth'; // Import useAuth
 
 const loginFormSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -24,6 +25,7 @@ type LoginFormValues = z.infer<typeof loginFormSchema>;
 export default function LoginForm() {
   const { toast } = useToast();
   const router = useRouter(); 
+  const auth = useAuth(); // Get auth context
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -44,29 +46,32 @@ export default function LoginForm() {
         const result = await loginUser(values);
         console.log('[LOGIN_FORM_SUBMIT_RESULT] Received result from loginUser action:', result);
 
-        if (result && result.success && result.userProfile) {
+        if (result && result.success && result.userId) {
+          console.log('[LOGIN_FORM_SERVER_SUCCESS] Login server action successful. Calling auth.checkAuthState().');
+          await auth.checkAuthState(); // Explicitly update auth context
+          console.log('[LOGIN_FORM_AUTH_CHECK_COMPLETE] auth.checkAuthState() completed.');
+          // At this point, auth.user, auth.userProfile, and auth.loading should be fresh.
+
           toast({
             title: 'Login Successful!',
             description: 'Welcome back. Redirecting...',
           });
           
-          const serverProfile = result.userProfile;
-          console.log('[LOGIN_FORM_SUCCESS] Profile from server for redirection check:', serverProfile);
-
-          const profileSetupComplete = serverProfile?.profileSetupComplete;
-          console.log(`[LOGIN_FORM_SUCCESS] Profile setup complete status from server: ${profileSetupComplete}`);
+          // Use the fresh profile from the context
+          const currentAuthContextProfile = auth.userProfile; 
+          console.log('[LOGIN_FORM_SUCCESS_CONTEXT_PROFILE] Profile from AuthContext after checkAuthState:', currentAuthContextProfile);
+          
+          const profileSetupComplete = currentAuthContextProfile?.profileSetupComplete;
+          console.log(`[LOGIN_FORM_SUCCESS_CONTEXT_PROFILE_STATUS] Profile setup complete from context: ${profileSetupComplete}`);
 
           if (profileSetupComplete === true) {
             console.log('[LOGIN_FORM_SUCCESS] Redirecting (client-side) to dashboard page (/).');
             router.push('/');
           } else {
+            // This handles both profileSetupComplete: false and profileSetupComplete: undefined (or profile is null)
             console.log(`[LOGIN_FORM_SUCCESS] Redirecting (client-side) to profile setup page (/profile). Reason: profileSetupComplete is ${profileSetupComplete}`);
             router.push('/profile');
           }
-        } else if (result && result.success && result.userId && result.userProfile === null) { 
-          console.log('[LOGIN_FORM_SUCCESS_PROFILE_NULL] Login succeeded, got userId, profile is null. Redirecting to /profile for setup.');
-          toast({ title: 'Login Successful', description: 'Redirecting to complete profile setup.' });
-          router.push('/profile');
         } else {
           console.log('[LOGIN_FORM_FAILURE] Login action reported failure or unexpected result structure. Result:', result);
           setError(result?.error || 'An unknown error occurred during login.');
@@ -150,3 +155,4 @@ export default function LoginForm() {
     </form>
   );
 }
+    
