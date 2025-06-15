@@ -13,8 +13,23 @@ import { getAuth } from 'firebase/auth'; // For server-side getAuth
 import { getFirestore, type Firestore } from 'firebase/firestore'; // For server-side Firestore
 // DO NOT import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp' for server actions
 import { z } from 'zod';
-import type { UserProfile, SubscriptionTier, FitbitApiCallStats, StravaApiCallStats, GoogleFitApiCallStats, WithingsApiCallStats, WalkingRadarGoals, RunningRadarGoals, HikingRadarGoals, SwimmingRadarGoals, SleepRadarGoals, DashboardMetricIdValue, LoginResult } from '@/types';
-import { passwordSchema } from '@/types';
+// UserProfile and other specific types are now imported from @/types
+import type { 
+    UserProfile, 
+    SubscriptionTier, 
+    FitbitApiCallStats, 
+    StravaApiCallStats, 
+    GoogleFitApiCallStats, 
+    WithingsApiCallStats, 
+    WalkingRadarGoals, 
+    RunningRadarGoals, 
+    HikingRadarGoals, 
+    SwimmingRadarGoals, 
+    SleepRadarGoals, 
+    DashboardMetricIdValue,
+    LoginResult // Import LoginResult
+} from '@/types';
+import { passwordSchema } from '@/types'; // passwordSchema is also in @/types
 import { doc, setDoc, getDoc, updateDoc, Timestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { differenceInYears, format } from 'date-fns';
 
@@ -185,7 +200,7 @@ const LoginInputSchema = z.object({
   password: z.string().min(1, { message: "Password is required." }),
 });
 
-
+// LoginResult is now imported from @/types
 export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promise<LoginResult> {
   console.log("[LOGIN_ACTION_START] loginUser action initiated for email:", values.email);
   
@@ -790,3 +805,4 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
 
 
     
+

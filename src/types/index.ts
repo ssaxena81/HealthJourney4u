@@ -378,6 +378,18 @@ export interface UserProfile {
   dashboardRadarMetrics?: DashboardMetricIdValue[]; 
 }
 
+// --- LoginResult Type (Moved from auth.ts) ---
+export interface LoginResult {
+  success: boolean;
+  userId?: string;
+  passwordExpired?: boolean;
+  userProfile?: UserProfile | null; // Can be null if profile not found
+  error?: string;
+  errorCode?: string;
+}
+// --- End LoginResult Type ---
+
+
 export const subscriptionTiers: SubscriptionTier[] = ['free', 'silver', 'gold', 'platinum'];
 
 export interface TierFeatureComparison {
