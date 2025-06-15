@@ -18,7 +18,7 @@ const AuthContext = createContext<{
   setUserProfile: React.Dispatch<React.SetStateAction<UserProfile | null>> | null;
   loading: boolean;
   logout: () => Promise<void>;
-  checkAuthState: () => Promise<void>;
+  checkAuthState: () => Promise<void>; // Kept for potential manual checks
 }>({
   user: null,
   userProfile: null,
@@ -31,7 +31,7 @@ const AuthContext = createContext<{
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfileState] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(true); // Start true for initial auth check
   const firebaseAuthInstance = firebaseAuthModule;
 
   console.log(`[AuthProvider Root Level] Timestamp: ${new Date().toISOString()}`);
@@ -42,7 +42,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     if (!db) {
       console.warn("[AuthProvider fetchUserProfile] Firestore (db) is not initialized. Cannot fetch profile.");
       setUserProfileState(null);
-      return;
+      return; // Return null or a specific error object if needed
     }
     try {
       const userDocRef = doc(db, "users", fbUser.uid);
@@ -50,7 +50,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       if (userDocSnap.exists()) {
         const profileData = userDocSnap.data() as UserProfile;
         setUserProfileState(profileData);
-        console.log(`[AuthProvider fetchUserProfile] Profile fetched for UID: ${fbUser.uid}. Profile:`, profileData);
+        console.log(`[AuthProvider fetchUserProfile] Profile fetched for UID: ${fbUser.uid}. Profile Setup Complete: ${profileData.profileSetupComplete}`);
       } else {
         console.warn(`[AuthProvider fetchUserProfile] Profile NOT FOUND in Firestore for UID: ${fbUser.uid}`);
         setUserProfileState(null);
@@ -67,17 +67,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.error("[AuthProvider contextLogout] Firebase Auth instance unavailable.");
       return;
     }
-    try {
-      // setLoading(true); // onAuthStateChanged will handle loading state transitions
-      await signOut(firebaseAuthInstance);
-      console.log("[AuthProvider contextLogout] signOut successful. onAuthStateChanged will update state.");
-      // No need to manually set user/profile to null here, onAuthStateChanged handles it.
-    } catch (error) {
-      console.error("[AuthProvider contextLogout] Error signing out:", error);
-      setLoading(false);
-    }
+    // onAuthStateChanged will handle setting loading, user, and userProfile
+    await signOut(firebaseAuthInstance);
+    console.log("[AuthProvider contextLogout] signOut successful. onAuthStateChanged will update state.");
   }, [firebaseAuthInstance]);
 
+  // This function is for manual checks, not the primary login flow.
   const contextCheckAuthState = useCallback(async () => {
     console.log(`[AuthProvider contextCheckAuthState] MANUALLY CALLED. Timestamp: ${new Date().toISOString()}`);
     if (!firebaseAuthInstance) {
@@ -98,8 +93,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     }
     setLoading(false);
     console.log(`  [contextCheckAuthState] Finished. Loading state is now FALSE. User UID: ${currentFbUser?.uid || 'null'}, Profile ID: ${userProfile?.id || 'null'}`);
-  }, [firebaseAuthInstance, fetchUserProfile, userProfile?.id]);
-
+  }, [firebaseAuthInstance, fetchUserProfile, userProfile?.id]); // userProfile.id dependency might be problematic here, review if causes loops
 
   useEffect(() => {
     console.log(`[AuthProvider useEffect for onAuthStateChanged] Setting up listener. Timestamp: ${new Date().toISOString()}`);
@@ -109,9 +103,12 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return () => {};
     }
 
+    setLoading(true); // Set loading true when the listener setup effect runs for the first time
+    console.log(`[AuthProvider useEffect onAuthStateChanged setup] Initial setLoading(true) for listener setup.`);
+
     const unsubscribe = onAuthStateChanged(firebaseAuthInstance, async (fbUser) => {
       console.log(`[AuthProvider onAuthStateChanged CALLBACK FIRED] Received fbUser UID: ${fbUser?.uid || 'null'}. Timestamp: ${new Date().toISOString()}`);
-      setLoading(true);
+      setLoading(true); // Set loading true whenever auth state might be changing
       console.log(`  [onAuthStateChanged] Set loading to TRUE.`);
 
       if (fbUser) {
@@ -133,7 +130,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.log("[AuthProvider useEffect] CLEANING UP onAuthStateChanged listener.");
       unsubscribe();
     };
-  }, [firebaseAuthInstance, fetchUserProfile]);
+  }, [firebaseAuthInstance, fetchUserProfile]); // Dependencies: firebaseAuthInstance, fetchUserProfile
 
   const contextValue = useMemo(() => {
     return {
