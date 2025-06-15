@@ -5,15 +5,14 @@ import React, { useState, useTransition, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { useRouter } from 'next/navigation'; 
+import { useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { loginUser } from '@/app/actions/auth';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
-import type { UserProfile } from '@/types'; 
-import { useAuth } from '@/hooks/useAuth'; // Import useAuth
+import { useAuth } from '@/hooks/useAuth';
 
 const loginFormSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -24,11 +23,12 @@ type LoginFormValues = z.infer<typeof loginFormSchema>;
 
 export default function LoginForm() {
   const { toast } = useToast();
-  const router = useRouter(); 
-  const auth = useAuth(); // Get auth context
+  const router = useRouter();
+  const auth = useAuth();
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
+  const [loginAttemptedSuccessfully, setLoginAttemptedSuccessfully] = useState(false);
 
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
@@ -38,53 +38,62 @@ export default function LoginForm() {
     },
   });
 
+  useEffect(() => {
+    console.log(`[LoginForm useEffect] Triggered. loginAttempted: ${loginAttemptedSuccessfully}, auth.user: ${!!auth.user}, auth.loading: ${auth.loading}, auth.userProfile: ${!!auth.userProfile}`);
+    if (loginAttemptedSuccessfully && auth.user && !auth.loading) {
+      console.log('[LoginForm useEffect] Conditions met for redirect. Profile:', auth.userProfile);
+      toast({
+        title: 'Login Context Updated!',
+        description: 'User and profile loaded. Redirecting...',
+      });
+
+      const profileSetupComplete = auth.userProfile?.profileSetupComplete;
+      console.log(`[LoginForm useEffect] Profile setup complete from context: ${profileSetupComplete}`);
+
+      if (profileSetupComplete === true) {
+        console.log('[LoginForm useEffect] Redirecting (client-side) to dashboard page (/).');
+        router.push('/');
+      } else {
+        console.log(`[LoginForm useEffect] Redirecting (client-side) to profile setup page (/profile). Reason: profileSetupComplete is ${profileSetupComplete}`);
+        router.push('/profile');
+      }
+      setLoginAttemptedSuccessfully(false); // Reset flag after redirect attempt
+    }
+  }, [auth.user, auth.userProfile, auth.loading, loginAttemptedSuccessfully, router, toast]);
+
   const onSubmit = (values: LoginFormValues) => {
     setError(null);
-    console.log('[LOGIN_FORM_SUBMIT_START] Submitting login form with values:', values.email);
+    setLoginAttemptedSuccessfully(false); // Reset before new attempt
+    console.log('[LOGIN_FORM_SUBMIT_START] Submitting login form with email:', values.email);
     startTransition(async () => {
       try {
         const result = await loginUser(values);
         console.log('[LOGIN_FORM_SUBMIT_RESULT] Received result from loginUser action:', result);
 
         if (result && result.success && result.userId) {
-          console.log('[LOGIN_FORM_SERVER_SUCCESS] Login server action successful. Calling auth.checkAuthState().');
-          await auth.checkAuthState(); // Explicitly update auth context
-          console.log('[LOGIN_FORM_AUTH_CHECK_COMPLETE] auth.checkAuthState() completed.');
-          // At this point, auth.user, auth.userProfile, and auth.loading should be fresh.
-
+          console.log('[LOGIN_FORM_SERVER_SUCCESS] Login server action successful. Waiting for AuthContext to update via onAuthStateChanged.');
           toast({
-            title: 'Login Successful!',
-            description: 'Welcome back. Redirecting...',
+            title: 'Login Submitted',
+            description: 'Verifying session, please wait...',
           });
-          
-          // Use the fresh profile from the context
-          const currentAuthContextProfile = auth.userProfile; 
-          console.log('[LOGIN_FORM_SUCCESS_CONTEXT_PROFILE] Profile from AuthContext after checkAuthState:', currentAuthContextProfile);
-          
-          const profileSetupComplete = currentAuthContextProfile?.profileSetupComplete;
-          console.log(`[LOGIN_FORM_SUCCESS_CONTEXT_PROFILE_STATUS] Profile setup complete from context: ${profileSetupComplete}`);
-
-          if (profileSetupComplete === true) {
-            console.log('[LOGIN_FORM_SUCCESS] Redirecting (client-side) to dashboard page (/).');
-            router.push('/');
-          } else {
-            // This handles both profileSetupComplete: false and profileSetupComplete: undefined (or profile is null)
-            console.log(`[LOGIN_FORM_SUCCESS] Redirecting (client-side) to profile setup page (/profile). Reason: profileSetupComplete is ${profileSetupComplete}`);
-            router.push('/profile');
-          }
+          setLoginAttemptedSuccessfully(true); // Signal that onAuthStateChanged should now lead to a redirect
+          // DO NOT call auth.checkAuthState() here. Let onAuthStateChanged handle it.
+          // DO NOT redirect here. Let the useEffect handle it after context update.
         } else {
-          console.log('[LOGIN_FORM_FAILURE] Login action reported failure or unexpected result structure. Result:', result);
+          console.log('[LOGIN_FORM_FAILURE] Login action reported failure. Result:', result);
           setError(result?.error || 'An unknown error occurred during login.');
           toast({
             title: 'Login Failed',
             description: result?.error || 'Please check your credentials.',
             variant: 'destructive',
           });
+          setLoginAttemptedSuccessfully(false);
         }
       } catch (transitionError: any) {
         console.error('[LOGIN_FORM_ERROR] Error within startTransition async block:', transitionError);
-        setError(transitionError.message || 'An unexpected error occurred during login process.');
+        setError(transitionError.message || 'An unexpected error occurred.');
         toast({ title: 'Login Error', description: 'An unexpected client-side error occurred.', variant: 'destructive' });
+        setLoginAttemptedSuccessfully(false);
       }
     });
   };
@@ -143,10 +152,10 @@ export default function LoginForm() {
       </>
 
       <Button type="submit" className="w-full" disabled={isPending}>
-        {isPending ? (
+        {isPending || (loginAttemptedSuccessfully && auth.loading) ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            {'Logging In...'}
+            {loginAttemptedSuccessfully && auth.loading ? 'Verifying...' : 'Logging In...'}
           </>
         ) : (
           'Log In'
