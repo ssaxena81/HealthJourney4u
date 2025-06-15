@@ -22,7 +22,7 @@ const AuthContext = createContext<AuthContextType>({
   user: null,
   userProfile: null,
   setUserProfile: null,
-  loading: true, // Initialize loading to true
+  loading: true,
   logout: async () => { console.error("AuthContext: Default logout stub executed."); },
 });
 
@@ -30,89 +30,109 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   console.log(`[AuthProvider BODY START] Component rendering. Timestamp: ${new Date().toISOString()}`);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfileState] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true); // Crucial: Initialize to true
+  const [loading, setLoading] = useState(true);
 
   console.log(`[AuthProvider State Init] user: ${user?.uid || 'null'}, loading: ${loading}. Timestamp: ${new Date().toISOString()}`);
-  console.log("  firebaseAuthInstance (from clientApp.ts) available at AuthProvider module scope:", !!firebaseAuthInstance);
+  console.log(`  firebaseAuthInstance (from clientApp.ts) available at AuthProvider module scope: ${!!firebaseAuthInstance}`);
+
+  console.log(`[AuthProvider LOG POINT PRE-CALLBACKS] Before useCallback definitions. Timestamp: ${new Date().toISOString()}`);
 
   const fetchUserProfile = useCallback(async (fbUser: FirebaseUser) => {
     console.log(`[AuthProvider fetchUserProfile] Called for UID: ${fbUser.uid}. Timestamp: ${new Date().toISOString()}`);
     if (!db) {
       console.warn("[AuthProvider fetchUserProfile] Firestore (db) is not initialized. Cannot fetch profile.");
       setUserProfileState(null);
-      return;
+      return null;
     }
     try {
       const userDocRef = doc(db, "users", fbUser.uid);
       const userDocSnap = await getDoc(userDocRef);
       if (userDocSnap.exists()) {
         const profileData = userDocSnap.data() as UserProfile;
+        console.log(`[AuthProvider fetchUserProfile] Profile fetched for UID: ${fbUser.uid}. Profile Data:`, JSON.stringify(profileData));
         setUserProfileState(profileData);
-        console.log(`[AuthProvider fetchUserProfile] Profile fetched for UID: ${fbUser.uid}. Profile Setup Complete: ${profileData.profileSetupComplete}. Data:`, JSON.stringify(profileData));
+        return profileData;
       } else {
         console.warn(`[AuthProvider fetchUserProfile] Profile NOT FOUND in Firestore for UID: ${fbUser.uid}`);
         setUserProfileState(null);
+        return null;
       }
     } catch (error) {
       console.error(`[AuthProvider fetchUserProfile] ERROR fetching profile for UID: ${fbUser.uid}`, error);
       setUserProfileState(null);
+      return null;
     }
-  }, []); // db is stable from module scope
+  }, []);
 
   const contextLogout = useCallback(async () => {
     console.log(`[AuthProvider contextLogout] Called. Timestamp: ${new Date().toISOString()}`);
     if (!firebaseAuthInstance) {
       console.error("[AuthProvider contextLogout] Firebase Auth instance unavailable for logout.");
-      // Manually reset state if auth instance is gone, though onAuthStateChanged should also fire with null
-      setLoading(true);
+      setLoading(true); setUser(null); setUserProfileState(null); setLoading(false);
+      return;
+    }
+    try {
+      await signOut(firebaseAuthInstance);
+      console.log("[AuthProvider contextLogout] signOut successful. onAuthStateChanged should handle context updates.");
+    } catch (error) {
+      console.error("[AuthProvider contextLogout] Error during signOut:", error);
+      setLoading(true); setUser(null); setUserProfileState(null); setLoading(false);
+    }
+  }, []);
+
+  console.log(`[AuthProvider LOG POINT POST-CALLBACKS] After useCallback definitions. Timestamp: ${new Date().toISOString()}`);
+
+  useEffect(() => {
+    console.log(`[AuthProvider useEffect for onAuthStateChanged] EXECUTING EFFECT. Timestamp: ${new Date().toISOString()}`);
+    console.log(`  [AuthProvider useEffect] Checking firebaseAuthInstance INSIDE effect. Available: ${!!firebaseAuthInstance}, typeof onAuthStateChanged: ${typeof firebaseAuthModule?.onAuthStateChanged}`);
+
+    if (!firebaseAuthInstance || typeof firebaseAuthInstance.onAuthStateChanged !== 'function') {
+      console.warn(`  [AuthProvider useEffect] Firebase Auth instance or onAuthStateChanged function NOT READY INSIDE effect. Auth listener NOT set up. Setting loading to false.`);
       setUser(null);
       setUserProfileState(null);
       setLoading(false);
       return;
     }
-    await signOut(firebaseAuthInstance);
-    // onAuthStateChanged should handle further state updates.
-  }, [firebaseAuthInstance]);
 
-  useEffect(() => {
-    console.log(`[AuthProvider useEffect for onAuthStateChanged] EXECUTING EFFECT. Timestamp: ${new Date().toISOString()}`); // THIS IS THE CRITICAL LOG
-    setLoading(true);
-    console.log(`  [AuthProvider useEffect] Set loading to TRUE. firebaseAuthInstance type: ${typeof firebaseAuthInstance}, onAuthStateChanged type: ${typeof firebaseAuthInstance?.onAuthStateChanged}`);
+    console.log(`  [AuthProvider useEffect] Subscribing to onAuthStateChanged...`);
+    let unsubscribe: (() => void) | null = null;
+    try {
+      unsubscribe = onAuthStateChanged(firebaseAuthInstance, async (fbUser) => {
+        console.log(`[AuthProvider onAuthStateChanged CALLBACK FIRED] Received fbUser UID: ${fbUser?.uid || 'null'}. Timestamp: ${new Date().toISOString()}`);
+        setLoading(true);
+        console.log(`  [onAuthStateChanged Callback] Set loading to TRUE.`);
 
-    if (!firebaseAuthInstance || typeof firebaseAuthInstance.onAuthStateChanged !== 'function') {
-      console.warn(`[AuthProvider useEffect] Firebase Auth instance NOT READY (instance is ${firebaseAuthInstance ? 'defined' : 'null/undefined'}, onAuthStateChanged is ${typeof firebaseAuthInstance?.onAuthStateChanged}). Auth listener NOT set up. Setting loading to false.`);
+        if (fbUser) {
+          console.log(`  [onAuthStateChanged Callback] User is PRESENT. UID: ${fbUser.uid}. Setting user state.`);
+          setUser(fbUser);
+          console.log(`  [onAuthStateChanged Callback] Calling fetchUserProfile for UID: ${fbUser.uid}`);
+          await fetchUserProfile(fbUser);
+        } else {
+          console.log("  [onAuthStateChanged Callback] User is NULL. Resetting user and profile state.");
+          setUser(null);
+          setUserProfileState(null);
+        }
+        console.log("  [onAuthStateChanged Callback] All async operations complete. Setting loading to false.");
+        setLoading(false);
+      });
+      console.log("  [AuthProvider useEffect] Listener SUBSCRIBED successfully.");
+    } catch (e) {
+      console.error("  [AuthProvider useEffect] CRITICAL ERROR during onAuthStateChanged subscription:", e);
       setUser(null);
       setUserProfileState(null);
       setLoading(false);
-      return; // Return undefined (implicitly)
     }
 
-    console.log(`[AuthProvider useEffect] Subscribing to onAuthStateChanged...`);
-    const unsubscribe = onAuthStateChanged(firebaseAuthInstance, async (fbUser) => {
-      console.log(`[AuthProvider onAuthStateChanged CALLBACK FIRED] Received fbUser UID: ${fbUser?.uid || 'null'}. Timestamp: ${new Date().toISOString()}`);
-      // setLoading(true); // Already set at the start of useEffect, ensure it's true for processing
-
-      if (fbUser) {
-        console.log(`  [onAuthStateChanged Callback] User is PRESENT. UID: ${fbUser.uid}.`);
-        setUser(fbUser); // Update user state first
-        console.log(`  [onAuthStateChanged Callback] Calling fetchUserProfile for UID: ${fbUser.uid}`);
-        await fetchUserProfile(fbUser); // Then fetch profile
-      } else {
-        console.log("  [onAuthStateChanged Callback] User is NULL. Resetting user and profile state.");
-        setUser(null);
-        setUserProfileState(null);
-      }
-      console.log("  [onAuthStateChanged Callback] All async operations complete. Setting loading to false.");
-      setLoading(false); // Set loading to false after all processing for this auth state change
-    });
-
-    console.log("[AuthProvider useEffect] Listener SUBSCRIBED.");
     return () => {
       console.log("[AuthProvider useEffect] CLEANING UP listener.");
-      unsubscribe();
+      if (unsubscribe) {
+        console.log("  [AuthProvider useEffect Cleanup] Calling unsubscribe().");
+        unsubscribe();
+      } else {
+        console.log("  [AuthProvider useEffect Cleanup] No unsubscribe function to call (likely subscription failed).");
+      }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // TEMPORARY: Empty dependency array for testing. Correct: [firebaseAuthInstance, fetchUserProfile]
+  }, []);
 
   const contextValue = useMemo(() => {
     return {
@@ -139,3 +159,4 @@ export const useAuth = () => {
   }
   return context;
 };
+    
