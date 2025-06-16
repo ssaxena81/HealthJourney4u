@@ -10,6 +10,7 @@ export function setCookie(name: string, value: string, days: number): void {
   }
   if (typeof document !== 'undefined') {
     document.cookie = name + "=" + (value || "")  + expires + "; path=/; SameSite=Lax" + (process.env.NODE_ENV === 'production' ? '; Secure' : '');
+    console.log('cookie name is: ${document.cookie}');
   }
 }
 
