@@ -5,6 +5,7 @@ import { GeistMono } from 'geist/font/mono';
 import './globals.css';
 import { AuthProvider } from '@/hooks/useAuth';
 import { Toaster } from "@/components/ui/toaster";
+import CookieConsentBanner from '@/components/ui/cookie-consent-banner'; // Added import
 
 export const metadata: Metadata = {
   title: 'Health Timeline',
@@ -22,6 +23,7 @@ export default function RootLayout({
         <AuthProvider>
           {children}
           <Toaster />
+          <CookieConsentBanner /> {/* Added Banner */}
         </AuthProvider>
       </body>
     </html>
