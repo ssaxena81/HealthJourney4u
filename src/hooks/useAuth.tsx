@@ -1,9 +1,9 @@
 
 'use client';
 
-import React, { useState, useEffect, createContext, useContext, useMemo } from 'react';
-import { onAuthStateChanged, type User as FirebaseUser, signOut } from 'firebase/auth'; // Added signOut back
-import { auth as firebaseAuthInstance, db } from '@/lib/firebase/clientApp';
+import React, { useState, useEffect, createContext, useContext, useMemo, useCallback } from 'react';
+import { onAuthStateChanged, type User as FirebaseUser, signOut } from 'firebase/auth';
+import { auth as firebaseAuthInstance, db } from '@/lib/firebase/clientApp'; // From clientApp.ts
 import type { UserProfile } from '@/types';
 import { doc, getDoc } from 'firebase/firestore';
 
@@ -11,87 +11,115 @@ interface AuthContextType {
   user: FirebaseUser | null;
   userProfile: UserProfile | null;
   loading: boolean;
-  logout: () => Promise<void>; // Added logout back
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
-  console.log(`[AuthProvider MINIMAL-REVERT BODY START] Timestamp: ${new Date().toISOString()}`);
+  console.log(`[AuthProvider BODY START] Timestamp: ${new Date().toISOString()}`);
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfileState] = useState<UserProfile | null>(null);
-  const [loading, setLoading] = useState(true); // Start true
+  const [loading, setLoading] = useState(true); // Initialize to true
 
-  console.log(`  [AuthProvider MINIMAL-REVERT State Init] firebaseAuthInstance available: ${!!firebaseAuthInstance}, db available: ${!!db}`);
+  console.log(`  [AuthProvider State Init] User: ${user?.uid || 'null'}, Loading: ${loading}. firebaseAuthInstance available: ${!!firebaseAuthInstance}`);
+
+  const fetchUserProfile = useCallback(async (fbUser: FirebaseUser): Promise<UserProfile | null> => {
+    console.log(`    [AuthProvider fetchUserProfile] Called for UID: ${fbUser.uid}. DB available: ${!!db}`);
+    if (!db) {
+      console.error("    [AuthProvider fetchUserProfile] Firestore 'db' instance is not available. Cannot fetch profile.");
+      return null;
+    }
+    try {
+      const profileSnap = await getDoc(doc(db, "users", fbUser.uid));
+      if (profileSnap.exists()) {
+        const profileData = profileSnap.data() as UserProfile;
+        console.log(`    [AuthProvider fetchUserProfile] Profile fetched for ${fbUser.uid}. Profile setup complete: ${profileData.profileSetupComplete}`);
+        return profileData;
+      } else {
+        console.log(`    [AuthProvider fetchUserProfile] No profile found for ${fbUser.uid}.`);
+        return null;
+      }
+    } catch (e) {
+      console.error(`    [AuthProvider fetchUserProfile] Error fetching profile for ${fbUser.uid}:`, e);
+      return null;
+    }
+  }, []); // No dependencies, as `db` is from module scope
 
   useEffect(() => {
-    console.log(`[AuthProvider MINIMAL-REVERT useEffect for Listener] EXECUTING EFFECT. Timestamp: ${new Date().toISOString()}`);
-    console.log(`  [AuthProvider MINIMAL-REVERT useEffect] firebaseAuthInstance in effect: ${!!firebaseAuthInstance}`);
+    console.log(`[AuthProvider useEffect for onAuthStateChanged] EXECUTING EFFECT. Timestamp: ${new Date().toISOString()}`);
+    console.log(`  [AuthProvider useEffect] firebaseAuthInstance in effect: ${!!firebaseAuthInstance}`);
 
     if (!firebaseAuthInstance) {
-      console.warn(`  [AuthProvider MINIMAL-REVERT useEffect] Firebase Auth instance NOT READY. Setting loading false.`);
+      console.warn("  [AuthProvider useEffect] Firebase Auth instance not available at effect execution. Setting loading to false and returning.");
       setLoading(false);
       return;
     }
 
-    console.log(`  [AuthProvider MINIMAL-REVERT useEffect] Subscribing to onAuthStateChanged...`);
+    console.log(`  [AuthProvider useEffect] Subscribing to onAuthStateChanged...`);
     const unsubscribe = onAuthStateChanged(firebaseAuthInstance, async (fbUser) => {
-      console.log(`  [AuthProvider MINIMAL-REVERT onAuthStateChanged CALLBACK START] User UID: ${fbUser?.uid || 'null'}`);
-      setLoading(true);
+      const callbackTime = new Date().toISOString();
+      console.log(`  [AuthProvider onAuthStateChanged CALLBACK START] Received fbUser UID: ${fbUser?.uid || 'null'}. Timestamp: ${callbackTime}`);
+      
+      // Critical: Set loading to true as soon as an auth event begins processing
+      setLoading(true); 
+      console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] Set loading to TRUE.`);
+
       if (fbUser) {
+        console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] User IS PRESENT (UID: ${fbUser.uid}). Setting user state.`);
         setUser(fbUser);
-        if (db) {
-          try {
-            console.log(`    [AuthProvider MINIMAL-REVERT onAuthStateChanged] Fetching profile for ${fbUser.uid}`);
-            const profileSnap = await getDoc(doc(db, "users", fbUser.uid));
-            if (profileSnap.exists()) {
-              setUserProfileState(profileSnap.data() as UserProfile);
-              console.log(`    [AuthProvider MINIMAL-REVERT onAuthStateChanged] Profile fetched for ${fbUser.uid}`);
-            } else {
-              setUserProfileState(null);
-              console.log(`    [AuthProvider MINIMAL-REVERT onAuthStateChanged] No profile found for ${fbUser.uid}`);
-            }
-          } catch (e) {
-            console.error("    [AuthProvider MINIMAL-REVERT onAuthStateChanged] Error fetching profile:", e);
-            setUserProfileState(null);
-          }
-        } else {
-           console.warn("    [AuthProvider MINIMAL-REVERT onAuthStateChanged] Firestore 'db' not available for profile fetch.");
-           setUserProfileState(null);
-        }
+        const profile = await fetchUserProfile(fbUser);
+        setUserProfileState(profile);
+        console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] User profile state set. Profile found: ${!!profile}`);
       } else {
+        console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] User IS NULL. Clearing user and userProfile states.`);
         setUser(null);
         setUserProfileState(null);
-        console.log(`  [AuthProvider MINIMAL-REVERT onAuthStateChanged] User is NULL.`);
       }
+      
       setLoading(false);
-      console.log(`  [AuthProvider MINIMAL-REVERT onAuthStateChanged CALLBACK END] Loading set to false.`);
+      console.log(`  [AuthProvider onAuthStateChanged CALLBACK END @ ${new Date().toISOString()}] Set loading to FALSE. Final context state for this event - User: ${fbUser?.uid || 'null'}, Profile: ${!!userProfileState}, Loading: false`);
     });
 
-    console.log(`  [AuthProvider MINIMAL-REVERT useEffect] Listener SUBSCRIBED.`);
+    console.log(`  [AuthProvider useEffect] Listener SUBSCRIBED.`);
     return () => {
-      console.log(`[AuthProvider MINIMAL-REVERT useEffect] CLEANING UP onAuthStateChanged listener.`);
+      console.log(`[AuthProvider useEffect] CLEANING UP onAuthStateChanged listener.`);
       unsubscribe();
     };
-  }, []); // Empty dependency array: run once on mount.
+  }, [fetchUserProfile]); // Dependency on fetchUserProfile (memoized)
 
-  const contextLogout = async () => { // Added logout back
-    console.log(`[AuthProvider MINIMAL-REVERT contextLogout] Called.`);
+  const contextLogout = useCallback(async () => {
+    console.log(`[AuthProvider contextLogout] Called.`);
     if (firebaseAuthInstance) {
-      await signOut(firebaseAuthInstance);
+      try {
+        await signOut(firebaseAuthInstance);
+        // onAuthStateChanged will be triggered by signOut, which will then handle
+        // setting user to null, profile to null, and loading states appropriately.
+        console.log(`[AuthProvider contextLogout] signOut successful. onAuthStateChanged will update context.`);
+      } catch (error) {
+        console.error("[AuthProvider contextLogout] Error signing out:", error);
+        // Even on error, ensure state reflects logged out user if possible, or indicate error
+        setUser(null);
+        setUserProfileState(null);
+        setLoading(false); // Ensure loading is false if signout fails to trigger onAuthStateChanged quickly
+      }
     } else {
-      console.error("[AuthProvider MINIMAL-REVERT contextLogout] Firebase Auth instance not available.");
+      console.error("[AuthProvider contextLogout] Firebase Auth instance not available for logout.");
+      setUser(null); // Attempt to clear client state even if instance is missing
+      setUserProfileState(null);
+      setLoading(false);
     }
-  };
+  }, []); // No dependencies as firebaseAuthInstance is from module scope
 
   const contextValue = useMemo(() => ({
     user,
     userProfile,
     loading,
-    logout: contextLogout, // Added logout back
-  }), [user, userProfile, loading]);
+    logout: contextLogout,
+  }), [user, userProfile, loading, contextLogout]);
 
-  console.log(`[AuthProvider MINIMAL-REVERT RENDER] Loading: ${loading}, User: ${user?.uid || 'null'}`);
+  console.log(`[AuthProvider RENDER/Memo] Timestamp: ${new Date().toISOString()}. Context: User UID: ${contextValue.user?.uid || 'null'}, Loading: ${contextValue.loading}, Profile ID: ${contextValue.userProfile?.id || 'null'}`);
+
   return (
     <AuthContext.Provider value={contextValue}>
       {children}
