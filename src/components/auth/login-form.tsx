@@ -31,20 +31,26 @@ export default function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   const [loginActionCompleted, setLoginActionCompleted] = useState(false);
-  // New state to track the auth_sync_complete cookie
   const [isAuthSyncCookiePresent, setIsAuthSyncCookiePresent] = useState(false);
+
+  // Correctly initialize useForm
+  const form = useForm<LoginFormValues>({
+    resolver: zodResolver(loginFormSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+    },
+  });
 
   // Check for sync cookie periodically after login action completes
   useEffect(() => {
     let intervalId: NodeJS.Timeout | undefined;
-    if (loginActionCompleted && !auth.user) { // Only poll if login action done but context user not set
+    if (loginActionCompleted && !auth.user) {
       console.log("[LoginForm CookiePollEffect] Starting to poll for auth_sync_complete cookie.");
-      // Initial check
       if (getCookie('auth_sync_complete') === 'true') {
         console.log("[LoginForm CookiePollEffect] auth_sync_complete cookie found on initial check.");
         setIsAuthSyncCookiePresent(true);
       } else {
-        // Poll every 250ms for a few seconds
         let attempts = 0;
         const maxAttempts = 20; // Poll for up to 5 seconds
         intervalId = setInterval(() => {
@@ -56,8 +62,6 @@ export default function LoginForm() {
           } else if (attempts >= maxAttempts) {
             console.log("[LoginForm CookiePollEffect] auth_sync_complete cookie not found after max attempts.");
             clearInterval(intervalId);
-            // Optionally, handle timeout here if needed, e.g. show an error or different message
-            // For now, we rely on the main redirection useEffect to see the stale context.
           }
         }, 250);
       }
@@ -76,12 +80,9 @@ export default function LoginForm() {
     const effectTimestamp = new Date().toISOString();
     console.log(`[LoginForm RedirectionEffect @ ${effectTimestamp}] Triggered. loginActionCompleted: ${loginActionCompleted}, auth.user: ${!!auth.user}, auth.loading: ${auth.loading}, isAuthSyncCookiePresent: ${isAuthSyncCookiePresent}, auth.userProfile: ${!!auth.userProfile}`);
     
-    // Condition for redirection: login server action must have been completed AND
-    // the auth_sync_complete cookie must be present (signaling AuthProvider has processed the user) AND
-    // auth context must reflect the user AND auth context must not be loading.
     if (loginActionCompleted && isAuthSyncCookiePresent && auth.user && !auth.loading) {
       console.log(`[LoginForm RedirectionEffect @ ${effectTimestamp}] Conditions met. Proceeding with redirection logic.`);
-      eraseCookie('auth_sync_complete'); // Clean up the sync cookie
+      eraseCookie('auth_sync_complete'); 
       console.log(`[LoginForm RedirectionEffect @ ${effectTimestamp}] auth_sync_complete cookie erased.`);
 
       const profileSetupComplete = auth.userProfile?.profileSetupComplete;
@@ -94,12 +95,10 @@ export default function LoginForm() {
         console.log(`[LoginForm RedirectionEffect @ ${effectTimestamp}] Redirecting (client-side) to profile setup page (/profile). Reason: profileSetupComplete is ${profileSetupComplete}`);
         router.push('/profile');
       }
-      setLoginActionCompleted(false); // Reset flag
-      setIsAuthSyncCookiePresent(false); // Reset cookie state
+      setLoginActionCompleted(false); 
+      setIsAuthSyncCookiePresent(false); 
     } else if (loginActionCompleted && isAuthSyncCookiePresent && !auth.user && !auth.loading) {
-        console.warn(`[LoginForm RedirectionEffect @ ${effectTimestamp}] Auth sync cookie present, login action complete, but AuthContext.user is still null and AuthContext is not loading. This could indicate an issue with AuthProvider state propagation despite the cookie, or the cookie was set prematurely.`);
-        // setError("Login verification failed on client. Please try again.");
-        // toast({ title: "Verification Issue", description: "Could not verify your session. Please try logging in again.", variant: "destructive"});
+        console.warn(`[LoginForm RedirectionEffect @ ${effectTimestamp}] Auth sync cookie present, login action complete, but AuthContext.user is still null and AuthContext is not loading.`);
     } else if (loginActionCompleted && !isAuthSyncCookiePresent && !auth.user && !auth.loading) {
         console.log(`[LoginForm RedirectionEffect @ ${effectTimestamp}] Login action complete, but sync cookie NOT present and user still not in context. Waiting or polling for cookie.`);
     }
@@ -107,10 +106,10 @@ export default function LoginForm() {
   }, [auth.user, auth.userProfile, auth.loading, loginActionCompleted, isAuthSyncCookiePresent, router, toast, auth]);
 
 
-  const onSubmit = (values: LoginFormValues) => {
+  const onSubmit = (values: LoginFormValues) => { // Restored 'form' variable here
     setError(null);
     setLoginActionCompleted(false);
-    setIsAuthSyncCookiePresent(false); // Reset on new submission
+    setIsAuthSyncCookiePresent(false);
     console.log('[LOGIN_FORM_SUBMIT_START] Submitting login form with email:', values.email);
     startServerActionTransition(async () => {
       try {
@@ -124,7 +123,6 @@ export default function LoginForm() {
             description: 'Verifying session...',
           });
           setLoginActionCompleted(true);
-          // IMPORTANT: Do NOT redirect here. Let the useEffect handle it after AuthContext updates AND sync cookie is found.
         } else {
           console.log('[LOGIN_FORM_FAILURE] Login server action reported failure. Result:', result);
           setError(result?.error || 'An unknown error occurred during login.');
@@ -147,7 +145,7 @@ export default function LoginForm() {
   const isLoadingUI = isServerActionPending || (loginActionCompleted && auth.loading) || (loginActionCompleted && !isAuthSyncCookiePresent && !auth.user);
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6"> {/* Ensure 'form' is used here */}
       {error && (
         <div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
           {error}
