@@ -11,14 +11,15 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { signUpUser } from '@/app/actions/auth'; // checkEmailAvailability removed
+import { signUpUser } from '@/app/actions/auth'; 
 import { passwordSchema } from '@/types';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import type { SubscriptionTier, UserProfile } from '@/types';
 import { subscriptionTiers } from '@/types';
-// import ComparePlansDialog from '@/components/ui/compare-plans-dialog'; // Kept commented
+// import ComparePlansDialog from '@/components/ui/compare-plans-dialog'; 
 import { useAuth } from '@/hooks/useAuth';
+import { setCookie } from '@/lib/cookie-utils'; // Import setCookie
 
 const signUpFormSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -37,7 +38,8 @@ type SignUpFormValues = z.infer<typeof signUpFormSchema>;
 export default function SignUpFlow() {
   const router = useRouter();
   const { toast } = useToast();
-  const { checkAuthState } = useAuth(); // setUserProfile removed as it's not directly used here now
+  // checkAuthState is not directly used here, so removed for now. 
+  // setUserProfile is also not directly used, server action handles profile creation.
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
@@ -67,15 +69,25 @@ export default function SignUpFlow() {
       
       console.log('[SignUpFlow handleFormSubmit] Server action result from signUpUser:', result);
 
-      if (result.success && result.userId) { 
+      if (result.success && result.userId && result.initialCookieState) { 
         toast({
           title: 'Account Created!',
-          description: 'You have successfully signed up. Please complete your profile.',
+          description: 'You have successfully signed up. Please log in to continue.',
         });
         
-        await checkAuthState(); 
-
-        router.push('/profile'); 
+        // Set the initial auth state cookie
+        try {
+          setCookie('app_auth_state', JSON.stringify(result.initialCookieState), 1); // Store for 1 day
+          console.log('[SignUpFlow handleFormSubmit] app_auth_state cookie set:', JSON.stringify(result.initialCookieState));
+        } catch (cookieError) {
+          console.error('[SignUpFlow handleFormSubmit] Error setting app_auth_state cookie:', cookieError);
+          // Decide if this is a critical error or if the app can proceed without it.
+          // For now, we'll log and proceed, but this might impact login flow.
+        }
+        
+        // No need to call checkAuthState() here, as the user will be redirected to login.
+        // The login process itself will trigger onAuthStateChanged and update the AuthContext.
+        router.push('/login'); 
       } else {
         const displayError = result.error || 'An unknown error occurred during sign up.';
         const displayErrorCode = result.errorCode ? ` (Code: ${result.errorCode})` : '';

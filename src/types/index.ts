@@ -329,10 +329,11 @@ export interface UserProfile {
   cellPhone?: string; 
   passwordResetCodeAttempt?: { code: string; expiresAt: string; }; 
   isAgeCertified?: boolean; 
-  profileSetupComplete?: boolean; // Added field
+  profileSetupComplete?: boolean; 
+  isProfileCreated?: boolean; // New flag
 
   lastPasswordChangeDate: string; 
-  lastLoggedInDate?: string; // Added new field
+  lastLoggedInDate?: string; 
   acceptedLatestTerms: boolean;
   termsVersionAccepted?: string; 
 
@@ -362,13 +363,13 @@ export interface UserProfile {
   fitbitApiCallStats?: FitbitApiCallStats;
   stravaApiCallStats?: StravaApiCallStats;
   googleFitApiCallStats?: GoogleFitApiCallStats;
-  withingsApiCallStats?: WithingsApiCallStats; // Added for Withings
+  withingsApiCallStats?: WithingsApiCallStats; 
 
   fitbitLastSuccessfulSync?: string; 
   stravaLastSyncTimestamp?: number; 
   googleFitLastSuccessfulSync?: string; 
-  withingsLastSuccessfulSync?: string; // Added for Withings
-  withingsUserId?: string; // Store Withings specific user ID
+  withingsLastSuccessfulSync?: string; 
+  withingsUserId?: string; 
 
   walkingRadarGoals?: WalkingRadarGoals;
   runningRadarGoals?: RunningRadarGoals;
@@ -383,7 +384,7 @@ export interface LoginResult {
   success: boolean;
   userId?: string;
   passwordExpired?: boolean;
-  userProfile?: UserProfile | null; // Can be null if profile not found
+  userProfile?: UserProfile | null; 
   error?: string;
   errorCode?: string;
 }
@@ -532,3 +533,4 @@ export interface TermsAndConditionsConfig {
   text: string;
   publishedAt?: string; // ISO Timestamp
 }
+

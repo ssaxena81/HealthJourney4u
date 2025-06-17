@@ -82,12 +82,17 @@ const SignUpDetailsInputSchema = z.object({
   path: ['confirmPassword'],
 });
 
+export interface InitialCookieStateType { // Explicit interface for clarity
+  isProfileCreated: boolean;
+  authSyncComplete: boolean;
+}
 interface SignUpResult {
   success: boolean;
   userId?: string;
   error?: string;
   errorCode?: string;
   details?: any;
+  initialCookieState?: InitialCookieStateType;
 }
 
 export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema>): Promise<SignUpResult> {
@@ -148,6 +153,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       termsVersionAccepted: undefined, 
       isAgeCertified: false,
       profileSetupComplete: false, 
+      isProfileCreated: false, // Initialize new flag
       connectedFitnessApps: [],
       connectedDiagnosticsServices: [],
       connectedInsuranceProviders: [],
@@ -167,9 +173,14 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       return { success: false, error: `Account created but profile setup failed: ${errorMessage}. Please contact support.`, errorCode, userId: userCredential.user.uid };
     }
 
+    const initialCookieState: InitialCookieStateType = {
+      isProfileCreated: false,
+      authSyncComplete: false, // Also initialize this for consistency
+    };
+
     console.log("[SIGNUP_ACTION_SUCCESS] signUpUser action completed successfully for UID:", userCredential.user.uid);
     console.log("[SIGNUP_ACTION_ATTEMPT_RETURN_SUCCESS]");
-    return { success: true, userId: userCredential.user.uid };
+    return { success: true, userId: userCredential.user.uid, initialCookieState };
   } catch (error: any) {
     console.error("[SIGNUP_ACTION_OUTER_CATCH_ERROR] Raw error in signUpUser's outer catch block:", error.message, error.stack);
     let errorMessage = "An unexpected error occurred during account creation.";
@@ -277,16 +288,17 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
           ? rawProfileData.lastPasswordChangeDate.toDate().toISOString()
           : typeof rawProfileData.lastPasswordChangeDate === 'string'
             ? rawProfileData.lastPasswordChangeDate
-            : new Date(0).toISOString()), // Fallback if missing, though should always be set
+            : new Date(0).toISOString()), 
         lastLoggedInDate: (rawProfileData.lastLoggedInDate instanceof Timestamp
           ? rawProfileData.lastLoggedInDate.toDate().toISOString()
           : typeof rawProfileData.lastLoggedInDate === 'string'
             ? rawProfileData.lastLoggedInDate
-            : undefined), // Can be undefined if first login
+            : undefined), 
         acceptedLatestTerms: !!rawProfileData.acceptedLatestTerms,
         termsVersionAccepted: typeof rawProfileData.termsVersionAccepted === 'string' ? rawProfileData.termsVersionAccepted : undefined,
         isAgeCertified: !!rawProfileData.isAgeCertified,
         profileSetupComplete: typeof rawProfileData.profileSetupComplete === 'boolean' ? rawProfileData.profileSetupComplete : false,
+        isProfileCreated: typeof rawProfileData.isProfileCreated === 'boolean' ? rawProfileData.isProfileCreated : false, // Handle new flag
         firstName: typeof rawProfileData.firstName === 'string' ? rawProfileData.firstName : undefined,
         middleInitial: typeof rawProfileData.middleInitial === 'string' ? rawProfileData.middleInitial : undefined,
         lastName: typeof rawProfileData.lastName === 'string' ? rawProfileData.lastName : undefined,
@@ -347,8 +359,6 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
         console.log(`[LOGIN_ACTION_PASSWORD_EXPIRED] Password expired for user ${userId}.`);
       }
     } else {
-      // If lastPasswordChangeDate is missing, consider it expired to force a reset.
-      // This should ideally not happen if the profile is created correctly during signup.
       passwordExpired = true; 
       console.warn(`[LOGIN_PASSWORD_DATE_MISSING] User ${userId} missing lastPasswordChangeDate. Treating as password expired.`);
     }
@@ -378,7 +388,6 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     return { success: false, error: errorMessage, errorCode: errorCode };
   }
   
-  // Fallback return, should ideally never be reached if logic is correct
   console.error("[LOGIN_ACTION_UNEXPECTED_FALLTHROUGH] LoginUser function reached end without explicit return. This indicates a flaw in control flow.");
   return { success: false, error: "Login failed due to an unexpected server-side control flow issue.", errorCode: "UNEXPECTED_FALLTHROUGH" };
 }
@@ -620,6 +629,8 @@ export async function updateDemographics(userId: string, values: z.infer<typeof 
           dateOfBirth: validatedValues.dateOfBirth,
           cellPhone: validatedValues.cellPhone,
           isAgeCertified: validatedValues.isAgeCertified,
+          isProfileCreated: true, // Set isProfileCreated to true upon successful demographics update
+          profileSetupComplete: true, // Also mark full profile setup as complete
       };
       console.log("[UPDATE_DEMOGRAPHICS_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId);
       await updateDoc(doc(serverDb, "users", userId), profileUpdateData);
@@ -805,4 +816,5 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
 
 
     
+
 
