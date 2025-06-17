@@ -318,6 +318,10 @@ export interface PerformanceRadarChartDataPoint {
   isBelowMinGoal?: boolean;   
 }
 
+export interface AppAuthStateCookie {
+  isProfileCreated: boolean;
+  authSyncComplete: boolean;
+}
 
 export interface UserProfile {
   id: string; 
@@ -330,12 +334,12 @@ export interface UserProfile {
   passwordResetCodeAttempt?: { code: string; expiresAt: string; }; 
   isAgeCertified?: boolean; 
   profileSetupComplete?: boolean; 
-  isProfileCreated?: boolean; // New flag
+  isProfileCreated?: boolean; 
 
   lastPasswordChangeDate: string; 
   lastLoggedInDate?: string; 
   acceptedLatestTerms: boolean;
-  termsVersionAccepted?: string; 
+  termsVersionAccepted?: string | null; 
 
   subscriptionTier: SubscriptionTier;
   paymentDetails?: any; 
@@ -387,6 +391,7 @@ export interface LoginResult {
   userProfile?: UserProfile | null; 
   error?: string;
   errorCode?: string;
+  initialCookieState?: AppAuthStateCookie; // Replaced previous InitialCookieStateType
 }
 // --- End LoginResult Type ---
 
@@ -533,4 +538,3 @@ export interface TermsAndConditionsConfig {
   text: string;
   publishedAt?: string; // ISO Timestamp
 }
-

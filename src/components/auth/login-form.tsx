@@ -13,8 +13,8 @@ import { useToast } from '@/hooks/use-toast';
 import { loginUser } from '@/app/actions/auth';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
-import type { LoginResult } from '@/types';
-import { getCookie, eraseCookie } from '@/lib/cookie-utils'; // Import cookie utils
+import type { LoginResult, AppAuthStateCookie } from '@/types';
+import { setCookie, getCookie, eraseCookie } from '@/lib/cookie-utils'; // Import cookie utils
 
 const loginFormSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -30,10 +30,13 @@ export default function LoginForm() {
   const [isServerActionPending, startServerActionTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
-  const [loginActionCompleted, setLoginActionCompleted] = useState(false);
-  const [isAuthSyncCookiePresent, setIsAuthSyncCookiePresent] = useState(false);
+  
+  // This state signals that the login server action has completed and client-side effects should run
+  const [loginServerActionCompleted, setLoginServerActionCompleted] = useState(false);
+  // This state holds the cookie data read by the effect, to avoid multiple getCookie calls in one render cycle
+  const [currentCookieState, setCurrentCookieState] = useState<AppAuthStateCookie | null>(null);
 
-  // Correctly initialize useForm
+
   const form = useForm<LoginFormValues>({
     resolver: zodResolver(loginFormSchema),
     defaultValues: {
@@ -42,110 +45,116 @@ export default function LoginForm() {
     },
   });
 
-  // Check for sync cookie periodically after login action completes
-  useEffect(() => {
-    let intervalId: NodeJS.Timeout | undefined;
-    if (loginActionCompleted && !auth.user) {
-      console.log("[LoginForm CookiePollEffect] Starting to poll for auth_sync_complete cookie.");
-      if (getCookie('auth_sync_complete') === 'true') {
-        console.log("[LoginForm CookiePollEffect] auth_sync_complete cookie found on initial check.");
-        setIsAuthSyncCookiePresent(true);
-      } else {
-        let attempts = 0;
-        const maxAttempts = 20; // Poll for up to 5 seconds
-        intervalId = setInterval(() => {
-          attempts++;
-          if (getCookie('auth_sync_complete') === 'true') {
-            console.log(`[LoginForm CookiePollEffect] auth_sync_complete cookie found after ${attempts} attempts.`);
-            setIsAuthSyncCookiePresent(true);
-            clearInterval(intervalId);
-          } else if (attempts >= maxAttempts) {
-            console.log("[LoginForm CookiePollEffect] auth_sync_complete cookie not found after max attempts.");
-            clearInterval(intervalId);
-          }
-        }, 250);
-      }
-    }
-    return () => {
-      if (intervalId) {
-        console.log("[LoginForm CookiePollEffect] Clearing poll interval.");
-        clearInterval(intervalId);
-      }
-    };
-  }, [loginActionCompleted, auth.user]);
-
-
-  // Main redirection logic
+  // Effect to react to AuthProvider completing its sync (signaled by app_auth_state cookie)
+  // This is more of a reactive listener to the cookie now
   useEffect(() => {
     const effectTimestamp = new Date().toISOString();
-    console.log(`[LoginForm RedirectionEffect @ ${effectTimestamp}] Triggered. loginActionCompleted: ${loginActionCompleted}, auth.user: ${!!auth.user}, auth.loading: ${auth.loading}, isAuthSyncCookiePresent: ${isAuthSyncCookiePresent}, auth.userProfile: ${!!auth.userProfile}`);
+    console.log(`[LoginForm CookieListenerEffect @ ${effectTimestamp}] Triggered. loginServerActionCompleted: ${loginServerActionCompleted}, auth.user: ${!!auth.user}, auth.loading: ${auth.loading}`);
     
-    if (loginActionCompleted && isAuthSyncCookiePresent && auth.user && !auth.loading) {
-      console.log(`[LoginForm RedirectionEffect @ ${effectTimestamp}] Conditions met. Proceeding with redirection logic.`);
-      eraseCookie('auth_sync_complete'); 
-      console.log(`[LoginForm RedirectionEffect @ ${effectTimestamp}] auth_sync_complete cookie erased.`);
-
-      const profileSetupComplete = auth.userProfile?.profileSetupComplete;
-      console.log(`[LoginForm RedirectionEffect @ ${effectTimestamp}] Profile setup complete from AuthContext: ${profileSetupComplete}`);
-
-      if (profileSetupComplete === true) {
-        console.log(`[LoginForm RedirectionEffect @ ${effectTimestamp}] Redirecting (client-side) to dashboard page (/).`);
-        router.push('/');
-      } else {
-        console.log(`[LoginForm RedirectionEffect @ ${effectTimestamp}] Redirecting (client-side) to profile setup page (/profile). Reason: profileSetupComplete is ${profileSetupComplete}`);
-        router.push('/profile');
+    const cookieString = getCookie('app_auth_state');
+    let parsedCookie: AppAuthStateCookie | null = null;
+    if (cookieString) {
+      try {
+        parsedCookie = JSON.parse(cookieString);
+        setCurrentCookieState(parsedCookie); // Update local state for other logic if needed
+      } catch (e) {
+        console.error("[LoginForm CookieListenerEffect] Error parsing app_auth_state cookie:", e);
+        eraseCookie('app_auth_state'); // Clear malformed cookie
       }
-      setLoginActionCompleted(false); 
-      setIsAuthSyncCookiePresent(false); 
-    } else if (loginActionCompleted && isAuthSyncCookiePresent && !auth.user && !auth.loading) {
-        console.warn(`[LoginForm RedirectionEffect @ ${effectTimestamp}] Auth sync cookie present, login action complete, but AuthContext.user is still null and AuthContext is not loading.`);
-    } else if (loginActionCompleted && !isAuthSyncCookiePresent && !auth.user && !auth.loading) {
-        console.log(`[LoginForm RedirectionEffect @ ${effectTimestamp}] Login action complete, but sync cookie NOT present and user still not in context. Waiting or polling for cookie.`);
+    } else {
+        setCurrentCookieState(null);
     }
 
-  }, [auth.user, auth.userProfile, auth.loading, loginActionCompleted, isAuthSyncCookiePresent, router, toast, auth]);
+    if (parsedCookie && parsedCookie.authSyncComplete) {
+      console.log(`[LoginForm CookieListenerEffect @ ${effectTimestamp}] app_auth_state cookie found with authSyncComplete=true. Cookie state:`, parsedCookie);
+      console.log(`  Auth context state: User UID: ${auth.user?.uid}, Profile ID: ${auth.userProfile?.id}, ProfileSetupComplete: ${auth.userProfile?.profileSetupComplete}`);
 
+      // Double-check with AuthContext if it's also ready
+      if (auth.user && !auth.loading) {
+        const profileSetupComplete = auth.userProfile?.profileSetupComplete;
+        console.log(`[LoginForm CookieListenerEffect @ ${effectTimestamp}] AuthProvider context ready. Profile setup complete: ${profileSetupComplete}`);
+        
+        // At this point, AuthProvider should have set the cookie correctly.
+        // The redirection logic below (onSubmit or another effect if user already logged in) should handle it.
+        // If login form is still visible, and auth is complete, redirect.
+        if (profileSetupComplete) {
+          console.log(`[LoginForm CookieListenerEffect @ ${effectTimestamp}] Redirecting to / (dashboard) as profile is complete.`);
+          router.push('/');
+        } else {
+          console.log(`[LoginForm CookieListenerEffect @ ${effectTimestamp}] Redirecting to /profile as profile is not complete.`);
+          router.push('/profile');
+        }
+        eraseCookie('app_auth_state'); // Clean up cookie once used for this redirection cycle
+      } else {
+        console.log(`[LoginForm CookieListenerEffect @ ${effectTimestamp}] Cookie has authSyncComplete=true, but AuthContext not fully ready (User: ${!!auth.user}, Loading: ${auth.loading}). Waiting for AuthContext.`);
+      }
+    } else if (loginServerActionCompleted && !parsedCookie?.authSyncComplete) {
+      console.log(`[LoginForm CookieListenerEffect @ ${effectTimestamp}] Login server action completed, but app_auth_state cookie does not have authSyncComplete=true yet. Waiting for AuthProvider.`);
+    }
+  }, [auth.user, auth.userProfile, auth.loading, loginServerActionCompleted, router]); // Re-run when these change
 
-  const onSubmit = (values: LoginFormValues) => { // Restored 'form' variable here
+  const onSubmit = (values: LoginFormValues) => {
     setError(null);
-    setLoginActionCompleted(false);
-    setIsAuthSyncCookiePresent(false);
+    setLoginServerActionCompleted(false); // Reset for new submission
+    setCurrentCookieState(null); // Reset
     console.log('[LOGIN_FORM_SUBMIT_START] Submitting login form with email:', values.email);
     startServerActionTransition(async () => {
       try {
+        // Scenario A: Cookie might not be present, or if present, might be stale.
+        // Server action (`loginUser`) will handle DB checks and return initial state for the cookie.
         const result: LoginResult = await loginUser(values);
         console.log('[LOGIN_FORM_SUBMIT_RESULT] Received result from loginUser server action:', result);
 
         if (result && result.success && result.userId) {
-          console.log('[LOGIN_FORM_SERVER_SUCCESS] Login server action successful. Waiting for AuthProvider to update context and set auth_sync_complete cookie.');
-          toast({
-            title: 'Login Submitted',
-            description: 'Verifying session...',
-          });
-          setLoginActionCompleted(true);
+          setLoginServerActionCompleted(true); // Signal server action done
+          toast({ title: 'Login Submitted', description: 'Verifying session...' });
+
+          if (result.initialCookieState) {
+            const clientSideInitialCookie: AppAuthStateCookie = {
+              isProfileCreated: result.initialCookieState.isProfileCreated,
+              authSyncComplete: false, // Server action provides initial state; AuthProvider confirms full sync
+            };
+            console.log('[LOGIN_FORM_SUBMIT] Setting app_auth_state cookie with initial state from server:', clientSideInitialCookie);
+            setCookie('app_auth_state', JSON.stringify(clientSideInitialCookie), 1);
+            setCurrentCookieState(clientSideInitialCookie); // Update local state immediately
+
+            // Immediate redirection based on isProfileCreated from server's response
+            if (clientSideInitialCookie.isProfileCreated) {
+              console.log('[LOGIN_FORM_SUBMIT] Initial redirection to / (dashboard) based on isProfileCreated=true from server.');
+              router.push('/');
+            } else {
+              console.log('[LOGIN_FORM_SUBMIT] Initial redirection to /profile based on isProfileCreated=false from server.');
+              router.push('/profile');
+            }
+            // AuthProvider's onAuthStateChanged will eventually fire, fetch full profile,
+            // and update the app_auth_state cookie with authSyncComplete: true.
+            // The useEffect above will catch this if further action/redirection is needed.
+          } else {
+            console.warn('[LOGIN_FORM_SUBMIT] Login successful but no initialCookieState received from server. Relying on AuthProvider.');
+            // If no initialCookieState, we rely on AuthProvider to set the cookie.
+            // The useEffect will pick up that change.
+          }
         } else {
           console.log('[LOGIN_FORM_FAILURE] Login server action reported failure. Result:', result);
           setError(result?.error || 'An unknown error occurred during login.');
-          toast({
-            title: 'Login Failed',
-            description: result?.error || 'Please check your credentials.',
-            variant: 'destructive',
-          });
-          setLoginActionCompleted(false);
+          toast({ title: 'Login Failed', description: result?.error || 'Please check your credentials.', variant: 'destructive' });
+          setLoginServerActionCompleted(false);
         }
       } catch (transitionError: any) {
         console.error('[LOGIN_FORM_ERROR] Error within startServerActionTransition async block:', transitionError);
         setError(transitionError.message || 'An unexpected error occurred.');
         toast({ title: 'Login Error', description: 'An unexpected client-side error occurred.', variant: 'destructive' });
-        setLoginActionCompleted(false);
+        setLoginServerActionCompleted(false);
       }
     });
   };
   
-  const isLoadingUI = isServerActionPending || (loginActionCompleted && auth.loading) || (loginActionCompleted && !isAuthSyncCookiePresent && !auth.user);
+  // Determine overall loading state for UI
+  // isLoadingUI is true if server action is pending, OR if server action completed but AuthProvider hasn't signaled full sync via cookie.
+  const isLoadingUI = isServerActionPending || (loginServerActionCompleted && (!currentCookieState || !currentCookieState.authSyncComplete) && auth.loading);
 
   return (
-    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6"> {/* Ensure 'form' is used here */}
+    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
       {error && (
         <div className="rounded-md border border-destructive bg-destructive/10 p-3 text-sm text-destructive">
           {error}
