@@ -14,18 +14,18 @@ import { getFirestore, type Firestore } from 'firebase/firestore'; // For server
 // DO NOT import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp' for server actions
 import { z } from 'zod';
 // UserProfile and other specific types are now imported from @/types
-import type { 
-    UserProfile, 
-    SubscriptionTier, 
-    FitbitApiCallStats, 
-    StravaApiCallStats, 
-    GoogleFitApiCallStats, 
-    WithingsApiCallStats, 
-    WalkingRadarGoals, 
-    RunningRadarGoals, 
-    HikingRadarGoals, 
-    SwimmingRadarGoals, 
-    SleepRadarGoals, 
+import type {
+    UserProfile,
+    SubscriptionTier,
+    FitbitApiCallStats,
+    StravaApiCallStats,
+    GoogleFitApiCallStats,
+    WithingsApiCallStats,
+    WalkingRadarGoals,
+    RunningRadarGoals,
+    HikingRadarGoals,
+    SwimmingRadarGoals,
+    SleepRadarGoals,
     DashboardMetricIdValue,
     LoginResult // Import LoginResult
 } from '@/types';
@@ -56,7 +56,7 @@ const initializeServerFirebase = () => {
     console.error(errorMessage);
     throw new Error(errorMessage); // Throw error to be caught by calling function
   }
-  
+
   let app: FirebaseApp;
   if (!getApps().length) {
     console.log("[ServerFirebaseHelper] No Firebase apps initialized for server. Initializing new Firebase app.");
@@ -97,7 +97,7 @@ interface SignUpResult {
 
 export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema>): Promise<SignUpResult> {
   console.log("[SIGNUP_ACTION_START] signUpUser action initiated with email:", values.email, "tier:", values.subscriptionTier);
-  
+
   let serverAuth: Auth;
   let serverDb: Firestore;
 
@@ -124,7 +124,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     try {
       console.log("[SIGNUP_ACTION_CREATE_USER_START] Attempting to create user in Firebase Auth for email:", validatedValues.email);
       userCredential = await createUserWithEmailAndPassword(
-        serverAuth, 
+        serverAuth,
         validatedValues.email,
         validatedValues.password
       );
@@ -150,9 +150,9 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       lastPasswordChangeDate: nowIso,
       lastLoggedInDate: nowIso,
       acceptedLatestTerms: false,
-      termsVersionAccepted: undefined, 
+      termsVersionAccepted: null, // Changed from undefined to null
       isAgeCertified: false,
-      profileSetupComplete: false, 
+      profileSetupComplete: false,
       isProfileCreated: false, // Initialize new flag
       connectedFitnessApps: [],
       connectedDiagnosticsServices: [],
@@ -162,7 +162,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
 
     try {
       console.log("[SIGNUP_ACTION_FIRESTORE_SETDOC_START] Attempting to save profile to Firestore for UID:", userCredential.user.uid);
-      await setDoc(doc(serverDb, "users", userCredential.user.uid), initialProfile); 
+      await setDoc(doc(serverDb, "users", userCredential.user.uid), initialProfile);
       console.log("[SIGNUP_ACTION_FIRESTORE_SETDOC_SUCCESS] Profile saved to Firestore successfully for UID:", userCredential.user.uid);
     } catch (firestoreError: any) {
       console.error("[SIGNUP_FIRESTORE_ERROR] Error creating user profile in Firestore for UID:", userCredential.user.uid, "Raw Error:", firestoreError);
@@ -214,7 +214,7 @@ const LoginInputSchema = z.object({
 // LoginResult is now imported from @/types
 export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promise<LoginResult> {
   console.log("[LOGIN_ACTION_START] loginUser action initiated for email:", values.email);
-  
+
   let serverAuth: Auth;
   let serverDb: Firestore;
 
@@ -240,7 +240,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     try {
       console.log("[LOGIN_ACTION_SIGNIN_START] Attempting to sign in user with Firebase Auth for email:", validatedValues.email);
       userCredential = await signInWithEmailAndPassword(
-        serverAuth, 
+        serverAuth,
         validatedValues.email,
         validatedValues.password
       );
@@ -259,7 +259,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     }
 
     const userId = userCredential.user.uid;
-    const userProfileDocRef = doc(serverDb, "users", userId); 
+    const userProfileDocRef = doc(serverDb, "users", userId);
 
     let constructedUserProfileData: UserProfile;
 
@@ -288,14 +288,14 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
           ? rawProfileData.lastPasswordChangeDate.toDate().toISOString()
           : typeof rawProfileData.lastPasswordChangeDate === 'string'
             ? rawProfileData.lastPasswordChangeDate
-            : new Date(0).toISOString()), 
+            : new Date(0).toISOString()),
         lastLoggedInDate: (rawProfileData.lastLoggedInDate instanceof Timestamp
           ? rawProfileData.lastLoggedInDate.toDate().toISOString()
           : typeof rawProfileData.lastLoggedInDate === 'string'
             ? rawProfileData.lastLoggedInDate
-            : undefined), 
+            : undefined),
         acceptedLatestTerms: !!rawProfileData.acceptedLatestTerms,
-        termsVersionAccepted: typeof rawProfileData.termsVersionAccepted === 'string' ? rawProfileData.termsVersionAccepted : undefined,
+        termsVersionAccepted: rawProfileData.termsVersionAccepted === null ? null : (typeof rawProfileData.termsVersionAccepted === 'string' ? rawProfileData.termsVersionAccepted : undefined),
         isAgeCertified: !!rawProfileData.isAgeCertified,
         profileSetupComplete: typeof rawProfileData.profileSetupComplete === 'boolean' ? rawProfileData.profileSetupComplete : false,
         isProfileCreated: typeof rawProfileData.isProfileCreated === 'boolean' ? rawProfileData.isProfileCreated : false, // Handle new flag
@@ -342,7 +342,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     const currentLoginTimeISO = new Date().toISOString();
     try {
       await updateDoc(userProfileDocRef, { lastLoggedInDate: currentLoginTimeISO });
-      constructedUserProfileData.lastLoggedInDate = currentLoginTimeISO; 
+      constructedUserProfileData.lastLoggedInDate = currentLoginTimeISO;
       console.log("[LOGIN_ACTION_FIRESTORE_UPDATE_SUCCESS] lastLoggedInDate updated in Firestore for UID:", userId);
     } catch (dbError: any) {
       console.error("[LOGIN_ACTION_FIRESTORE_ERROR] Failed to update lastLoggedInDate for UID:", userId, "Error:", dbError);
@@ -359,7 +359,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
         console.log(`[LOGIN_ACTION_PASSWORD_EXPIRED] Password expired for user ${userId}.`);
       }
     } else {
-      passwordExpired = true; 
+      passwordExpired = true;
       console.warn(`[LOGIN_PASSWORD_DATE_MISSING] User ${userId} missing lastPasswordChangeDate. Treating as password expired.`);
     }
 
@@ -376,7 +376,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
       console.error("[LOGIN_ACTION_ZOD_DETAILS] ZodError:", error.flatten());
       errorMessage = "Invalid login input.";
       errorCode = "VALIDATION_ERROR";
-    } else if ((error as AuthError).code) { 
+    } else if ((error as AuthError).code) {
       errorMessage = String((error as AuthError).message || errorMessage);
       errorCode = String((error as AuthError).code);
       console.error(`[LOGIN_ACTION_ERROR_DETAILS_CODED] Code: ${errorCode}, Message: ${errorMessage}`);
@@ -387,7 +387,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     console.log("[LOGIN_ACTION_ATTEMPT_RETURN_ERROR_OUTER_CATCH]");
     return { success: false, error: errorMessage, errorCode: errorCode };
   }
-  
+
   console.error("[LOGIN_ACTION_UNEXPECTED_FALLTHROUGH] LoginUser function reached end without explicit return. This indicates a flaw in control flow.");
   return { success: false, error: "Login failed due to an unexpected server-side control flow issue.", errorCode: "UNEXPECTED_FALLTHROUGH" };
 }
@@ -425,7 +425,7 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
   console.log("[SEND_RESET_CODE_START] Action initiated for email:", values.email);
   let serverDb: Firestore;
   try {
-    const { db: sDb } = initializeServerFirebase(); 
+    const { db: sDb } = initializeServerFirebase();
     serverDb = sDb;
     const validatedValues = ForgotPasswordEmailSchema.parse(values);
     console.log("[SEND_RESET_CODE_VALIDATED] Email validated by Zod:", validatedValues.email);
@@ -442,7 +442,7 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
     const userDoc = querySnapshot.docs[0];
     const userIdForReset = userDoc.id;
     const resetCode = Math.floor(10000000 + Math.random() * 90000000).toString();
-    const expiresAt = Timestamp.fromMillis(Date.now() + 10 * 60 * 1000); 
+    const expiresAt = Timestamp.fromMillis(Date.now() + 10 * 60 * 1000);
 
     await updateDoc(doc(serverDb, "users", userIdForReset), {
       passwordResetCodeAttempt: { code: resetCode, expiresAt: expiresAt.toDate().toISOString() }
@@ -515,7 +515,7 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
     serverDb = sDb;
     const validatedValues = FinalResetPasswordSchema.parse(values);
 
-    const currentUser = serverAuth.currentUser; 
+    const currentUser = serverAuth.currentUser;
 
     if (currentUser && currentUser.email === validatedValues.email) {
       console.log("[RESET_PASSWORD_LOGGED_IN_USER] Attempting password update for logged-in user on server instance:", currentUser.uid);
@@ -544,7 +544,7 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
     const userIdToReset = userDocSnap.id;
 
     console.warn(`[RESET_PASSWORD_ADMIN_SDK_REQUIRED] To reset password for unauthenticated user ${userIdToReset} via email link flow, Firebase Admin SDK (or verifying the oobCode client-side then calling applyPasswordReset) is typically used. Simulating update via server action for now.`);
-    
+
     console.log(`[RESET_PASSWORD_SIMULATE_ADMIN_SUCCESS] Simulating successful password reset for ${userIdToReset} via Admin SDK (not actually changing auth password here).`);
 
     try {
@@ -816,5 +816,6 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
 
 
     
+
 
 
