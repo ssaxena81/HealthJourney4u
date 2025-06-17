@@ -31,16 +31,26 @@ export default function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   
-  // This state tracks if the current instance of the form initiated the login
+  // This state tracks if the current instance of the form *just* completed a login server action.
   const [loginServerActionInitiated, setLoginServerActionInitiated] = useState(false);
 
+  const form = useForm<LoginFormValues>({
+    resolver: zodResolver(loginFormSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+    },
+  });
 
-  // Effect to handle redirection once AuthContext is resolved
+  // Effect to handle redirection once AuthContext is resolved or if user is already logged in.
   useEffect(() => {
     const effectTimestamp = new Date().toISOString();
     console.log(`[LoginForm AuthEffect @ ${effectTimestamp}] Triggered. auth.loading: ${auth.loading}, auth.user: ${!!auth.user}, auth.userProfile: ${!!auth.userProfile}, loginServerActionInitiated: ${loginServerActionInitiated}`);
 
-    // Primary condition: If auth is done loading and we have a user and their profile, then redirect.
+    // If AuthProvider is done loading and we have a user and their profile, then redirect.
+    // This handles both:
+    // 1. User was already logged in when they hit /login.
+    // 2. User just logged in via this form, and AuthProvider has now updated the context.
     if (!auth.loading && auth.user && auth.userProfile) {
       console.log(`  [LoginForm AuthEffect @ ${effectTimestamp}] Auth context resolved with user ${auth.user.uid}. Profile setup complete: ${auth.userProfile.profileSetupComplete}. Redirecting from /login.`);
       if (auth.userProfile.profileSetupComplete) {
@@ -51,25 +61,19 @@ export default function LoginForm() {
       return; // Redirected.
     }
 
-    // This condition handles a very specific (and possibly rare) edge case:
-    // If this form initiated a login (loginServerActionInitiated is true),
-    // AND AuthProvider is done loading (auth.loading is false),
-    // BUT there's NO user in the context (auth.user is null).
-    // This implies the login attempt might have failed at a Firebase level or some other issue
-    // prevented AuthProvider from recognizing the user.
+    // This handles the case where this form initiated a login, AuthProvider finished loading,
+    // but no user was found in the context (which would be an unexpected error state).
     if (loginServerActionInitiated && !auth.user && !auth.loading) {
         console.warn(`  [LoginForm AuthEffect @ ${effectTimestamp}] Auth context resolved with NO USER, despite a login attempt being initiated by this form. Resetting loginServerActionInitiated.`);
-        // Optionally, display an error to the user here if not already handled by onSubmit's error state.
-        // setError("Login verification failed. Please try again.");
-        setLoginServerActionInitiated(false); // Reset the flag as this attempt didn't resolve to a user in context.
+        //setError("Login verification failed or session timed out. Please try again."); // Display a generic error.
+        setLoginServerActionInitiated(false); // Reset the flag.
     }
-
   }, [auth.user, auth.userProfile, auth.loading, router, loginServerActionInitiated]);
 
 
   const onSubmit = (values: LoginFormValues) => {
     setError(null);
-    setLoginServerActionInitiated(false); 
+    setLoginServerActionInitiated(false); // Reset before new attempt
     console.log('[LOGIN_FORM_SUBMIT_START] Submitting login form with email:', values.email);
     
     startServerActionTransition(async () => {
@@ -83,17 +87,20 @@ export default function LoginForm() {
           if (result.initialCookieState) {
             const clientSideInitialCookie: AppAuthStateCookie = {
               isProfileCreated: result.initialCookieState.isProfileCreated,
-              authSyncComplete: false, 
+              authSyncComplete: false, // Always false initially from server action
             };
             console.log('[LOGIN_FORM_SUBMIT] Setting app_auth_state cookie with initial state from server:', clientSideInitialCookie);
             setCookie('app_auth_state', JSON.stringify(clientSideInitialCookie), 1);
           } else {
             console.warn('[LOGIN_FORM_SUBMIT] Login successful but no initialCookieState received from server.');
+             // Fallback: set a default initial cookie if server didn't provide one (should not happen with new logic)
+            setCookie('app_auth_state', JSON.stringify({ isProfileCreated: false, authSyncComplete: false }), 1);
           }
           
-          // DO NOT redirect from here. The useEffect above handles redirection when AuthContext is ready.
+          // Do NOT redirect from here. The useEffect above handles redirection when AuthContext is ready.
           // The UI will show "Verifying Session..." due to isLoadingUI.
           console.log('[LOGIN_FORM_SUBMIT] Login successful. Cookie set. Waiting for AuthProvider to update context, then LoginForm AuthEffect to redirect.');
+          // `loginServerActionInitiated` being true will keep isLoadingUI true until auth.user is populated by AuthProvider
 
         } else {
           console.log('[LOGIN_FORM_FAILURE] Login server action reported failure. Result:', result);
