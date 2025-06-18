@@ -6,7 +6,7 @@ import { onAuthStateChanged, type User as FirebaseUser, signOut } from 'firebase
 import { auth as firebaseAuthInstance, db } from '@/lib/firebase/clientApp';
 import type { UserProfile, AppAuthStateCookie } from '@/types';
 import { doc, getDoc } from 'firebase/firestore';
-import { setCookie, eraseCookie, getCookie } from '@/lib/cookie-utils'; // Added getCookie
+import { setCookie, eraseCookie, getCookie } from '@/lib/cookie-utils';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -54,16 +54,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const processUserSession = useCallback(async (fbUser: FirebaseUser | null, source: string) => {
     const processTime = new Date().toISOString();
-    console.log(`  [AuthProvider processUserSession FROM ${source} @ ${processTime}] START. Received fbUser UID: ${fbUser?.uid || 'null'}. Current loading state: ${loading}`);
+    console.log(`  [AuthProvider processUserSession FROM ${source} @ ${processTime}] START. Received fbUser UID: ${fbUser?.uid || 'null'}.`);
     
-    // setLoading(true); // Explicitly set loading, even if called from delayed check.
-    // console.log(`    [AuthProvider processUserSession @ ${processTime}] setLoading(true) called.`);
+    // setLoading(true) is managed by the calling effect/function (useEffect for onAuthStateChanged, or checkAuthState)
 
     let newFirebaseUser: FirebaseUser | null = null;
     let newProfile: UserProfile | null = null;
 
     if (fbUser) {
-      console.log(`    [AuthProvider processUserSession @ ${processTime}] fbUser IS PRESENT (UID: ${fbUser.uid}).`);
+      console.log(`    [AuthProvider processUserSession @ ${processTime}] fbUser IS PRESENT (UID: ${fbUser.uid}). Attempting to fetch profile.`);
       newFirebaseUser = fbUser;
       try {
         newProfile = await fetchUserProfile(fbUser);
@@ -81,7 +80,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     if (newFirebaseUser && newProfile) {
       const cookieStateToSet: AppAuthStateCookie = {
-          isProfileCreated: !!newProfile.profileSetupComplete,
+          isProfileCreated: !!newProfile.profileSetupComplete, // Use profileSetupComplete for this cookie flag
           authSyncComplete: true
       };
       console.log(`    [AuthProvider processUserSession @ ${processTime}] Attempting to set app_auth_state cookie for UID: ${newFirebaseUser.uid} with state:`, cookieStateToSet);
@@ -93,20 +92,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.log(`    [AuthProvider processUserSession @ ${processTime}] app_auth_state cookie ERASED.`);
     }
     
-    console.log(`  [AuthProvider processUserSession FROM ${source} @ ${new Date().toISOString()}] END. Setting loading to FALSE. fbUser was: ${fbUser?.uid || 'null'}.`);
-    setLoading(false);
-  }, [fetchUserProfile, loading]); // Added loading to deps
+    console.log(`  [AuthProvider processUserSession FROM ${source} @ ${new Date().toISOString()}] END. Setting loading to FALSE.`);
+    setLoading(false); // setLoading(false) is now the last step of processUserSession
+  }, [fetchUserProfile]); // Removed 'loading' from deps as it's managed within this flow
 
 
   useEffect(() => {
     const effectExecutionTime = new Date().toISOString();
-    console.log(`[AuthProvider useEffect for onAuthStateChanged & Initial Check] EXECUTING EFFECT. Timestamp: ${effectExecutionTime}`);
+    console.log(`[AuthProvider useEffect for onAuthStateChanged] EXECUTING EFFECT. Timestamp: ${effectExecutionTime}`);
     let isMounted = true;
-    let initialCheckTimeout: NodeJS.Timeout | null = null;
 
     if (!firebaseAuthInstance) {
-      console.warn(`  [AuthProvider useEffect @ ${effectExecutionTime}] Firebase Auth instance not available. Setting loading to false and erasing cookie.`);
-      if (isMounted) {
+      console.warn(`  [AuthProvider useEffect @ ${effectExecutionTime}] Firebase Auth instance not available. Setting user/profile to null, loading to false, and erasing cookie.`);
+      if (isMounted) { // Check isMounted before setting state
         setUser(null);
         setUserProfileState(null);
         eraseCookie('app_auth_state');
@@ -114,76 +112,45 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       }
       return;
     }
-    console.log(`  [AuthProvider useEffect @ ${effectExecutionTime}] firebaseAuthInstance in effect: true. Subscribing to onAuthStateChanged...`);
+    
+    console.log(`  [AuthProvider useEffect @ ${effectExecutionTime}] firebaseAuthInstance is available. Setting loading to true and subscribing to onAuthStateChanged...`);
+    setLoading(true); // Set loading to true at the start of the effect
 
-    // Immediately set loading to true as we are about to check auth state
-    setLoading(true);
-    console.log(`    [AuthProvider useEffect @ ${effectExecutionTime}] setLoading(true) called at start of effect.`);
-
-
-    const unsubscribe = onAuthStateChanged(firebaseAuthInstance, (fbUser) => {
-      if (!isMounted) return;
-      if (initialCheckTimeout) clearTimeout(initialCheckTimeout); // Cancel delayed check if onAuthStateChanged fires first
-      console.log(`  [AuthProvider onAuthStateChanged CALLBACK @ ${new Date().toISOString()}] Listener FIRED. Processing user session.`);
-      processUserSession(fbUser, 'onAuthStateChanged');
+    const unsubscribe = onAuthStateChanged(firebaseAuthInstance, async (fbUser) => {
+      if (!isMounted) {
+        console.log(`  [AuthProvider onAuthStateChanged CALLBACK @ ${new Date().toISOString()}] Listener FIRED but component unmounted. Aborting.`);
+        return;
+      }
+      console.log(`  [AuthProvider onAuthStateChanged CALLBACK @ ${new Date().toISOString()}] Listener FIRED. Calling processUserSession. Current loading state: ${loading}`); // Log current loading
+      // setLoading(true) is already called at the start of useEffect.
+      // processUserSession will set it to false when it's done.
+      await processUserSession(fbUser, 'onAuthStateChanged');
     });
     console.log(`  [AuthProvider useEffect @ ${effectExecutionTime}] onAuthStateChanged Listener SUBSCRIBED.`);
 
-    // Fallback/Delayed Check:
-    // This helps if onAuthStateChanged is slow to fire or if the initial state is already set
-    // by Firebase (e.g., from persistence) before the listener is attached.
-    initialCheckTimeout = setTimeout(() => {
-        if (!isMounted) return;
-        // Only run this if `user` is still null, meaning onAuthStateChanged hasn't populated it yet.
-        // This check needs to be careful not to interfere if onAuthStateChanged has already processed a null user (logout).
-        // We check current context's `user` state directly.
-        // The current `user` in context might be stale if this timeout runs before `onAuthStateChanged` has updated it.
-        // A better check is `firebaseAuthInstance.currentUser` IF `user` in context is still null.
-        
-        console.log(`  [AuthProvider DELAYED CHECK @ ${new Date().toISOString()}] Timeout reached. Checking firebaseAuthInstance.currentUser.`);
-        const currentUserFromInstance = firebaseAuthInstance.currentUser;
-
-        // If `user` state is still null (meaning onAuthStateChanged hasn't set a user yet)
-        // AND firebaseAuthInstance.currentUser is now available (meaning session might have been picked up by Firebase client)
-        // then process this user.
-        if (user === null && currentUserFromInstance) {
-            console.log(`    [AuthProvider DELAYED CHECK @ ${new Date().toISOString()}] Context 'user' is null, but firebaseAuthInstance.currentUser (UID: ${currentUserFromInstance.uid}) exists. Processing session.`);
-            processUserSession(currentUserFromInstance, 'DelayedCheck');
-        } else if (user === null && !currentUserFromInstance) {
-            // If context user is null and instance current user is also null, it means no user is logged in.
-            console.log(`    [AuthProvider DELAYED CHECK @ ${new Date().toISOString()}] Context 'user' is null, firebaseAuthInstance.currentUser is also null. No user session. Ensuring loading is false.`);
-            processUserSession(null, 'DelayedCheck-NoUser'); // This will set loading to false
-        } else if (user !== null) {
-            // If context 'user' is already set, onAuthStateChanged likely already ran and handled it.
-            // We still need to ensure loading becomes false if it hasn't already.
-            console.log(`    [AuthProvider DELAYED CHECK @ ${new Date().toISOString()}] Context 'user' (UID: ${user.uid}) is already set. Assuming onAuthStateChanged handled it. Ensuring loading is false.`);
-            if (loading) setLoading(false); // Ensure loading is false if onAuthStateChanged handled it but this timer also ran.
-        }
-    }, 200); // Small delay like 200ms
-
     return () => {
       isMounted = false;
-      if (initialCheckTimeout) clearTimeout(initialCheckTimeout);
       const cleanupTime = new Date().toISOString();
-      console.log(`[AuthProvider useEffect for onAuthStateChanged & Initial Check] CLEANING UP. Timestamp: ${cleanupTime}`);
+      console.log(`[AuthProvider useEffect for onAuthStateChanged] CLEANING UP. Timestamp: ${cleanupTime}`);
       unsubscribe();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [processUserSession]); // processUserSession is memoized with fetchUserProfile. User state is not directly in dep array to avoid re-running sub/unsub too often.
+  }, [processUserSession]); // processUserSession is memoized.
 
   const contextLogout = useCallback(async () => {
     const logoutStartTime = new Date().toISOString();
     console.log(`[AuthProvider contextLogout @ ${logoutStartTime}] Called.`);
     setLoading(true);
+    console.log(`  [AuthProvider contextLogout @ ${logoutStartTime}] setLoading(true) called.`);
     eraseCookie('app_auth_state');
     if (firebaseAuthInstance) {
       try {
         await signOut(firebaseAuthInstance);
-        console.log(`  [AuthProvider contextLogout @ ${new Date().toISOString()}] signOut successful. onAuthStateChanged will handle clearing user/profile state and setting loading to false.`);
-        // onAuthStateChanged will set user to null, which will trigger processUserSession(null, ...)
+        console.log(`  [AuthProvider contextLogout @ ${new Date().toISOString()}] signOut successful. onAuthStateChanged will handle state updates and set loading to false.`);
+        // onAuthStateChanged will call processUserSession(null, ...), which sets loading to false.
       } catch (error) {
         console.error("  [AuthProvider contextLogout] Error signing out:", error);
-        // Manually clear state and set loading false if signOut fails or onAuthStateChanged doesn't fire
+        // Manually clear state and set loading false if signOut fails or onAuthStateChanged doesn't fire quickly enough
         setUser(null);
         setUserProfileState(null);
         setLoading(false);
@@ -195,18 +162,19 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const contextSetUserProfile = useCallback((updater: (prev: UserProfile | null) => UserProfile | null) => {
-    console.log("[AuthProvider contextSetUserProfile] Manually updating profile in context via updater fn.");
+    const setProfileTime = new Date().toISOString();
+    console.log(`[AuthProvider contextSetUserProfile @ ${setProfileTime}] Manually updating profile in context via updater fn.`);
     setUserProfileState(prevUserProfile => {
         const newProfile = updater(prevUserProfile);
-        if (user) {
+        if (user && newProfile) { // Ensure user and newProfile exist before setting cookie
              const cookieStateToSet: AppAuthStateCookie = {
-                isProfileCreated: !!newProfile?.profileSetupComplete,
+                isProfileCreated: !!newProfile.profileSetupComplete,
                 authSyncComplete: true
             };
-            console.log(`    [AuthProvider contextSetUserProfile] Setting app_auth_state cookie with new profile state:`, cookieStateToSet);
+            console.log(`    [AuthProvider contextSetUserProfile @ ${setProfileTime}] Setting app_auth_state cookie with new profile state:`, cookieStateToSet);
             setCookie('app_auth_state', JSON.stringify(cookieStateToSet), 1);
-        } else {
-             console.log(`    [AuthProvider contextSetUserProfile] User not logged in, erasing app_auth_state cookie.`);
+        } else if (!user) { // If no user, erase cookie
+             console.log(`    [AuthProvider contextSetUserProfile @ ${setProfileTime}] User not logged in, erasing app_auth_state cookie.`);
             eraseCookie('app_auth_state');
         }
         return newProfile;
@@ -216,23 +184,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const checkAuthState = useCallback(async () => {
     const checkAuthStartTime = new Date().toISOString();
     console.log(`[AuthProvider checkAuthState @ ${checkAuthStartTime}] Manually re-checking auth state...`);
-    setLoading(true); // Signal that we are actively checking
+    setLoading(true); 
     console.log(`  [AuthProvider checkAuthState @ ${checkAuthStartTime}] setLoading(true) called.`);
 
     if (!firebaseAuthInstance) {
       console.warn(`  [AuthProvider checkAuthState @ ${checkAuthStartTime}] Firebase Auth instance not available.`);
-      setUser(null); setUserProfileState(null);
+      // No need to call processUserSession if auth instance isn't there; just set final state
+      setUser(null); 
+      setUserProfileState(null);
       eraseCookie('app_auth_state');
       setLoading(false);
       console.log(`  [AuthProvider checkAuthState @ ${new Date().toISOString()}] setLoading(false) called due to no auth instance.`);
       return;
     }
     
-    // Use firebaseAuthInstance.currentUser directly as onAuthStateChanged might be slightly delayed
     const currentFbUser = firebaseAuthInstance.currentUser; 
+    console.log(`  [AuthProvider checkAuthState @ ${checkAuthStartTime}] firebaseAuthInstance.currentUser UID: ${currentFbUser?.uid || 'null'}. Calling processUserSession.`);
     await processUserSession(currentFbUser, 'checkAuthState');
     // processUserSession will handle setUser, setUserProfile, cookie, and setLoading(false)
-    console.log(`[AuthProvider checkAuthState @ ${new Date().toISOString()}] Manual re-check requested processUserSession. User: ${currentFbUser?.uid || 'null'}`);
+    console.log(`[AuthProvider checkAuthState @ ${new Date().toISOString()}] Manual re-check completed by calling processUserSession.`);
 
   }, [processUserSession]);
 
@@ -247,7 +217,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }), [user, userProfile, loading, contextLogout, contextSetUserProfile, checkAuthState]);
 
   const renderLogTimestamp = useMemo(() => new Date().toISOString(), [user, userProfile, loading]);
-  console.log(`[AuthProvider RENDER/Memo @ ${renderLogTimestamp}] Context: User UID: ${contextValue.user?.uid || 'null'}, Loading: ${contextValue.loading}, Profile ID: ${contextValue.userProfile?.id || 'null'}, isProfileCreated (context): ${contextValue.userProfile?.isProfileCreated}, profileSetupComplete (context): ${contextValue.userProfile?.profileSetupComplete}`);
+  console.log(`[AuthProvider RENDER/Memo @ ${renderLogTimestamp}] Context: User UID: ${contextValue.user?.uid || 'null'}, Loading: ${contextValue.loading}, Profile ID: ${contextValue.userProfile?.id || 'null'}, isProfileCreated (context-profile): ${contextValue.userProfile?.isProfileCreated}, profileSetupComplete (context-profile): ${contextValue.userProfile?.profileSetupComplete}`);
 
   return (
     <AuthContext.Provider value={contextValue}>
@@ -263,6 +233,6 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
+    
 
     

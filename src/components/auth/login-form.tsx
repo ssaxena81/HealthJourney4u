@@ -130,7 +130,7 @@ export default function LoginForm() {
   //    a. AuthProvider hasn't populated the user in context yet (!auth.user).
   //    b. AuthProvider is currently in its loading phase (auth.loading is true).
   const isLoadingUI = isServerActionPending || (loginServerActionInitiated && (!auth.user || auth.loading));
-
+  console.log('[LoginForm] isLoadingUI:',isLoadingUI);
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
