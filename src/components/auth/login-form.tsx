@@ -31,7 +31,6 @@ export default function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   
-  // This state tracks if the current instance of the form *just* completed a login server action.
   const [loginServerActionInitiated, setLoginServerActionInitiated] = useState(false);
 
   const form = useForm<LoginFormValues>({
@@ -54,18 +53,19 @@ export default function LoginForm() {
       } else {
         router.replace('/profile'); 
       }
-      setLoginServerActionInitiated(false); // Reset after successful redirect based on AuthContext
+      // No need to reset loginServerActionInitiated here, as the component will unmount upon redirection.
       return; 
     }
 
-    // This handles the case where this form initiated a login, AuthProvider finished loading (or checkAuthState finished),
+    // This handles the case where this form initiated a login, AuthProvider finished loading,
     // but no user was found in the context (which would be an unexpected error state).
     if (loginServerActionInitiated && !auth.user && !auth.loading) {
         console.warn(`  [LoginForm AuthEffect @ ${effectTimestamp}] Auth context resolved with NO USER, despite a login attempt being initiated by this form. Resetting loginServerActionInitiated.`);
         setError("Login verification failed or session timed out. Please try again."); 
-        setLoginServerActionInitiated(false); 
+        toast({ title: "Login Error", description: "Login verification failed or session timed out. Please try again.", variant: "destructive" });
+        setLoginServerActionInitiated(false); // Allow user to try again
     }
-  }, [auth.user, auth.userProfile, auth.loading, router, loginServerActionInitiated]);
+  }, [auth.user, auth.userProfile, auth.loading, router, loginServerActionInitiated, toast]);
 
 
   const onSubmit = (values: LoginFormValues) => {
@@ -93,17 +93,10 @@ export default function LoginForm() {
             setCookie('app_auth_state', JSON.stringify({ isProfileCreated: false, authSyncComplete: false }), 1);
           }
           
-          console.log('[LOGIN_FORM_SUBMIT] Login successful. Cookie set. Triggering auth.checkAuthState().');
-          if (auth.checkAuthState) {
-            await auth.checkAuthState(); // Explicitly tell AuthProvider to re-check and update context
-            console.log('[LOGIN_FORM_SUBMIT] auth.checkAuthState() completed. LoginForm AuthEffect should now handle redirection.');
-          } else {
-            console.error('[LOGIN_FORM_SUBMIT] auth.checkAuthState is not available. Cannot force context update.');
-            // Fallback or error handling if checkAuthState is missing
-             setError("Session verification component is missing. Please try again or contact support.");
-             setLoginServerActionInitiated(false); // Cannot rely on AuthEffect if checkAuthState failed
-          }
-          // Redirection is now handled by the useEffect listening to AuthContext changes.
+          console.log('[LOGIN_FORM_SUBMIT] Login successful. Cookie set. Waiting for AuthProvider to update context and trigger AuthEffect for redirection.');
+          // No explicit auth.checkAuthState() call here.
+          // Relying on onAuthStateChanged in AuthProvider to fire and update the context.
+          // The AuthEffect in LoginForm will then handle the redirection.
 
         } else {
           console.log('[LOGIN_FORM_FAILURE] Login server action reported failure. Result:', result);
