@@ -50,7 +50,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       console.error(`    [AuthProvider fetchUserProfile @ ${fetchProfileTimestamp}] Error fetching profile for ${fbUser.uid}:`, e.message, e.stack);
       return null;
     }
-  }, []); // db is stable
+  }, []);
 
   useEffect(() => {
     const effectExecutionTime = new Date().toISOString();
@@ -58,8 +58,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     
     if (!firebaseAuthInstance) {
       console.warn(`  [AuthProvider useEffect @ ${effectExecutionTime}] Firebase Auth instance not available. Setting loading to false and erasing cookie.`);
-      setLoading(false);
+      setUser(null); // Ensure user state is cleared
+      setUserProfileState(null); // Ensure profile state is cleared
       eraseCookie('app_auth_state'); 
+      setLoading(false);
       return;
     }
     console.log(`  [AuthProvider useEffect @ ${effectExecutionTime}] firebaseAuthInstance in effect: true. Subscribing to onAuthStateChanged...`);
@@ -68,45 +70,47 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const callbackTime = new Date().toISOString();
       console.log(`  [AuthProvider onAuthStateChanged CALLBACK START] Received fbUser UID: ${fbUser?.uid || 'null'}. Timestamp: ${callbackTime}`);
       
-      console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] Immediately setting loading to TRUE.`);
-      setLoading(true);
-      let fetchedProfile: UserProfile | null = null;
+      setLoading(true); // Explicitly set loading to true at the start of processing this event.
+      console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] setLoading(true) called.`);
+
+      let newFirebaseUser: FirebaseUser | null = null;
+      let newProfile: UserProfile | null = null;
 
       if (fbUser) {
-        console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] fbUser IS PRESENT (UID: ${fbUser.uid}). Calling setUser...`);
-        setUser(fbUser);
-        console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] setUser called. Now attempting to fetch profile for UID: ${fbUser.uid}...`);
-        
+        console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] fbUser IS PRESENT (UID: ${fbUser.uid}).`);
+        newFirebaseUser = fbUser;
         try {
-          fetchedProfile = await fetchUserProfile(fbUser);
-          console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] fetchUserProfile completed for UID: ${fbUser.uid}. Profile ${fetchedProfile ? 'found' : 'NOT found'}.`);
+          newProfile = await fetchUserProfile(fbUser);
+          console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] fetchUserProfile completed for UID: ${fbUser.uid}. Profile ${newProfile ? 'found' : 'NOT found'}.`);
         } catch (fetchError) {
             console.error(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] fetchUserProfile THREW AN ERROR for UID ${fbUser.uid}:`, fetchError);
         }
-        
-        console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] Calling setUserProfileState for UID: ${fbUser.uid}...`);
-        setUserProfileState(fetchedProfile);
-        console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] setUserProfileState called. Profile was ${fetchedProfile ? 'set' : 'set to null'}.`);
-        
-        const cookieStateToSet: AppAuthStateCookie = {
-            isProfileCreated: !!fetchedProfile?.isProfileCreated, // Use isProfileCreated from DB
-            authSyncComplete: true // AuthProvider sync is complete
-        };
-        console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] Attempting to set app_auth_state cookie for UID: ${fbUser.uid} with state:`, cookieStateToSet);
-        setCookie('app_auth_state', JSON.stringify(cookieStateToSet), 1); 
-        console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] app_auth_state cookie SET.`);
-
       } else {
         console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] fbUser IS NULL.`);
-        setUser(null);
-        setUserProfileState(null);
-        console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] User and profile states cleared. Attempting to erase app_auth_state cookie.`);
+      }
+
+      // Batch state updates for user and profile BEFORE cookie and final loading state
+      setUser(newFirebaseUser);
+      setUserProfileState(newProfile);
+      console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] setUser and setUserProfileState called. User: ${newFirebaseUser?.uid || 'null'}, Profile: ${newProfile?.id || 'null'}`);
+
+      // Update cookie based on the new state
+      if (newFirebaseUser && newProfile) {
+        const cookieStateToSet: AppAuthStateCookie = {
+            isProfileCreated: !!newProfile.profileSetupComplete, // Use profileSetupComplete as source of truth
+            authSyncComplete: true 
+        };
+        console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] Attempting to set app_auth_state cookie for UID: ${newFirebaseUser.uid} with state:`, cookieStateToSet);
+        setCookie('app_auth_state', JSON.stringify(cookieStateToSet), 1); 
+        console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] app_auth_state cookie SET for user ${newFirebaseUser.uid}.`);
+      } else {
+        console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] No user or profile. Attempting to erase app_auth_state cookie.`);
         eraseCookie('app_auth_state');
         console.log(`    [AuthProvider onAuthStateChanged @ ${callbackTime}] app_auth_state cookie ERASED.`);
       }
       
-      const currentContextUserUID = user?.uid; 
-      console.log(`  [AuthProvider onAuthStateChanged CALLBACK END @ ${new Date().toISOString()}] Setting loading to FALSE. Triggering fbUser was: ${fbUser?.uid || 'null'}. Context user state before this setLoading(false): ${currentContextUserUID || 'null'}. Fetched profile for cookie:`, fetchedProfile);
+      // Set loading to false AFTER all state updates (user, profile, cookie) are processed
+      console.log(`  [AuthProvider onAuthStateChanged CALLBACK END @ ${new Date().toISOString()}] Setting loading to FALSE. fbUser was: ${fbUser?.uid || 'null'}.`);
       setLoading(false);
     });
 
@@ -122,15 +126,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const contextLogout = useCallback(async () => {
     const logoutStartTime = new Date().toISOString();
     console.log(`[AuthProvider contextLogout @ ${logoutStartTime}] Called.`);
+    setLoading(true); // Indicate loading during logout
     eraseCookie('app_auth_state');
     if (firebaseAuthInstance) {
       try {
         await signOut(firebaseAuthInstance);
-        console.log(`  [AuthProvider contextLogout @ ${new Date().toISOString()}] signOut successful. onAuthStateChanged will handle state updates.`);
+        console.log(`  [AuthProvider contextLogout @ ${new Date().toISOString()}] signOut successful. onAuthStateChanged will handle clearing user/profile and setting loading to false.`);
+        // Note: onAuthStateChanged will be triggered with null, which will call setUser(null), setUserProfileState(null), eraseCookie, and setLoading(false)
       } catch (error) {
         console.error("  [AuthProvider contextLogout] Error signing out:", error);
         setUser(null); 
         setUserProfileState(null);
+        // eraseCookie('app_auth_state'); // Already erased
         setLoading(false); 
       }
     } else {
@@ -143,25 +150,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     console.log("[AuthProvider contextSetUserProfile] Manually updating profile in context via updater fn.");
     setUserProfileState(prevUserProfile => {
         const newProfile = updater(prevUserProfile);
-        // After profile is updated in context, update the cookie
-        if (newProfile && user) { // Ensure user is still logged in
+        if (user) { // Only update cookie if user is still logged in
              const cookieStateToSet: AppAuthStateCookie = {
-                isProfileCreated: !!newProfile.profileSetupComplete, // Or newProfile.isProfileCreated if that's the primary source
-                authSyncComplete: true // Assume sync is complete if profile is updated
+                isProfileCreated: !!newProfile?.profileSetupComplete,
+                authSyncComplete: true 
             };
             console.log(`    [AuthProvider contextSetUserProfile] Setting app_auth_state cookie with new profile state:`, cookieStateToSet);
             setCookie('app_auth_state', JSON.stringify(cookieStateToSet), 1);
-        } else if (!newProfile && !user) { // If profile and user become null (e.g. during logout sequence triggered elsewhere)
+        } else {
+             console.log(`    [AuthProvider contextSetUserProfile] User not logged in, erasing app_auth_state cookie.`);
             eraseCookie('app_auth_state');
         }
         return newProfile;
     });
-  }, [user]); // Depend on user to ensure we don't set cookie if user logs out during this
+  }, [user]); 
   
   const checkAuthState = useCallback(async () => {
     if (!firebaseAuthInstance) {
       console.warn("[AuthProvider checkAuthState] Firebase Auth instance not available.");
-      setLoading(false); 
+      setUser(null); setUserProfileState(null); setLoading(false); 
       eraseCookie('app_auth_state');
       return;
     }
@@ -169,15 +176,20 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     setLoading(true);
     const currentFbUser = firebaseAuthInstance.currentUser;
     let fetchedProfile: UserProfile | null = null;
+
     if (currentFbUser) {
       setUser(currentFbUser);
       fetchedProfile = await fetchUserProfile(currentFbUser);
       setUserProfileState(fetchedProfile);
-      const cookieStateToSet: AppAuthStateCookie = {
-          isProfileCreated: !!fetchedProfile?.profileSetupComplete, // Or isProfileCreated
-          authSyncComplete: true
-      };
-      setCookie('app_auth_state', JSON.stringify(cookieStateToSet), 1);
+      if (fetchedProfile) {
+        const cookieStateToSet: AppAuthStateCookie = {
+            isProfileCreated: !!fetchedProfile.profileSetupComplete,
+            authSyncComplete: true
+        };
+        setCookie('app_auth_state', JSON.stringify(cookieStateToSet), 1);
+      } else {
+        eraseCookie('app_auth_state'); // No profile, so treat as not fully synced for cookie purposes
+      }
     } else {
       setUser(null);
       setUserProfileState(null);
