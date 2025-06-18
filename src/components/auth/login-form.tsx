@@ -42,38 +42,35 @@ export default function LoginForm() {
     },
   });
 
-  // Effect to handle redirection once AuthContext is resolved or if user is already logged in.
+  // Effect to handle redirection if user is already logged in OR after AuthProvider updates context
   useEffect(() => {
     const effectTimestamp = new Date().toISOString();
-    console.log(`[LoginForm AuthEffect @ ${effectTimestamp}] Triggered. auth.loading: ${auth.loading}, auth.user: ${!!auth.user}, auth.userProfile: ${!!auth.userProfile}, loginServerActionInitiated: ${loginServerActionInitiated}`);
+    console.log(`[LoginForm AuthEffect @ ${effectTimestamp}] Triggered. auth.loading: ${!!auth.loading}, auth.user: ${!!auth.user}, auth.userProfile: ${!!auth.userProfile}, loginServerActionInitiated: ${loginServerActionInitiated}`);
 
-    // If AuthProvider is done loading and we have a user and their profile, then redirect.
-    // This handles both:
-    // 1. User was already logged in when they hit /login.
-    // 2. User just logged in via this form, and AuthProvider has now updated the context.
     if (!auth.loading && auth.user && auth.userProfile) {
       console.log(`  [LoginForm AuthEffect @ ${effectTimestamp}] Auth context resolved with user ${auth.user.uid}. Profile setup complete: ${auth.userProfile.profileSetupComplete}. Redirecting from /login.`);
       if (auth.userProfile.profileSetupComplete) {
-        router.replace('/'); // Redirect to dashboard
+        router.replace('/'); 
       } else {
-        router.replace('/profile'); // Redirect to profile setup
+        router.replace('/profile'); 
       }
-      return; // Redirected.
+      setLoginServerActionInitiated(false); // Reset after successful redirect based on AuthContext
+      return; 
     }
 
-    // This handles the case where this form initiated a login, AuthProvider finished loading,
+    // This handles the case where this form initiated a login, AuthProvider finished loading (or checkAuthState finished),
     // but no user was found in the context (which would be an unexpected error state).
     if (loginServerActionInitiated && !auth.user && !auth.loading) {
         console.warn(`  [LoginForm AuthEffect @ ${effectTimestamp}] Auth context resolved with NO USER, despite a login attempt being initiated by this form. Resetting loginServerActionInitiated.`);
-        //setError("Login verification failed or session timed out. Please try again."); // Display a generic error.
-        setLoginServerActionInitiated(false); // Reset the flag.
+        setError("Login verification failed or session timed out. Please try again."); 
+        setLoginServerActionInitiated(false); 
     }
   }, [auth.user, auth.userProfile, auth.loading, router, loginServerActionInitiated]);
 
 
   const onSubmit = (values: LoginFormValues) => {
     setError(null);
-    setLoginServerActionInitiated(false); // Reset before new attempt
+    setLoginServerActionInitiated(false); 
     console.log('[LOGIN_FORM_SUBMIT_START] Submitting login form with email:', values.email);
     
     startServerActionTransition(async () => {
@@ -82,25 +79,31 @@ export default function LoginForm() {
         console.log('[LOGIN_FORM_SUBMIT_RESULT] Received result from loginUser server action:', result);
 
         if (result && result.success && result.userId) {
-          setLoginServerActionInitiated(true); // Mark that this form instance initiated a login
+          setLoginServerActionInitiated(true); 
 
           if (result.initialCookieState) {
             const clientSideInitialCookie: AppAuthStateCookie = {
               isProfileCreated: result.initialCookieState.isProfileCreated,
-              authSyncComplete: false, // Always false initially from server action
+              authSyncComplete: false, 
             };
             console.log('[LOGIN_FORM_SUBMIT] Setting app_auth_state cookie with initial state from server:', clientSideInitialCookie);
             setCookie('app_auth_state', JSON.stringify(clientSideInitialCookie), 1);
           } else {
             console.warn('[LOGIN_FORM_SUBMIT] Login successful but no initialCookieState received from server.');
-             // Fallback: set a default initial cookie if server didn't provide one (should not happen with new logic)
             setCookie('app_auth_state', JSON.stringify({ isProfileCreated: false, authSyncComplete: false }), 1);
           }
           
-          // Do NOT redirect from here. The useEffect above handles redirection when AuthContext is ready.
-          // The UI will show "Verifying Session..." due to isLoadingUI.
-          console.log('[LOGIN_FORM_SUBMIT] Login successful. Cookie set. Waiting for AuthProvider to update context, then LoginForm AuthEffect to redirect.');
-          // `loginServerActionInitiated` being true will keep isLoadingUI true until auth.user is populated by AuthProvider
+          console.log('[LOGIN_FORM_SUBMIT] Login successful. Cookie set. Triggering auth.checkAuthState().');
+          if (auth.checkAuthState) {
+            await auth.checkAuthState(); // Explicitly tell AuthProvider to re-check and update context
+            console.log('[LOGIN_FORM_SUBMIT] auth.checkAuthState() completed. LoginForm AuthEffect should now handle redirection.');
+          } else {
+            console.error('[LOGIN_FORM_SUBMIT] auth.checkAuthState is not available. Cannot force context update.');
+            // Fallback or error handling if checkAuthState is missing
+             setError("Session verification component is missing. Please try again or contact support.");
+             setLoginServerActionInitiated(false); // Cannot rely on AuthEffect if checkAuthState failed
+          }
+          // Redirection is now handled by the useEffect listening to AuthContext changes.
 
         } else {
           console.log('[LOGIN_FORM_FAILURE] Login server action reported failure. Result:', result);
@@ -117,8 +120,6 @@ export default function LoginForm() {
     });
   };
   
-  // isLoadingUI should be true if server action is pending,
-  // OR if this form initiated a login and AuthProvider hasn't fully resolved the user context yet.
   const isLoadingUI = isServerActionPending || (loginServerActionInitiated && (!auth.user || auth.loading));
 
 
