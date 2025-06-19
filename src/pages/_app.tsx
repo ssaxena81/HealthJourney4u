@@ -1,9 +1,9 @@
 import type { AppProps } from 'next/app';
-import '../app/globals.css'; // Assuming your global styles are in src/app/globals.css
+// Removed: import '../app/globals.css';
+// The global CSS is imported in src/app/layout.tsx for the App Router.
 
-// This is a minimal _app.tsx for the Pages Router.
-// In a pure App Router setup, this file is typically not needed.
-// If present, it can sometimes interfere with the App Router build if not correctly handled.
+// This _app.tsx is minimal.
+// If your application primarily uses the App Router (src/app), this file might be unnecessary.
 function MyApp({ Component, pageProps }: AppProps) {
   return <Component {...pageProps} />;
 }
