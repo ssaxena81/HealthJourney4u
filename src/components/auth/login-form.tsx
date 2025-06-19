@@ -106,6 +106,7 @@ export default function LoginForm() {
         console.log('[LOGIN_FORM_SUBMIT_RESULT] Received result from loginUser server action:', result);
 
         if (result && result.success && result.userId) {
+          console.log('[LOGIN_FORM_SUBMIT] user id received in result is: ',result.userId);
           setLoginServerActionInitiated(true); 
 
           if (result.initialCookieState) {
