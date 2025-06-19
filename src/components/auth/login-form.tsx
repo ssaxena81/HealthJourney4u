@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState, useTransition, useEffect, useCallback } from 'react';
+import React, { useState, useTransition, useEffect, useCallback, useMemo } from 'react'; // Added useMemo
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
@@ -15,7 +15,6 @@ import { Loader2, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import type { LoginResult, AppAuthStateCookie } from '@/types';
 import { setCookie } from '@/lib/cookie-utils';
-// Removed: import { auth as firebaseAuthClientInstance } from '@/lib/firebase/clientApp';
 
 const loginFormSchema = z.object({
   email: z.string().email({ message: 'Invalid email address.' }),
@@ -32,7 +31,6 @@ export default function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   
-  // This flag indicates that THIS login form instance initiated a login attempt.
   const [loginServerActionInitiated, setLoginServerActionInitiated] = useState(false);
 
   const form = useForm<LoginFormValues>({
@@ -45,15 +43,11 @@ export default function LoginForm() {
 
   useEffect(() => {
     const effectTimestamp = new Date().toISOString();
-    console.log(`[LoginForm AuthEffect @ ${effectTimestamp}] Triggered. auth.loading: ${auth.loading}, auth.user UID: ${auth.user?.uid || 'null'}, auth.userProfile ID: ${auth.userProfile?.id || 'null'}, loginServerActionInitiated: ${loginServerActionInitiated}`);
+    // console.log(`[LoginForm AuthEffect @ ${effectTimestamp}] Triggered. auth.loading: ${auth.loading}, auth.user UID: ${auth.user?.uid || 'null'}, auth.userProfile ID: ${auth.userProfile?.id || 'null'}, loginServerActionInitiated: ${loginServerActionInitiated}`);
 
-    // Scenario 1: User is already logged in when they visit /login (loginServerActionInitiated is false)
-    // OR AuthProvider has finished processing after this form initiated a login (loginServerActionInitiated is true)
-    if (!auth.loading && auth.user && auth.userProfile) {
-      console.log(`  [LoginForm AuthEffect @ ${effectTimestamp}] Auth context has user & profile. Profile setup complete: ${auth.userProfile.profileSetupComplete}. Redirecting from /login.`);
-      if (loginServerActionInitiated) {
-        setLoginServerActionInitiated(false); // Reset flag as we are now handling the post-login state.
-      }
+    // Scenario 1: User is already logged in (e.g., direct navigation to /login or refresh)
+    if (!loginServerActionInitiated && !auth.loading && auth.user && auth.userProfile) {
+      // console.log(`  [LoginForm AuthEffect @ ${effectTimestamp}] User ALREADY authenticated. Profile setup complete: ${auth.userProfile.profileSetupComplete}. Redirecting from /login.`);
       if (auth.userProfile.profileSetupComplete) {
         router.replace('/'); 
       } else {
@@ -62,24 +56,34 @@ export default function LoginForm() {
       return;
     }
 
-    // Scenario 2: This form initiated a login, AuthProvider has finished loading, but NO user/profile in context.
-    if (loginServerActionInitiated && !auth.loading && !auth.user) {
-      console.warn(`  [LoginForm AuthEffect @ ${effectTimestamp}] Auth context resolved with NO USER (auth.loading is false), despite a login attempt being initiated by this form. This indicates a sync issue or login failure at Firebase level. Resetting loginServerActionInitiated.`);
-      setError("Login verification failed or session timed out. Please try again."); 
-      toast({ title: "Login Error", description: "Login verification failed or session timed out. Please try again.", variant: "destructive" });
-      setLoginServerActionInitiated(false); // Allow user to try again
+    // Scenario 2: This form initiated a login, and AuthProvider has finished processing
+    if (loginServerActionInitiated && !auth.loading) {
+      if (auth.user && auth.userProfile) {
+        // console.log(`  [LoginForm AuthEffect @ ${effectTimestamp}] Login initiated by THIS form, AuthProvider COMPLETED. User & Profile PRESENT. Profile setup complete: ${auth.userProfile.profileSetupComplete}. Redirecting.`);
+        if (auth.userProfile.profileSetupComplete) {
+          router.replace('/');
+        } else {
+          router.replace('/profile');
+        }
+      } else {
+        // AuthProvider finished, but no user/profile. This is an actual login failure post-server action.
+        // console.warn(`  [LoginForm AuthEffect @ ${effectTimestamp}] Login initiated by THIS form, AuthProvider COMPLETED, but NO USER in context. This indicates a sync issue or login failure at Firebase level. Resetting loginServerActionInitiated.`);
+        setError("Login verification failed or session timed out. Please try again."); 
+        toast({ title: "Login Error", description: "Login verification failed or session timed out. Please try again.", variant: "destructive" });
+      }
+      setLoginServerActionInitiated(false); // Reset flag, as this login attempt has been processed by AuthProvider
       return;
     }
-    
+
     // Scenario 3: This form initiated login, AuthProvider still loading. Wait. (isLoadingUI handles button state).
     if (loginServerActionInitiated && auth.loading) {
-        console.log(`  [LoginForm AuthEffect @ ${effectTimestamp}] Login initiated by this form, AuthProvider is currently loading (auth.loading is true). Waiting...`);
+        // console.log(`  [LoginForm AuthEffect @ ${effectTimestamp}] Login initiated by THIS form, AuthProvider is currently loading (auth.loading is true). Waiting...`);
         return;
     }
-
-    // Scenario 4: Initial state or navigated to login page: Not loading, no user, and no active login attempt by this form.
+    
+    // Scenario 4: Initial state (not loading, no user, no active login attempt by this form).
     if (!loginServerActionInitiated && !auth.loading && !auth.user) {
-        console.log(`  [LoginForm AuthEffect @ ${effectTimestamp}] Initial state or navigated to login page: Not loading, no user, and no active login attempt by this form.`);
+        // console.log(`  [LoginForm AuthEffect @ ${effectTimestamp}] Initial state or navigated to login page: Not loading, no user, and no active login attempt by this form.`);
         return;
     }
     
@@ -88,44 +92,40 @@ export default function LoginForm() {
 
   const onSubmit = (values: LoginFormValues) => {
     setError(null);
-    setLoginServerActionInitiated(false); 
-    console.log('[LOGIN_FORM_SUBMIT_START] Submitting login form with email:', values.email);
+    // console.log('[LOGIN_FORM_SUBMIT_START] Submitting login form with email:', values.email);
     
     startServerActionTransition(async () => {
+      setLoginServerActionInitiated(true); // Signal that this form initiated a login *before* the server call
       try {
         const result: LoginResult = await loginUser(values);
-        console.log('[LOGIN_FORM_SUBMIT_RESULT] Received result from loginUser server action:', result);
+        // console.log('[LOGIN_FORM_SUBMIT_RESULT] Received result from loginUser server action:', result);
 
         if (result && result.success && result.userId) {
-          console.log('[LOGIN_FORM_SUBMIT] user id received in result is: ',result.userId);
-          setLoginServerActionInitiated(true); // Signal that this form initiated a login
-
+          // console.log('[LOGIN_FORM_SUBMIT] user id received in result is: ',result.userId);
           if (result.initialCookieState) {
             const clientSideInitialCookie: AppAuthStateCookie = {
               isProfileCreated: result.initialCookieState.isProfileCreated,
-              authSyncComplete: false, // AuthProvider will set this to true when its context is ready
+              authSyncComplete: false, 
             };
-            console.log('[LOGIN_FORM_SUBMIT] Setting app_auth_state cookie with initial state from server:', clientSideInitialCookie);
+            // console.log('[LOGIN_FORM_SUBMIT] Setting app_auth_state cookie with initial state from server:', clientSideInitialCookie);
             setCookie('app_auth_state', JSON.stringify(clientSideInitialCookie), 1);
           } else {
-            console.warn('[LOGIN_FORM_SUBMIT] Login successful but no initialCookieState received from server.');
-            // Set a default initial cookie
+            // console.warn('[LOGIN_FORM_SUBMIT] Login successful but no initialCookieState received from server.');
             setCookie('app_auth_state', JSON.stringify({ isProfileCreated: false, authSyncComplete: false }), 1);
           }
           
-          console.log('[LOGIN_FORM_SUBMIT] Login successful. Cookie set. Waiting for AuthProvider to update context and trigger AuthEffect for redirection.');
-          // Removed: await auth.checkAuthState(); 
-          // We now rely on onAuthStateChanged in AuthProvider to pick up the session.
-          // The isLoadingUI state and the AuthEffect will handle the "waiting" period.
+          // console.log('[LOGIN_FORM_SUBMIT] Login successful. Cookie set. Waiting for AuthProvider to update context and trigger AuthEffect for redirection.');
+          // NO auth.checkAuthState() here. Rely on onAuthStateChanged in AuthProvider.
+          // loginServerActionInitiated is true, AuthEffect will handle next steps once auth.loading is false.
 
         } else {
-          console.log('[LOGIN_FORM_FAILURE] Login server action reported failure. Result:', result);
+          // console.log('[LOGIN_FORM_FAILURE] Login server action reported failure. Result:', result);
           setError(result?.error || 'An unknown error occurred during login.');
           toast({ title: 'Login Failed', description: result?.error || 'Please check your credentials.', variant: 'destructive' });
-          setLoginServerActionInitiated(false); 
+          setLoginServerActionInitiated(false); // Reset as the server action itself failed.
         }
       } catch (transitionError: any) {
-        console.error('[LOGIN_FORM_ERROR] Error within startServerActionTransition async block:', transitionError);
+        // console.error('[LOGIN_FORM_ERROR] Error within startServerActionTransition async block:', transitionError);
         setError(transitionError.message || 'An unexpected error occurred.');
         toast({ title: 'Login Error', description: 'An unexpected client-side error occurred.', variant: 'destructive' });
         setLoginServerActionInitiated(false); 
@@ -133,11 +133,11 @@ export default function LoginForm() {
     });
   };
   
-  // This reflects that the form is waiting for the server action OR
-  // after the server action, it's waiting for AuthProvider (via onAuthStateChanged) to update the context.
   const isLoadingUI = isServerActionPending || (loginServerActionInitiated && auth.loading);
-  const logTimestamp = useMemo(() => new Date().toISOString(), [isServerActionPending, loginServerActionInitiated, auth.user, auth.loading]);
-  console.log(`[LoginForm @ ${logTimestamp}] isLoadingUI: ${isLoadingUI}`, `isServerActionPending: ${isServerActionPending}`, `loginServerActionInitiated: ${loginServerActionInitiated}`, `auth.user: ${!!auth.user}`, `auth.loading: ${auth.loading}`);
+  
+  // const logTimestamp = useMemo(() => new Date().toISOString(), [isServerActionPending, loginServerActionInitiated, auth.user, auth.loading]);
+  // console.log(`[LoginForm @ ${logTimestamp}] isLoadingUI: ${isLoadingUI}`, `isServerActionPending: ${isServerActionPending}`, `loginServerActionInitiated: ${loginServerActionInitiated}`, `auth.user: ${!!auth.user}`, `auth.loading: ${auth.loading}`);
+
 
   return (
     <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
