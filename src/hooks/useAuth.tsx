@@ -28,7 +28,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const processUserSession = useCallback(async (fbUser: FirebaseUser | null, source: string) => {
     const processTime = new Date().toISOString();
-    console.log(`  [AuthProvider processUserSession FROM ${source} @ ${processTime}] START. Received fbUser UID: ${fbUser?.uid || 'null'}. Current context User: ${user?.uid || 'null'}`);
+    console.log(`  [AuthProvider processUserSession FROM ${source} @ ${processTime}] START. Received fbUser UID: ${fbUser?.uid || 'null'}.`);
     
     let newFirebaseUser: FirebaseUser | null = null;
     let newProfile: UserProfile | null = null;
@@ -63,7 +63,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     
     console.log(`  [AuthProvider processUserSession FROM ${source} @ ${new Date().toISOString()}] END. Setting loading to FALSE.`);
     setLoading(false);
-  }, [user]);
+  }, []); // REMOVED `user` from dependency array to fix loop
 
   useEffect(() => {
     const effectExecutionTime = new Date().toISOString();
