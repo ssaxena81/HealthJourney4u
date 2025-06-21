@@ -1,6 +1,4 @@
 import type { Config } from "tailwindcss";
-import { GeistSans } from 'geist/font/sans';
-import { GeistMono } from 'geist/font/mono';
 
 export default {
     darkMode: ["class"],
@@ -12,8 +10,8 @@ export default {
   theme: {
   	extend: {
       fontFamily: {
-        sans: [`var(${GeistSans.variable})`, 'sans-serif'],
-        mono: [`var(${GeistMono.variable})`, 'monospace'],
+        sans: ["var(--font-geist-sans)", 'sans-serif'],
+        mono: ["var(--font-geist-mono)", 'monospace'],
       },
   		colors: {
   			background: 'hsl(var(--background))',
