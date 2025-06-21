@@ -2,12 +2,11 @@
 'use server';
 
 import { z } from 'zod';
-import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
+import { auth, db } from '@/lib/firebase/serverApp';
 import { doc, updateDoc } from 'firebase/firestore';
 import type { WalkingRadarGoals, RunningRadarGoals, HikingRadarGoals, SwimmingRadarGoals, SleepRadarGoals, DashboardMetricIdValue } from '@/types';
-import { DashboardMetricId, AVAILABLE_DASHBOARD_METRICS } from '@/types'; // Import new types
+import { DashboardMetricId, AVAILABLE_DASHBOARD_METRICS } from '@/types';
 
-// Schema for validating individual goal values
 const optionalPositiveNumber = z.preprocess(
   (val) => (val === "" || val === null || val === undefined ? undefined : Number(val)),
   z.number().nonnegative("Must be a non-negative number (0 or more).").optional().nullable()
@@ -47,11 +46,7 @@ interface UpdateWalkingRadarGoalsResult {
 export async function updateWalkingRadarGoals(
   values: WalkingRadarGoals 
 ): Promise<UpdateWalkingRadarGoalsResult> {
-  if (!firebaseAuth) {
-    console.error('[USER_PROFILE_ACTIONS] Firebase Auth service is not available for updateWalkingRadarGoals.');
-    return { success: false, error: 'Authentication service unavailable.' };
-  }
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
   }
@@ -71,12 +66,6 @@ export async function updateWalkingRadarGoals(
     goalsToUpdate.minDailyDistanceMeters = validatedValues.minDailyDistanceMeters === null ? undefined : validatedValues.minDailyDistanceMeters;
     goalsToUpdate.minDailyDurationSec = validatedValues.minDailyDurationSec === null ? undefined : validatedValues.minDailyDurationSec;
     goalsToUpdate.minDailySessions = validatedValues.minDailySessions === null ? undefined : validatedValues.minDailySessions;
-
-
-    if (!db || !db.app) {
-      console.error('[USER_PROFILE_ACTIONS] Firestore not initialized.');
-      return { success: false, error: 'Database service unavailable.' };
-    }
 
     const userProfileDocRef = doc(db, 'users', userId);
     await updateDoc(userProfileDocRef, {
@@ -127,11 +116,7 @@ interface UpdateRunningRadarGoalsResult {
 export async function updateRunningRadarGoals(
   values: RunningRadarGoals
 ): Promise<UpdateRunningRadarGoalsResult> {
-  if (!firebaseAuth) {
-    console.error('[USER_PROFILE_ACTIONS] Firebase Auth service is not available for updateRunningRadarGoals.');
-    return { success: false, error: 'Authentication service unavailable.' };
-  }
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
   }
@@ -149,11 +134,6 @@ export async function updateRunningRadarGoals(
     goalsToUpdate.minDailyDistanceMeters = validatedValues.minDailyDistanceMeters === null ? undefined : validatedValues.minDailyDistanceMeters;
     goalsToUpdate.minDailyDurationSec = validatedValues.minDailyDurationSec === null ? undefined : validatedValues.minDailyDurationSec;
     goalsToUpdate.minDailySessions = validatedValues.minDailySessions === null ? undefined : validatedValues.minDailySessions;
-
-    if (!db || !db.app) {
-      console.error('[USER_PROFILE_ACTIONS] Firestore not initialized for running goals.');
-      return { success: false, error: 'Database service unavailable.' };
-    }
 
     const userProfileDocRef = doc(db, 'users', userId);
     await updateDoc(userProfileDocRef, {
@@ -207,11 +187,7 @@ interface UpdateHikingRadarGoalsResult {
 export async function updateHikingRadarGoals(
   values: HikingRadarGoals
 ): Promise<UpdateHikingRadarGoalsResult> {
-  if (!firebaseAuth) {
-    console.error('[USER_PROFILE_ACTIONS] Firebase Auth service is not available for updateHikingRadarGoals.');
-    return { success: false, error: 'Authentication service unavailable.' };
-  }
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
   }
@@ -231,12 +207,6 @@ export async function updateHikingRadarGoals(
     goalsToUpdate.minDailyDurationSec = validatedValues.minDailyDurationSec === null ? undefined : validatedValues.minDailyDurationSec;
     goalsToUpdate.minDailySessions = validatedValues.minDailySessions === null ? undefined : validatedValues.minDailySessions;
     goalsToUpdate.minDailyElevationGainMeters = validatedValues.minDailyElevationGainMeters === null ? undefined : validatedValues.minDailyElevationGainMeters;
-
-
-    if (!db || !db.app) {
-      console.error('[USER_PROFILE_ACTIONS] Firestore not initialized for hiking goals.');
-      return { success: false, error: 'Database service unavailable.' };
-    }
 
     const userProfileDocRef = doc(db, 'users', userId);
     await updateDoc(userProfileDocRef, {
@@ -288,11 +258,7 @@ interface UpdateSwimmingRadarGoalsResult {
 export async function updateSwimmingRadarGoals(
   values: SwimmingRadarGoals
 ): Promise<UpdateSwimmingRadarGoalsResult> {
-  if (!firebaseAuth) {
-    console.error('[USER_PROFILE_ACTIONS] Firebase Auth service is not available for updateSwimmingRadarGoals.');
-    return { success: false, error: 'Authentication service unavailable.' };
-  }
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
   }
@@ -310,11 +276,6 @@ export async function updateSwimmingRadarGoals(
     goalsToUpdate.minDailyDistanceMeters = validatedValues.minDailyDistanceMeters === null ? undefined : validatedValues.minDailyDistanceMeters;
     goalsToUpdate.minDailyDurationSec = validatedValues.minDailyDurationSec === null ? undefined : validatedValues.minDailyDurationSec;
     goalsToUpdate.minDailySessions = validatedValues.minDailySessions === null ? undefined : validatedValues.minDailySessions;
-
-    if (!db || !db.app) {
-      console.error('[USER_PROFILE_ACTIONS] Firestore not initialized for swimming goals.');
-      return { success: false, error: 'Database service unavailable.' };
-    }
 
     const userProfileDocRef = doc(db, 'users', userId);
     await updateDoc(userProfileDocRef, {
@@ -354,11 +315,7 @@ interface UpdateSleepRadarGoalsResult {
 export async function updateSleepRadarGoals(
   values: SleepRadarGoals
 ): Promise<UpdateSleepRadarGoalsResult> {
-  if (!firebaseAuth) {
-    console.error('[USER_PROFILE_ACTIONS] Firebase Auth service is not available for updateSleepRadarGoals.');
-    return { success: false, error: 'Authentication service unavailable.' };
-  }
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
   }
@@ -375,11 +332,6 @@ export async function updateSleepRadarGoals(
       minTimeInDeepSleepMinutes: validatedValues.minTimeInDeepSleepMinutes === null ? undefined : validatedValues.minTimeInDeepSleepMinutes,
       minTimeInRemSleepMinutes: validatedValues.minTimeInRemSleepMinutes === null ? undefined : validatedValues.minTimeInRemSleepMinutes,
     };
-
-    if (!db || !db.app) {
-      console.error('[USER_PROFILE_ACTIONS] Firestore not initialized for sleep goals.');
-      return { success: false, error: 'Database service unavailable.' };
-    }
 
     const userProfileDocRef = doc(db, 'users', userId);
     await updateDoc(userProfileDocRef, {
@@ -401,7 +353,7 @@ export async function updateSleepRadarGoals(
 
 
 // --- Dashboard Metric Selection ---
-const allMetricIds = AVAILABLE_DASHBOARD_METRICS.map(m => m.id) as [DashboardMetricIdValue, ...DashboardMetricIdValue[]]; // Ensure at least one for Zod enum
+const allMetricIds = AVAILABLE_DASHBOARD_METRICS.map(m => m.id) as [DashboardMetricIdValue, ...DashboardMetricIdValue[]];
 const DashboardMetricSelectionSchema = z.object({
   selectedMetricIds: z.array(z.enum(allMetricIds))
     .min(3, "Please select at least 3 metrics for your dashboard.")
@@ -418,11 +370,7 @@ interface UpdateDashboardRadarMetricsResult {
 export async function updateDashboardRadarMetrics(
   selectedMetricIds: DashboardMetricIdValue[]
 ): Promise<UpdateDashboardRadarMetricsResult> {
-  if (!firebaseAuth) {
-    console.error('[USER_PROFILE_ACTIONS] Firebase Auth service is not available for updateDashboardRadarMetrics.');
-    return { success: false, error: 'Authentication service unavailable.' };
-  }
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
   }
@@ -432,11 +380,6 @@ export async function updateDashboardRadarMetrics(
 
   try {
     const validatedValues = DashboardMetricSelectionSchema.parse({ selectedMetricIds });
-
-    if (!db || !db.app) {
-      console.error('[USER_PROFILE_ACTIONS] Firestore not initialized for dashboard metrics.');
-      return { success: false, error: 'Database service unavailable.' };
-    }
 
     const userProfileDocRef = doc(db, 'users', userId);
     await updateDoc(userProfileDocRef, {
@@ -458,17 +401,9 @@ export async function updateDashboardRadarMetrics(
 
 // --- Mark Profile Setup Complete ---
 export async function markProfileSetupComplete(userId: string): Promise<{ success: boolean, error?: string }> {
-  if (!firebaseAuth || !db) {
-    console.error('[USER_PROFILE_ACTIONS] Firebase services not available for markProfileSetupComplete.');
-    return { success: false, error: 'Core services unavailable.' };
-  }
-  
-  // Optional: Verify it's the currently logged-in user or an admin making this call
-  // For simplicity, we'll assume the caller (DemographicsForm) has access to the correct userId.
-  if (firebaseAuth.currentUser?.uid !== userId) {
-    // This check might be too strict if an admin could mark it, but for user-driven flow it's okay.
-    // console.warn('[USER_PROFILE_ACTIONS] Attempt to mark profile complete for a different user ID.');
-    // return { success: false, error: 'Authorization error.' };
+  const currentUser = auth.currentUser;
+  if (!currentUser || currentUser.uid !== userId) {
+    return { success: false, error: 'Authorization error.' };
   }
 
   console.log('[USER_PROFILE_ACTIONS] Marking profile setup as complete for UID:', userId);

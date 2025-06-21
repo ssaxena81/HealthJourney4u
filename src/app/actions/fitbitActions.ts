@@ -1,8 +1,8 @@
 
 'use server';
 
-import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore';
+import { auth, db } from '@/lib/firebase/serverApp';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, orderBy, Timestamp, documentId } from 'firebase/firestore';
 import type { UserProfile, SubscriptionTier, FitbitActivitySummaryFirestore, FitbitHeartRateFirestore, FitbitSleepLogFirestore, NormalizedActivityFirestore, FitbitApiCallStats } from '@/types';
 import { NormalizedActivityType } from '@/types';
 import { getDailyActivitySummary, getHeartRateTimeSeries, getSleepLogs, getSwimmingActivities, getLoggedActivitiesForDate, type FitbitActivityLog } from '@/lib/services/fitbitService';
@@ -52,18 +52,10 @@ function mapFitbitActivityNameToNormalizedType(activityName?: string): Normalize
 function mapFitbitUnitToMeters(distance?: number, unit?: string): number | undefined {
   if (distance === undefined || distance === null || isNaN(distance)) return undefined;
   
-  // If unit is not provided and distance is likely in km (e.g., a small number like 5 for 5km), we might infer.
-  // However, Fitbit's API is inconsistent with providing distanceUnit for all activities.
-  // For daily summary distance, it's often in the user's preferred unit (km or miles).
-  // For logged activities, it *should* have distanceUnit, but let's be defensive.
-  
   if (!unit) {
-    // Heuristic: if distance is > 1000, assume it's already meters (e.g., from some specific activity types)
-    // If distance is < 100 (common for km/miles), assume it's NOT meters unless explicitly stated.
-    // This is imperfect. The ideal scenario is Fitbit always providing the unit.
     if (distance > 1000) return distance; // Likely already meters
     console.warn(`[FitbitActions] mapFitbitUnitToMeters: Distance ${distance} present but unit is missing. Cannot convert to meters reliably. Assuming it's not meters unless very large.`);
-    return undefined; // Or handle as per application's policy for missing units
+    return undefined;
   }
 
   const lowerUnit = unit.toLowerCase();
@@ -93,21 +85,11 @@ export async function fetchAndStoreFitbitDailyActivity(
 ): Promise<FetchFitbitDataResult> {
   console.log(`[FitbitActions] Initiating fetchAndStoreFitbitDailyActivity for date: ${targetDate}`);
 
-  if (!firebaseAuth) {
-    console.error('[FitbitActions] Firebase Auth service is not available for fetchAndStoreFitbitDailyActivity.');
-    return { success: false, message: 'Authentication service unavailable.', errorCode: 'AUTH_UNAVAILABLE' };
-  }
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) {
-    console.error('[FitbitActions] User not authenticated for fetchAndStoreFitbitDailyActivity.');
     return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   }
   const userId = currentUser.uid;
-
-  if (!db || !db.app) {
-    console.error('[FitbitActions] Firestore not initialized for fetchAndStoreFitbitDailyActivity. DB App:', db?.app);
-    return { success: false, message: 'Database service unavailable.', errorCode: 'DB_UNAVAILABLE' };
-  }
 
   try {
     const userProfileDocRef = doc(db, 'users', userId);
@@ -163,10 +145,6 @@ export async function fetchAndStoreFitbitDailyActivity(
     }
 
     const summary = fitbitData.summary;
-    // Attempt to infer distance unit if summary.distance is an array (Fitbit sometimes returns distance for different activity types within summary)
-    // For daily summary, distance is usually total distance in user's preferred unit.
-    // Let's assume for summary.distance, if it's a number, it's in KM for simplicity or what the user has set.
-    // This part needs careful handling based on actual API responses.
     const distanceKm = Array.isArray(summary.distance) ? summary.distance.find(d => d.activity === 'total')?.distance : summary.distance;
 
     const firestoreData: FitbitActivitySummaryFirestore = {
@@ -205,20 +183,11 @@ export async function fetchAndStoreFitbitDailyActivity(
 export async function getFitbitActivitySummariesForDateRange(
   dateRange: { from: string; to: string } // Dates in 'yyyy-MM-dd' format
 ): Promise<{ success: boolean; data?: FitbitActivitySummaryFirestore[]; error?: string }> {
-  if (!firebaseAuth) {
-    console.error('[FitbitActions] Firebase Auth service is not available for getFitbitActivitySummariesForDateRange.');
-    return { success: false, error: 'Authentication service unavailable.' };
-  }
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
   }
   const userId = currentUser.uid;
-
-  if (!db || !db.app) {
-    console.error('[FitbitActions] Firestore not initialized for getFitbitActivitySummariesForDateRange. DB App:', db?.app);
-    return { success: false, error: 'Database service unavailable.' };
-  }
 
   try {
     console.log(`[FitbitActions] Fetching fitbit_activity_summaries for user ${userId} from ${dateRange.from} to ${dateRange.to}`);
@@ -250,15 +219,9 @@ export async function fetchAndStoreFitbitHeartRate(
   detailLevel: '1min' | '1sec' = '1min'
 ): Promise<FetchFitbitDataResult> {
   console.log(`[FitbitActions] Initiating fetchAndStoreFitbitHeartRate for date: ${targetDate}, detail: ${detailLevel}`);
-  if (!firebaseAuth) {
-    console.error('[FitbitActions] Firebase Auth service is not available for fetchAndStoreFitbitHeartRate.');
-    return { success: false, message: 'Authentication service unavailable.', errorCode: 'AUTH_UNAVAILABLE' };
-  }
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   const userId = currentUser.uid;
-
-  if (!db || !db.app) return { success: false, message: 'Database service unavailable.', errorCode: 'DB_UNAVAILABLE' };
 
   try {
     const userProfileDocRef = doc(db, 'users', userId);
@@ -339,16 +302,10 @@ export async function fetchAndStoreFitbitSleep(
   targetDate: string // YYYY-MM-DD
 ): Promise<FetchFitbitDataResult> {
   console.log(`[FitbitActions] Initiating fetchAndStoreFitbitSleep for date: ${targetDate}`);
-  if (!firebaseAuth) {
-    console.error('[FitbitActions] Firebase Auth service is not available for fetchAndStoreFitbitSleep.');
-    return { success: false, message: 'Authentication service unavailable.', errorCode: 'AUTH_UNAVAILABLE' };
-  }
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   const userId = currentUser.uid;
 
-  if (!db || !db.app) return { success: false, message: 'Database service unavailable.', errorCode: 'DB_UNAVAILABLE' };
-  
   try {
     const userProfileDocRef = doc(db, 'users', userId);
     const userProfileSnap = await getDoc(userProfileDocRef);
@@ -448,15 +405,9 @@ export async function fetchAndStoreFitbitSwimmingData(
   targetDate: string // YYYY-MM-DD format
 ): Promise<FetchFitbitDataResult> {
   console.log(`[FitbitActions] Initiating fetchAndStoreFitbitSwimmingData for date: ${targetDate}`);
-  if (!firebaseAuth) {
-    console.error('[FitbitActions] Firebase Auth service is not available for fetchAndStoreFitbitSwimmingData.');
-    return { success: false, message: 'Authentication service unavailable.', errorCode: 'AUTH_UNAVAILABLE' };
-  }
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   const userId = currentUser.uid;
-
-  if (!db || !db.app) return { success: false, message: 'Database service unavailable.', errorCode: 'DB_UNAVAILABLE' };
 
   try {
     const userProfileDocRef = doc(db, 'users', userId);
@@ -562,15 +513,9 @@ export async function fetchAndStoreFitbitLoggedActivities(
   targetDate: string // YYYY-MM-DD format
 ): Promise<FetchFitbitDataResult> {
   console.log(`[FitbitActions] Initiating fetchAndStoreFitbitLoggedActivities for date: ${targetDate}`);
-  if (!firebaseAuth) {
-    console.error('[FitbitActions] Firebase Auth service is not available for fetchAndStoreFitbitLoggedActivities.');
-    return { success: false, message: 'Authentication service unavailable.', errorCode: 'AUTH_UNAVAILABLE' };
-  }
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   const userId = currentUser.uid;
-
-  if (!db || !db.app) return { success: false, message: 'Database service unavailable.', errorCode: 'DB_UNAVAILABLE' };
 
   try {
     const userProfileDocRef = doc(db, 'users', userId);
@@ -628,18 +573,16 @@ export async function fetchAndStoreFitbitLoggedActivities(
 
     for (const activity of fitbitActivities) {
       try {
-        // Filter out summary-like entries or non-workout activities
         if (!activity.logType || !relevantLogTypes.includes(activity.logType.toLowerCase())) {
             console.log(`[FitbitActions] Skipping activity ${activity.logId} with logType: ${activity.logType} and name: ${activity.name}`);
             continue;
         }
         
         const normalizedType = mapFitbitActivityNameToNormalizedType(activity.activityName || activity.name);
-        if (normalizedType === NormalizedActivityType.Other && !(activity.activityName || activity.name)?.toLowerCase().includes('workout')) { // Be more selective for 'Other'
+        if (normalizedType === NormalizedActivityType.Other && !(activity.activityName || activity.name)?.toLowerCase().includes('workout')) {
              console.log(`[FitbitActions] Skipping activity ${activity.logId} with unmapped name: ${activity.activityName || activity.name}`);
             continue;
         }
-        // Avoid re-processing swims if they are already handled by fetchAndStoreFitbitSwimmingData (though this might lead to duplicates if not careful)
         if (normalizedType === NormalizedActivityType.Swimming) {
             console.log(`[FitbitActions] Skipping swim activity ${activity.logId} in general logged activities fetch, as it should be handled by swimming-specific sync.`);
             continue;
@@ -665,14 +608,14 @@ export async function fetchAndStoreFitbitLoggedActivities(
           name: activity.name || activity.activityName,
           startTimeUtc: fullStartTimeISO, 
           startTimeLocal: `${activityDate}T${activity.startTime}`, 
-          durationMovingSec: activity.duration ? activity.duration / 1000 : undefined, // Active time often is the main duration
-          durationElapsedSec: activity.duration ? activity.duration / 1000 : undefined, // Fitbit might not always distinguish well for logged activities
+          durationMovingSec: activity.duration ? activity.duration / 1000 : undefined,
+          durationElapsedSec: activity.duration ? activity.duration / 1000 : undefined,
           distanceMeters: distanceMeters,
           calories: activity.calories,
           steps: activity.steps,
           averageHeartRateBpm: activity.averageHeartRate,
-          elevationGainMeters: undefined, // Fitbit activity list doesn't usually provide elevation gain directly here.
-          mapPolyline: undefined, // Not typically in list view.
+          elevationGainMeters: undefined,
+          mapPolyline: undefined,
           date: activityDate, 
           lastFetched: new Date().toISOString(),
         };
@@ -695,25 +638,14 @@ export async function fetchAndStoreFitbitLoggedActivities(
   }
 }
 
-
-
 export async function getFitbitSleepLogsForDateRange(
   dateRange: { from: string; to: string } // Dates in 'yyyy-MM-dd' format
 ): Promise<{ success: boolean; data?: FitbitSleepLogFirestore[]; error?: string }> {
-  if (!firebaseAuth) {
-    console.error('[FitbitActions] Firebase Auth service is not available for getFitbitSleepLogsForDateRange.');
-    return { success: false, error: 'Authentication service unavailable.' };
-  }
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) {
     return { success: false, error: 'User not authenticated.' };
   }
   const userId = currentUser.uid;
-
-  if (!db || !db.app) {
-    console.error('[FitbitActions] Firestore not initialized for getFitbitSleepLogsForDateRange. DB App:', db?.app);
-    return { success: false, error: 'Database service unavailable.' };
-  }
 
   try {
     console.log(`[FitbitActions] Fetching fitbit_sleep logs for user ${userId} from ${dateRange.from} to ${dateRange.to}`);
@@ -740,6 +672,3 @@ export async function getFitbitSleepLogsForDateRange(
     return { success: false, error: `Failed to fetch sleep logs: ${String(error.message || 'Unknown Firestore error')}` };
   }
 }
-
-
-    

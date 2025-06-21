@@ -1,7 +1,7 @@
 
 'use server';
 
-import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
+import { auth, db } from '@/lib/firebase/serverApp';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import type { UserProfile } from '@/types';
 import {
@@ -23,31 +23,21 @@ export interface SyncResult {
   activitiesProcessed?: number;
 }
 
-export interface SyncAllResults { // Added export here
-  success: boolean; // Overall success, maybe true if at least one attempt was made
+export interface SyncAllResults {
+  success: boolean;
   results: SyncResult[];
-  error?: string; // For general errors orchestrating the sync
+  error?: string;
 }
 
 export async function syncAllConnectedData(): Promise<SyncAllResults> {
   console.log('[SyncActions] Starting syncAllConnectedData...');
 
-  if (!firebaseAuth) {
-    console.error('[SyncActions] Firebase Auth service is not available for syncAllConnectedData.');
-    return { success: false, results: [], error: 'Authentication service unavailable.' };
-  }
-
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) {
     console.error('[SyncActions] User not authenticated for syncAllConnectedData.');
     return { success: false, results: [], error: 'User not authenticated.' };
   }
   const userId = currentUser.uid;
-
-  if (!db) {
-    console.error('[SyncActions] Firestore service is not available for syncAllConnectedData.');
-    return { success: false, results: [], error: 'Database service unavailable.' };
-  }
 
   let userProfile: UserProfile | null = null;
   const userProfileDocRef = doc(db, 'users', userId);
@@ -64,14 +54,14 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
     return { success: false, results: [], error: `Failed to fetch user profile: ${e.message}` };
   }
 
-  if (!userProfile) { // Should be caught above, but as a safeguard
+  if (!userProfile) {
     return { success: false, results: [], error: 'User profile is null.' };
   }
 
   const syncResults: SyncResult[] = [];
   const today = new Date();
   const todayDateString = format(today, 'yyyy-MM-dd');
-  let overallSyncSuccess = true; // Assume success unless a critical error occurs
+  let overallSyncSuccess = true;
 
   // Fitbit Sync
   if (userProfile.connectedFitnessApps?.some(app => app.id === 'fitbit')) {
@@ -80,7 +70,6 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
     let totalFitbitActivitiesProcessed = 0;
 
     const lastSyncFitbit = userProfile.fitbitLastSuccessfulSync ? parseISO(userProfile.fitbitLastSuccessfulSync) : subDays(today, 7);
-    // Limit backfill to 7 days to prevent overly long syncs. A full historical backfill is a larger feature.
     const fitbitStartDate = isBefore(lastSyncFitbit, subDays(today, 7)) ? subDays(today, 7) : lastSyncFitbit;
 
     const datesToSyncFitbit = eachDayOfInterval({
@@ -92,7 +81,6 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
 
     for (const dateStr of datesToSyncFitbit) {
       try {
-        // Fetching all types of data for each day in the range
         const activityRes = await fetchAndStoreFitbitDailyActivity(dateStr);
         if (!activityRes.success) {
             fitbitSyncSuccess = false;
@@ -132,7 +120,7 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
         console.error(`[SyncActions] Error during Fitbit sync for date ${dateStr}:`, error);
         fitbitSyncSuccess = false;
         syncResults.push({ service: `Fitbit General (${dateStr})`, success: false, message: `Fitbit sync failed for ${dateStr}: ${error.message}`, errorCode: error.message === 'Fitbit Auth Error' ? 'FITBIT_AUTH_ERROR' : 'SYNC_LOOP_ERROR' });
-        if (error.message === 'Fitbit Auth Error') break; // Stop Fitbit sync if auth fails
+        if (error.message === 'Fitbit Auth Error') break;
       }
     }
 
@@ -142,7 +130,6 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
         syncResults.push({ service: 'Fitbit (Overall)', success: true, message: `Successfully synced Fitbit data up to ${todayDateString}.`, activitiesProcessed: totalFitbitActivitiesProcessed });
     } else if (!fitbitSyncSuccess) {
         overallSyncSuccess = false;
-        // Check if an auth error specific message for Fitbit (Overall) was already added
         const fitbitAuthErrorOverallExists = syncResults.some(r => r.service === 'Fitbit (Overall)' && r.errorCode?.includes('AUTH_ERROR'));
         if (!fitbitAuthErrorOverallExists) {
             syncResults.push({ service: 'Fitbit (Overall)', success: false, message: 'Fitbit sync encountered errors.', activitiesProcessed: totalFitbitActivitiesProcessed });
@@ -154,30 +141,25 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
   if (userProfile.connectedFitnessApps?.some(app => app.id === 'strava')) {
     console.log('[SyncActions] Attempting to sync Strava data...');
     try {
-      // Strava's 'after' parameter takes a Unix timestamp (seconds).
-      // If userProfile.stravaLastSyncTimestamp exists, use it. Otherwise, fetch for the last 7 days.
       const afterTimestamp = userProfile.stravaLastSyncTimestamp
-                             ? userProfile.stravaLastSyncTimestamp + 1 // Fetch activities *after* the last synced one
+                             ? userProfile.stravaLastSyncTimestamp + 1
                              : Math.floor(subDays(today, 7).getTime() / 1000);
 
       console.log(`[SyncActions] Strava: Fetching activities after timestamp: ${afterTimestamp}`);
 
       const stravaRes = await fetchAndStoreStravaRecentActivities({
           after: afterTimestamp,
-          per_page: 50 // Fetch a reasonable number of recent activities
+          per_page: 50
       });
       syncResults.push({ service: 'Strava Activities', ...stravaRes });
 
       if (stravaRes.success) {
-        // Update stravaLastSyncTimestamp to the current time (in seconds) to mark this sync point.
-        // This ensures the next sync will pick up from this moment.
         const currentEpochTimeSeconds = Math.floor(today.getTime() / 1000);
         await updateDoc(userProfileDocRef, { stravaLastSyncTimestamp: currentEpochTimeSeconds });
         console.log(`[SyncActions] Strava: Updated stravaLastSyncTimestamp to ${currentEpochTimeSeconds}.`);
       } else {
         overallSyncSuccess = false;
          if (stravaRes.errorCode === 'STRAVA_AUTH_ERROR' || stravaRes.errorCode === 'STRAVA_AUTH_EXPIRED_POST_REFRESH'){
-            // Error message is already added to syncResults by fetchAndStoreStravaRecentActivities
             console.warn('[SyncActions] Strava auth error detected, not overriding overall sync result based on this.');
          }
       }
@@ -202,7 +184,6 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
       } else {
         overallSyncSuccess = false;
         if (googleFitRes.errorCode === 'GOOGLE_FIT_AUTH_ERROR' || googleFitRes.errorCode === 'GOOGLE_FIT_AUTH_EXPIRED_SESSIONS' || googleFitRes.errorCode === 'GOOGLE_FIT_AUTH_EXPIRED_METRICS'){
-            // Error already added to syncResults by the action
             console.warn('[SyncActions] Google Fit auth error detected.');
         }
       }

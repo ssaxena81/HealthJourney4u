@@ -1,7 +1,7 @@
 
 'use server';
 
-import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
+import { auth, db } from '@/lib/firebase/serverApp';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import type { UserProfile, SubscriptionTier, StravaApiCallStats, NormalizedActivityFirestore } from '@/types';
 import { NormalizedActivityType } from '@/types';
@@ -30,7 +30,6 @@ function getRateLimitConfigStrava(
   }
 }
 
-// Helper to map Strava activity types to NormalizedActivityType
 function mapStravaTypeToNormalizedType(stravaType: string): NormalizedActivityType {
   const lowerType = stravaType.toLowerCase();
   switch (lowerType) {
@@ -42,11 +41,11 @@ function mapStravaTypeToNormalizedType(stravaType: string): NormalizedActivityTy
       return NormalizedActivityType.Hiking;
     case 'swim':
       return NormalizedActivityType.Swimming;
-    case 'ride': // Strava uses "Ride" for cycling
+    case 'ride':
     case 'virtualride':
     case 'ebikeride':
       return NormalizedActivityType.Cycling;
-    case 'workout': // General workout
+    case 'workout':
     case 'weighttraining':
     case 'crosstraining':
     case 'hiit':
@@ -64,21 +63,12 @@ export async function fetchAndStoreStravaRecentActivities(
 ): Promise<FetchStravaDataResult> {
   console.log('[StravaActions] Initiating fetchAndStoreStravaRecentActivities with params:', params);
 
-  if (!firebaseAuth) {
-    console.error('[StravaActions] Firebase Auth service is not available for fetchAndStoreStravaRecentActivities.');
-    return { success: false, message: 'Authentication service unavailable.', errorCode: 'AUTH_UNAVAILABLE' };
-  }
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) {
     console.error('[StravaActions] User not authenticated.');
     return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   }
   const userId = currentUser.uid;
-
-  if (!db || !db.app) {
-    console.error('[StravaActions] Firestore not initialized. DB App:', db?.app);
-    return { success: false, message: 'Database service unavailable.', errorCode: 'DB_UNAVAILABLE' };
-  }
 
   try {
     const userProfileDocRef = doc(db, 'users', userId);
@@ -126,7 +116,7 @@ export async function fetchAndStoreStravaRecentActivities(
       return { success: false, message: `Failed to fetch activities from Strava: ${String(error.message)}`, errorCode: 'STRAVA_API_ERROR' };
     }
     
-    callCountToday++; // Increment here as API call was made
+    callCountToday++;
     const updatedApiCallStats: StravaApiCallStats = {
       ...(userProfile.stravaApiCallStats || {}),
       activities: { lastCalledAt: now.toISOString(), callCountToday },
@@ -144,8 +134,8 @@ export async function fetchAndStoreStravaRecentActivities(
         NormalizedActivityType.Running, 
         NormalizedActivityType.Hiking, 
         NormalizedActivityType.Swimming,
-        NormalizedActivityType.Cycling, // Strava is strong on cycling
-        NormalizedActivityType.Workout, // For generic workouts
+        NormalizedActivityType.Cycling,
+        NormalizedActivityType.Workout,
     ];
     
     const processedActivities: NormalizedActivityFirestore[] = [];
@@ -157,25 +147,24 @@ export async function fetchAndStoreStravaRecentActivities(
 
         if (relevantActivityTypesToNormalize.includes(normalizedType)) {
           const firestoreData: NormalizedActivityFirestore = {
-            id: `strava-${activity.id}`, // Composite ID
+            id: `strava-${activity.id}`,
             userId: userId,
             originalId: String(activity.id),
             dataSource: 'strava',
             type: normalizedType,
             name: activity.name,
-            startTimeUtc: activity.start_date, // Strava start_date is already UTC
+            startTimeUtc: activity.start_date,
             startTimeLocal: activity.start_date_local,
             timezone: activity.timezone,
-            durationMovingSec: activity.moving_time, // Already in seconds
-            durationElapsedSec: activity.elapsed_time, // Already in seconds
-            distanceMeters: activity.distance, // Already in meters
+            durationMovingSec: activity.moving_time,
+            durationElapsedSec: activity.elapsed_time,
+            distanceMeters: activity.distance,
             calories: activity.calories,
-            // steps: undefined, // Strava activities don't typically provide step count in the main activity object
             averageHeartRateBpm: activity.average_heartrate,
             maxHeartRateBpm: activity.max_heartrate,
             elevationGainMeters: activity.total_elevation_gain,
             mapPolyline: activity.map?.summary_polyline || undefined,
-            date: activity.start_date_local.substring(0, 10), // YYYY-MM-DD from local start time
+            date: activity.start_date_local.substring(0, 10),
             lastFetched: new Date().toISOString(),
           };
           processedActivities.push(firestoreData);
@@ -203,4 +192,3 @@ export async function fetchAndStoreStravaRecentActivities(
     return { success: false, message: errorMessage, errorCode: errorCode };
   }
 }
-

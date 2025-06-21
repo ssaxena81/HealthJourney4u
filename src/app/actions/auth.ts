@@ -6,14 +6,9 @@ import {
   signInWithEmailAndPassword,
   updatePassword as firebaseUpdatePassword,
   type AuthError,
-  type Auth, // For type annotation
+  type Auth,
 } from 'firebase/auth';
-import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app'; // For server-side init
-import { getAuth } from 'firebase/auth'; // For server-side getAuth
-import { getFirestore, type Firestore } from 'firebase/firestore'; // For server-side Firestore
-// DO NOT import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp' for server actions
 import { z } from 'zod';
-// UserProfile and other specific types are now imported from @/types
 import type {
     UserProfile,
     SubscriptionTier,
@@ -30,46 +25,10 @@ import type {
     LoginResult,
     AppAuthStateCookie
 } from '@/types';
-import { passwordSchema } from '@/types'; // passwordSchema is also in @/types
+import { passwordSchema } from '@/types';
 import { doc, setDoc, getDoc, updateDoc, Timestamp, collection, query, where, getDocs } from 'firebase/firestore';
 import { differenceInYears, format } from 'date-fns';
-
-// Helper function for server-side Firebase initialization
-const initializeServerFirebase = () => {
-  const firebaseConfigServer = {
-    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
-    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN,
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID,
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
-    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  };
-
-  if (
-    !firebaseConfigServer.apiKey ||
-    !firebaseConfigServer.authDomain ||
-    !firebaseConfigServer.projectId ||
-    !firebaseConfigServer.storageBucket ||
-    !firebaseConfigServer.messagingSenderId ||
-    !firebaseConfigServer.appId
-  ) {
-    const errorMessage = "[ServerFirebaseHelper] CRITICAL SERVER FIREBASE CONFIG ERROR: One or more NEXT_PUBLIC_FIREBASE_... environment variables are missing.";
-    console.error(errorMessage);
-    throw new Error(errorMessage); // Throw error to be caught by calling function
-  }
-
-  let app: FirebaseApp;
-  if (!getApps().length) {
-    console.log("[ServerFirebaseHelper] No Firebase apps initialized for server. Initializing new Firebase app.");
-    app = initializeApp(firebaseConfigServer);
-  } else {
-    console.log("[ServerFirebaseHelper] Firebase app already initialized for server. Getting existing app.");
-    app = getApp();
-  }
-  const authInstance: Auth = getAuth(app);
-  const dbInstance: Firestore = getFirestore(app);
-  return { app, auth: authInstance, db: dbInstance };
-};
+import { auth as serverAuth, db as serverDb } from '@/lib/firebase/serverApp';
 
 
 // --- Sign Up Schemas ---
@@ -89,29 +48,11 @@ interface SignUpResult {
   error?: string;
   errorCode?: string;
   details?: any;
-  initialCookieState?: AppAuthStateCookie; // Updated to use AppAuthStateCookie from types
+  initialCookieState?: AppAuthStateCookie;
 }
 
 export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema>): Promise<SignUpResult> {
   console.log("[SIGNUP_ACTION_START] signUpUser action initiated with email:", values.email, "tier:", values.subscriptionTier);
-
-  let serverAuth: Auth;
-  let serverDb: Firestore;
-
-  try {
-    const initResult = initializeServerFirebase(); // Call helper
-    serverAuth = initResult.auth;
-    serverDb = initResult.db;
-    console.log("[SIGNUP_ACTION_SERVER_FIREBASE_INIT_SUCCESS] Server-side Firebase Auth and DB initialized for signUpUser.");
-  } catch (initError: any) {
-    console.error("[SIGNUP_ACTION_SERVER_FIREBASE_INIT_FAILURE]", initError.message, initError.stack);
-    return {
-      success: false,
-      error: "Critical server error: Firebase services could not be initialized. Please contact support.",
-      errorCode: 'SERVER_FIREBASE_INIT_FAILURE'
-    };
-  }
-
 
   try {
     const validatedValues = SignUpDetailsInputSchema.parse(values);
@@ -210,24 +151,7 @@ const LoginInputSchema = z.object({
 
 export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promise<LoginResult> {
   console.log("[LOGIN_ACTION_START] loginUser action initiated for email:", values.email);
-
-  let serverAuth: Auth;
-  let serverDb: Firestore;
   let initialCookieState: AppAuthStateCookie = { isProfileCreated: false, authSyncComplete: false }; // Default initial state
-
-  try {
-    const initResult = initializeServerFirebase();
-    serverAuth = initResult.auth;
-    serverDb = initResult.db;
-    console.log("[LOGIN_ACTION_SERVER_FIREBASE_INIT_SUCCESS] Server-side Firebase Auth and DB initialized for loginUser.");
-  } catch (initError: any) {
-    console.error("[LOGIN_ACTION_SERVER_FIREBASE_INIT_FAILURE]", initError.message, initError.stack);
-    return {
-      success: false,
-      error: "Critical server error: Firebase services could not be initialized. Please contact support.",
-      errorCode: 'SERVER_FIREBASE_INIT_FAILURE'
-    };
-  }
 
   try {
     const validatedValues = LoginInputSchema.parse(values);
@@ -435,10 +359,7 @@ interface ForgotPasswordResult {
 
 export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswordEmailSchema>): Promise<ForgotPasswordResult> {
   console.log("[SEND_RESET_CODE_START] Action initiated for email:", values.email);
-  let serverDb: Firestore;
   try {
-    const { db: sDb } = initializeServerFirebase();
-    serverDb = sDb;
     const validatedValues = ForgotPasswordEmailSchema.parse(values);
     console.log("[SEND_RESET_CODE_VALIDATED] Email validated by Zod:", validatedValues.email);
 
@@ -475,10 +396,7 @@ export async function sendPasswordResetCode(values: z.infer<typeof ForgotPasswor
 
 export async function verifyPasswordResetCode(values: z.infer<typeof VerifyResetCodeSchema>): Promise<ForgotPasswordResult> {
   console.log("[VERIFY_RESET_CODE_START] Action initiated for email:", values.email, "with code (first 2 chars):", values.code.substring(0,2));
-  let serverDb: Firestore;
   try {
-    const { db: sDb } = initializeServerFirebase();
-    serverDb = sDb;
     const validatedValues = VerifyResetCodeSchema.parse(values);
 
     const usersRef = collection(serverDb, "users");
@@ -519,12 +437,7 @@ export async function verifyPasswordResetCode(values: z.infer<typeof VerifyReset
 
 export async function resetPassword(values: z.infer<typeof FinalResetPasswordSchema>): Promise<ForgotPasswordResult> {
   console.log("[RESET_PASSWORD_START] Action initiated for email:", values.email);
-  let serverAuth: Auth;
-  let serverDb: Firestore;
   try {
-    const { auth: sAuth, db: sDb } = initializeServerFirebase();
-    serverAuth = sAuth;
-    serverDb = sDb;
     const validatedValues = FinalResetPasswordSchema.parse(values);
 
     const currentUser = serverAuth.currentUser;
@@ -627,10 +540,7 @@ const DemographicsSchemaServer = z.object({
 
 export async function updateDemographics(userId: string, values: z.infer<typeof DemographicsSchemaServer>): Promise<{success: boolean, error?: string, data?: Partial<UserProfile>, details?: z.inferFlattenedErrors<typeof DemographicsSchemaServer>, errorCode?: string}> {
     console.log("[UPDATE_DEMOGRAPHICS_START] Updating demographics for UID:", userId, "with values:", values);
-    let serverDb: Firestore;
     try {
-      const { db: sDb } = initializeServerFirebase();
-      serverDb = sDb;
       const validatedValues = DemographicsSchemaServer.parse(values);
       console.log("[UPDATE_DEMOGRAPHICS_VALIDATION_PASSED] Server-side validation passed for UID:", userId);
 
@@ -663,10 +573,7 @@ export async function updateDemographics(userId: string, values: z.infer<typeof 
 
 export async function updateUserTermsAcceptance(userId: string, accepted: boolean, version: string): Promise<{success: boolean, error?: string, errorCode?: string}> {
     console.log("[UPDATE_TERMS_START] Updating terms acceptance for UID:", userId, "Accepted:", accepted, "Version:", version);
-    let serverDb: Firestore;
     try {
-        const { db: sDb } = initializeServerFirebase();
-        serverDb = sDb;
         console.log("[UPDATE_TERMS_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId);
         await updateDoc(doc(serverDb, "users", userId), { acceptedLatestTerms: accepted, termsVersionAccepted: version });
         console.log("[UPDATE_TERMS_FIRESTORE_UPDATE_SUCCESS] Firestore updated successfully for UID:", userId);
@@ -683,10 +590,7 @@ export async function updateUserTermsAcceptance(userId: string, accepted: boolea
 
 export async function finalizeFitbitConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string, data?: any}> {
     console.log("[FINALIZE_FITBIT_CONNECTION_START] Finalizing Fitbit connection for UID:", userId);
-    let serverDb: Firestore;
     try {
-        const { db: sDb } = initializeServerFirebase();
-        serverDb = sDb;
         const userProfileDocRef = doc(serverDb, "users", userId);
         const userProfileSnap = await getDoc(userProfileDocRef);
 
@@ -719,10 +623,7 @@ export async function finalizeFitbitConnection(userId: string): Promise<{success
 
 export async function finalizeStravaConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string, data?: any}> {
     console.log("[FINALIZE_STRAVA_CONNECTION_START] Finalizing Strava connection for UID:", userId);
-    let serverDb: Firestore;
     try {
-        const { db: sDb } = initializeServerFirebase();
-        serverDb = sDb;
         const userProfileDocRef = doc(serverDb, "users", userId);
         const userProfileSnap = await getDoc(userProfileDocRef);
 
@@ -753,10 +654,7 @@ export async function finalizeStravaConnection(userId: string): Promise<{success
 
 export async function finalizeGoogleFitConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string, data?: any}> {
     console.log("[FINALIZE_GOOGLE_FIT_CONNECTION_START] Finalizing Google Fit connection for UID:", userId);
-    let serverDb: Firestore;
      try {
-        const { db: sDb } = initializeServerFirebase();
-        serverDb = sDb;
         const userProfileDocRef = doc(serverDb, "users", userId);
         const userProfileSnap = await getDoc(userProfileDocRef);
 
@@ -787,10 +685,7 @@ export async function finalizeGoogleFitConnection(userId: string): Promise<{succ
 
 export async function finalizeWithingsConnection(userId: string, withingsApiUserId?: string): Promise<{success: boolean, error?: string, errorCode?: string, data?: {withingsUserId?: string}} > {
     console.log("[FINALIZE_WITHINGS_CONNECTION_START] Finalizing Withings connection for UID:", userId);
-    let serverDb: Firestore;
     try {
-        const { db: sDb } = initializeServerFirebase();
-        serverDb = sDb;
         const userProfileDocRef = doc(serverDb, "users", userId);
         const userProfileSnap = await getDoc(userProfileDocRef);
 
@@ -821,14 +716,3 @@ export async function finalizeWithingsConnection(userId: string, withingsApiUser
         return { success: false, error: errorMessage, errorCode: errorCode};
     }
 }
-    
- 
-    
-
-
-
-    
-
-
-
-

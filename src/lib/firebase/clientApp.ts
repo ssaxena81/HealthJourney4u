@@ -69,6 +69,9 @@ if (typeof window !== 'undefined') {
   dbInstance = null;
 }
 
+console.log('[clientApp.ts] Firebase app instance:',firebaseAppInstance);
+
+
 export const firebaseApp = firebaseAppInstance;
 export const auth = authInstance;
 export const db = dbInstance;

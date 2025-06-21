@@ -1,12 +1,12 @@
 
 'use server';
 
-import { auth as firebaseAuth, db } from '@/lib/firebase/clientApp';
+import { auth, db } from '@/lib/firebase/serverApp';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import type { UserProfile, SubscriptionTier, NormalizedActivityFirestore, GoogleFitApiCallStats } from '@/types';
 import { NormalizedActivityType, normalizedActivityTypeDisplayNames } from '@/types';
 import * as googleFitService from '@/lib/services/googleFitService';
-import { getValidGoogleFitAccessToken, clearGoogleFitTokens } from '@/lib/google-fit-auth-utils'; // Corrected import
+import { getValidGoogleFitAccessToken, clearGoogleFitTokens } from '@/lib/google-fit-auth-utils';
 import { isSameDay, startOfDay, format, parseISO } from 'date-fns';
 
 interface FetchGoogleFitDataResult {
@@ -57,21 +57,12 @@ export async function fetchAndStoreGoogleFitActivities(
 ): Promise<FetchGoogleFitDataResult> {
   console.log('[GoogleFitActions] Initiating fetchAndStoreGoogleFitActivities with params:', params);
 
-  if (!firebaseAuth) {
-    console.error('[GoogleFitActions] Firebase Auth service is not available for fetchAndStoreGoogleFitActivities.');
-    return { success: false, message: 'Authentication service unavailable.', errorCode: 'AUTH_UNAVAILABLE' };
-  }
-  const currentUser = firebaseAuth.currentUser;
+  const currentUser = auth.currentUser;
   if (!currentUser) {
     console.error('[GoogleFitActions] User not authenticated.');
     return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   }
   const userId = currentUser.uid;
-
-  if (!db || !db.app) {
-    console.error('[GoogleFitActions] Firestore not initialized. DB App:', db?.app);
-    return { success: false, message: 'Database service unavailable.', errorCode: 'DB_UNAVAILABLE' };
-  }
 
   let userProfile: UserProfile;
   try {
@@ -259,4 +250,3 @@ export async function fetchAndStoreGoogleFitActivities(
     activitiesProcessed: activitiesStoredCount 
   };
 }
-
