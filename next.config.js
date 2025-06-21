@@ -17,7 +17,9 @@ const nextConfig = {
       // Add other image source hostnames here if needed
     ],
   },
-  serverExternalPackages: ['@grpc/grpc-js'], // Keep gRPC external
+  experimental: {
+    serverExternalPackages: ['@grpc/grpc-js'], // Keep gRPC external
+  },
 };
 
 module.exports = nextConfig;
