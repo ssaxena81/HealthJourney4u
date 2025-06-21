@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useTransition, useEffect } from 'react';
@@ -6,6 +5,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
 import { useRouter } from 'next/navigation';
+
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -31,6 +31,14 @@ export default function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [showPassword, setShowPassword] = useState(false);
   
+  const form = useForm<LoginFormValues>({
+    resolver: zodResolver(loginFormSchema),
+    defaultValues: {
+      email: '',
+      password: '',
+    },
+  });
+
   // This effect handles the case where a user is already logged in when they visit the /login page.
   useEffect(() => {
     if (!auth.loading && auth.user && auth.userProfile) {
@@ -45,41 +53,30 @@ export default function LoginForm() {
 
   const onSubmit = (values: LoginFormValues) => {
     setError(null);
-    const submitTime = new Date().toISOString();
-    console.log(`[LOGIN_FORM_SUBMIT_START @ ${submitTime}] Submitting login form with email:`, values.email);
-    
     startServerActionTransition(async () => {
       try {
         const result: LoginResult = await loginUser(values);
-        console.log(`[LOGIN_FORM_SUBMIT_RESULT @ ${new Date().toISOString()}] Received result from loginUser server action:`, result);
 
         if (result && result.success && result.userId) {
-          console.log(`[LOGIN_FORM_SUBMIT @ ${new Date().toISOString()}] user id received in result is: `,result.userId);
           
           if (result.initialCookieState) {
             const clientSideInitialCookie: AppAuthStateCookie = {
               isProfileCreated: result.initialCookieState.isProfileCreated,
               authSyncComplete: false, 
             };
-            console.log(`[LOGIN_FORM_SUBMIT @ ${new Date().toISOString()}] Setting app_auth_state cookie with initial state from server:`, clientSideInitialCookie);
             setCookie('app_auth_state', JSON.stringify(clientSideInitialCookie), 1);
           } else {
-            console.warn(`[LOGIN_FORM_SUBMIT @ ${new Date().toISOString()}] Login successful but no initialCookieState received from server.`);
             setCookie('app_auth_state', JSON.stringify({ isProfileCreated: false, authSyncComplete: false }), 1);
           }
           
-          toast({ title: "Login Successful", description: "Redirecting to your dashboard..." });
-          // Force a full page reload to the dashboard.
-          // This ensures the AuthProvider re-initializes with the new session state from Firebase.
+          toast({ title: "Login Successful", description: "Redirecting..." });
           window.location.href = '/';
 
         } else {
-          console.log(`[LOGIN_FORM_FAILURE @ ${new Date().toISOString()}] Login server action reported failure. Result:`, result);
           setError(result?.error || 'An unknown error occurred during login.');
           toast({ title: 'Login Failed', description: result?.error || 'Please check your credentials.', variant: 'destructive' });
         }
       } catch (transitionError: any) {
-        console.error(`[LOGIN_FORM_ERROR @ ${new Date().toISOString()}] Error within startServerActionTransition async block:`, transitionError);
         setError(transitionError.message || 'An unexpected error occurred.');
         toast({ title: 'Login Error', description: 'An unexpected client-side error occurred.', variant: 'destructive' });
       }
