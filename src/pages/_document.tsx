@@ -1,14 +1,2 @@
-// src/pages/_document.tsx
-import { Html, Head, Main, NextScript } from 'next/document';
-
-export default function Document() {
-  return (
-    <Html lang="en">
-      <Head />
-      <body>
-        <Main />
-        <NextScript />
-      </body>
-    </Html>
-  );
-}
+// This file is intentionally left empty to disable the Pages Router
+// and avoid conflicts with the App Router.

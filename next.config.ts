@@ -1,24 +1,2 @@
-
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  typescript: {
-    // ignoreBuildErrors: true, // Temporarily removed to surface potential issues
-  },
-  eslint: {
-    // ignoreDuringBuilds: true, // Temporarily removed to surface potential issues
-  },
-  images: {
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: 'placehold.co',
-        port: '',
-        pathname: '/**',
-      },
-      // Add other image source hostnames here if needed
-    ],
-  },
-  serverExternalPackages: ['@grpc/grpc-js'], // Keep gRPC external
-};
-
-export default nextConfig;
+// This file is intentionally left empty.
+// Configuration is now handled by next.config.js to support the build environment.
