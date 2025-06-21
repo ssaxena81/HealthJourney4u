@@ -70,7 +70,8 @@ if (typeof window !== 'undefined') {
 }
 
 console.log('[clientApp.ts] Firebase app instance:',firebaseAppInstance);
-
+console.log('[clientApp.ts] Firebase auth instance:', authInstance);
+console.log('[clientApp.ts] Firebase db instance: ', dbInstance);
 
 export const firebaseApp = firebaseAppInstance;
 export const auth = authInstance;
