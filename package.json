@@ -51,7 +51,7 @@
     "react-day-picker": "^8.10.1",
     "react-dom": "19.0.0-rc-f994737d14-20240522",
     "react-hook-form": "^7.54.2",
-    "recharts": "^2.15.1",
+    "recharts": "2.12.7",
     "tailwind-merge": "^3.0.1",
     "tailwindcss-animate": "^1.0.7",
     "zod": "3.24.1"
@@ -66,6 +66,9 @@
     "typescript": "5.5.2"
   },
   "overrides": {
+    "next": "15.0.0-rc.0",
+    "react": "19.0.0-rc-f994737d14-20240522",
+    "react-dom": "19.0.0-rc-f994737d14-20240522",
     "glob": "^10.4.2",
     "rimraf": "^5.0.7",
     "firebase": "11.3.0"
