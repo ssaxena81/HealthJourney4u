@@ -24,11 +24,14 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // This function will handle all session processing logic.
-    // By defining it inside the useEffect, it doesn't need to be a dependency.
-    const processUserSession = async (fbUser: FirebaseUser | null) => {
+    if (!firebaseAuthInstance) {
+      console.warn("[AuthProvider] Firebase Auth instance not available. Can't set up listener.");
+      setLoading(false);
+      return;
+    }
+    
+    const unsubscribe = onAuthStateChanged(firebaseAuthInstance, async (fbUser) => {
       if (fbUser) {
-        // User is signed in, fetch profile
         const profileSnap = await getDoc(doc(db, "users", fbUser.uid));
         setUser(fbUser);
         if (profileSnap.exists()) {
@@ -40,30 +43,15 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           };
           setCookie('app_auth_state', JSON.stringify(cookieStateToSet), 1);
         } else {
-          // Profile doesn't exist, this might happen during signup flow
           setUserProfileInternal(null);
           eraseCookie('app_auth_state');
         }
       } else {
-        // User is signed out
         setUser(null);
         setUserProfileInternal(null);
         eraseCookie('app_auth_state');
       }
       setLoading(false);
-    };
-
-    if (!firebaseAuthInstance) {
-      console.warn("[AuthProvider] Firebase Auth instance not available. Can't set up listener.");
-      setLoading(false);
-      return;
-    }
-    
-    const unsubscribe = onAuthStateChanged(firebaseAuthInstance, (fbUser) => {
-      processUserSession(fbUser).catch(error => {
-        console.error("Error processing user session in onAuthStateChanged:", error);
-        setLoading(false);
-      });
     });
 
     // Cleanup subscription on unmount
