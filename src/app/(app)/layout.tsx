@@ -78,7 +78,7 @@ export default function AuthenticatedAppLayout({
     
     // 5. User is fully authenticated and set up, but on an auth page -> redirect to dashboard
     if (pathname === '/login' || pathname === '/signup') {
-        router.replace('/');
+        router.replace('/dashboard');
         return;
     }
 
