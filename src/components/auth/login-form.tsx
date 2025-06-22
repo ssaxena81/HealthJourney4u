@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useTransition, useEffect } from 'react';
@@ -71,27 +72,26 @@ export default function LoginForm() {
           
           toast({ title: "Login Successful", description: "Redirecting..." });
           
-          // --- NEW REDIRECTION LOGIC [2024-07-26 18:31:00] ---
-          // This logic replaces the old `window.location.href = '/';`
-          // It uses the result from the login action to route the user intelligently.
+          // --- FIX [2024-07-26 18:31:00] ---
+          // Replaced `router.push` with `window.location.assign` to force a full page reload.
+          // This ensures the client-side AuthProvider is re-initialized with the new
+          // authentication state, avoiding the race condition where a protected route
+          // would redirect back to login before the auth state was updated.
 
           // Case 1: Password has expired.
           if (result.passwordExpired) {
-            // [2024-07-26 18:31:00] Redirect to forced password reset page.
-            router.push('/reset-password-required');
+            window.location.assign('/reset-password-required');
             return;
           }
 
           // Case 2: User profile is fully set up.
           if (result.userProfile?.profileSetupComplete) {
-            // [2024-07-26 18:31:00] Redirect to the main application dashboard.
-            router.push('/dashboard');
+            window.location.assign('/dashboard');
           } else {
             // Case 3: User profile is not yet complete.
-            // [2024-07-26 18:31:00] Redirect to the profile page to complete setup.
-            router.push('/profile');
+            window.location.assign('/profile');
           }
-          // --- END NEW REDIRECTION LOGIC [2024-07-26 18:31:00] ---
+          // --- END FIX ---
 
         } else {
           setError(result?.error || 'An unknown error occurred during login.');
