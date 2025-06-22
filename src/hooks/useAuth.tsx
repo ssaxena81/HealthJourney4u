@@ -30,32 +30,50 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       return;
     }
     
+    console.log("[AuthProvider] Setting up onAuthStateChanged listener.");
     const unsubscribe = onAuthStateChanged(firebaseAuthInstance, async (fbUser) => {
+      console.log(`[AuthProvider onAuthStateChanged] Fired. fbUser object is: ${fbUser ? fbUser.uid : 'null'}`);
       if (fbUser) {
-        const profileSnap = await getDoc(doc(db, "users", fbUser.uid));
+        // User is signed in.
         setUser(fbUser);
-        if (profileSnap.exists()) {
-          const profile = profileSnap.data() as UserProfile;
-          setUserProfileInternal(profile);
-          const cookieStateToSet: AppAuthStateCookie = {
-            isProfileCreated: !!profile.profileSetupComplete,
-            authSyncComplete: true
-          };
-          setCookie('app_auth_state', JSON.stringify(cookieStateToSet), 1);
-        } else {
-          setUserProfileInternal(null);
-          eraseCookie('app_auth_state');
+        try {
+          const profileSnap = await getDoc(doc(db, "users", fbUser.uid));
+          if (profileSnap.exists()) {
+            const profile = profileSnap.data() as UserProfile;
+            setUserProfileInternal(profile);
+            console.log("[AuthProvider onAuthStateChanged] User profile found and set for UID:", fbUser.uid);
+            const cookieStateToSet: AppAuthStateCookie = {
+              isProfileCreated: !!profile.profileSetupComplete,
+              authSyncComplete: true
+            };
+            setCookie('app_auth_state', JSON.stringify(cookieStateToSet), 1);
+          } else {
+            // This case might happen if profile creation failed during signup.
+            console.warn("[AuthProvider onAuthStateChanged] User is authenticated, but no profile document found for UID:", fbUser.uid);
+            setUserProfileInternal(null);
+            eraseCookie('app_auth_state');
+          }
+        } catch (error) {
+            console.error("[AuthProvider onAuthStateChanged] Error fetching user profile:", error);
+            setUserProfileInternal(null);
+            eraseCookie('app_auth_state');
         }
       } else {
+        // User is signed out.
+        console.log("[AuthProvider onAuthStateChanged] User is signed out.");
         setUser(null);
         setUserProfileInternal(null);
         eraseCookie('app_auth_state');
       }
       setLoading(false);
+      console.log("[AuthProvider onAuthStateChanged] Auth state processing finished. Loading set to false.");
     });
 
     // Cleanup subscription on unmount
-    return () => unsubscribe();
+    return () => {
+      console.log("[AuthProvider] Cleaning up onAuthStateChanged listener.");
+      unsubscribe();
+    };
   }, []); // Empty dependency array ensures this effect runs only once on mount
 
   const contextLogout = useCallback(async () => {
