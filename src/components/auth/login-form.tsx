@@ -1,3 +1,4 @@
+
 'use client';
 
 import React, { useState, useTransition, useEffect } from 'react';
@@ -42,12 +43,8 @@ export default function LoginForm() {
   // This effect handles the case where a user is already logged in when they visit the /login page.
   useEffect(() => {
     if (!auth.loading && auth.user && auth.userProfile) {
-      console.log('user is logged in');
-      console.log('user ID is: ',auth.user.uid);
-      console.log('loading state is: ',auth.loading);
-      console.log('profile status is: ',auth.userProfile.profileSetupComplete);
       if (auth.userProfile.profileSetupComplete) {
-        router.replace('/'); 
+        router.replace('/dashboard'); 
       } else {
         router.replace('/profile'); 
       }
@@ -74,7 +71,19 @@ export default function LoginForm() {
           }
           
           toast({ title: "Login Successful", description: "Redirecting..." });
-          window.location.href = '/';
+          
+          // --- NEW REDIRECTION LOGIC ---
+          if (result.passwordExpired) {
+            router.push('/reset-password-required');
+            return;
+          }
+
+          if (result.userProfile?.profileSetupComplete) {
+            router.push('/dashboard');
+          } else {
+            router.push('/profile');
+          }
+          // --- END NEW REDIRECTION LOGIC ---
 
         } else {
           setError(result?.error || 'An unknown error occurred during login.');
