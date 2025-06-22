@@ -158,22 +158,15 @@ export default function AuthenticatedAppLayout({
     });
   };
 
-  // Main Loading state for the entire auth context
-  if (authAndProfileLoading) {
+  // The race condition fix is here.
+  // We show a consistent loading screen if the auth state is still loading OR if there is no user yet.
+  // The useEffect hook above will handle the actual redirection while this loader is displayed,
+  // preventing a "flash" of incorrect content or a "Redirecting to login..." message.
+  if (authAndProfileLoading || !user) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
         <p className="ml-4 text-lg text-foreground">Loading session...</p>
-      </div>
-    );
-  }
-
-  // If loading is false, but we still lack a user, show a redirecting state.
-  if (!user) {
-    return (
-       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
-        <Loader2 className="h-12 w-12 animate-spin text-destructive" />
-        <p className="ml-4 text-lg text-destructive">Redirecting to login...</p>
       </div>
     );
   }
