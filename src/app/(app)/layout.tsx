@@ -71,7 +71,7 @@ export default function AuthenticatedAppLayout({
     // 4. Profile not set up -> must go to profile page for setup
     if (userProfile && userProfile.profileSetupComplete !== true) {
       if (pathname !== '/profile') {
-        router.replace('/profile');
+        window.location.assign('/profile');
       }
       return;
     }
