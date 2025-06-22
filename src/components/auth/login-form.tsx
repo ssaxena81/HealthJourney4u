@@ -1,4 +1,3 @@
-
 'use client';
 
 import React, { useState, useTransition, useEffect } from 'react';
@@ -72,18 +71,27 @@ export default function LoginForm() {
           
           toast({ title: "Login Successful", description: "Redirecting..." });
           
-          // --- NEW REDIRECTION LOGIC ---
+          // --- NEW REDIRECTION LOGIC [2024-07-26 18:31:00] ---
+          // This logic replaces the old `window.location.href = '/';`
+          // It uses the result from the login action to route the user intelligently.
+
+          // Case 1: Password has expired.
           if (result.passwordExpired) {
+            // [2024-07-26 18:31:00] Redirect to forced password reset page.
             router.push('/reset-password-required');
             return;
           }
 
+          // Case 2: User profile is fully set up.
           if (result.userProfile?.profileSetupComplete) {
+            // [2024-07-26 18:31:00] Redirect to the main application dashboard.
             router.push('/dashboard');
           } else {
+            // Case 3: User profile is not yet complete.
+            // [2024-07-26 18:31:00] Redirect to the profile page to complete setup.
             router.push('/profile');
           }
-          // --- END NEW REDIRECTION LOGIC ---
+          // --- END NEW REDIRECTION LOGIC [2024-07-26 18:31:00] ---
 
         } else {
           setError(result?.error || 'An unknown error occurred during login.');
