@@ -38,6 +38,7 @@ export default function AuthenticatedAppLayout({
   const [isSyncing, startDataSyncTransition] = useReactTransition();
 
   useEffect(() => {
+    // This hook now runs only when the user's state is stable and loaded.
     if (authAndProfileLoading) {
       return; // Wait for auth context to be fully resolved
     }
@@ -71,6 +72,7 @@ export default function AuthenticatedAppLayout({
     // 4. Profile not set up -> must go to profile page for setup
     if (userProfile && userProfile.profileSetupComplete !== true) {
       if (pathname !== '/profile') {
+        // Use a full page reload to avoid race conditions with the auth context
         window.location.assign('/profile');
       }
       return;
@@ -158,10 +160,11 @@ export default function AuthenticatedAppLayout({
     });
   };
 
+  // --- FIX [2024-07-26] ---
   // The race condition fix is here.
   // We show a consistent loading screen if the auth state is still loading OR if there is no user yet.
   // The useEffect hook above will handle the actual redirection while this loader is displayed,
-  // preventing a "flash" of incorrect content or a "Redirecting to login..." message.
+  // preventing a "flash" of incorrect content or a premature redirect to login.
   if (authAndProfileLoading || !user) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
@@ -171,7 +174,7 @@ export default function AuthenticatedAppLayout({
     );
   }
   
-  // If user is present but checks in useEffect are pending redirection (e.g., to /profile)
+  // If user is present but profile checks in useEffect are still pending redirection (e.g., to /profile)
   // this prevents rendering children that might not be appropriate for the intermediate state.
   if ((!userProfile || userProfile.profileSetupComplete !== true) && pathname !== '/profile') {
      return (
@@ -181,6 +184,8 @@ export default function AuthenticatedAppLayout({
       </div>
     );
   }
+  // --- END FIX ---
+
 
   // If all checks passed, render the full layout and any necessary modals.
   return (
