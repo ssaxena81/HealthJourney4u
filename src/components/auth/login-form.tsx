@@ -72,11 +72,10 @@ export default function LoginForm() {
           
           toast({ title: "Login Successful", description: "Redirecting..." });
           
-          // --- FIX [2024-07-26 18:31:00] ---
-          // Replaced `router.push` with `window.location.assign` to force a full page reload.
-          // This ensures the client-side AuthProvider is re-initialized with the new
-          // authentication state, avoiding the race condition where a protected route
-          // would redirect back to login before the auth state was updated.
+          // --- FIX [2024-07-26 19:14:00] ---
+          // Replaced `window.location.href = '/'` with `window.location.assign()` and added intelligent routing.
+          // This forces a full page reload to the *correct* page, ensuring the AuthProvider is 
+          // re-initialized with the new authentication state and avoiding the race condition.
 
           // Case 1: Password has expired.
           if (result.passwordExpired) {
