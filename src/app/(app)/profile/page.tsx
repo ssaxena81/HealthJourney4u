@@ -23,7 +23,7 @@ import { Separator } from '@/components/ui/separator';
 import type { UserProfile } from '@/types'; // Ensure UserProfile is imported
 
 export default function ProfilePage() {
-  const { user, userProfile, loading, setUserProfile } = useAuth();
+  const { user, userProfile, loading, setUserProfileStateOnly: setUserProfile } = useAuth();
   const { toast } = useToast();
 
   if (loading || !user) { 

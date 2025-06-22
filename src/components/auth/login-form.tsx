@@ -42,6 +42,10 @@ export default function LoginForm() {
   // This effect handles the case where a user is already logged in when they visit the /login page.
   useEffect(() => {
     if (!auth.loading && auth.user && auth.userProfile) {
+      console.log('user is logged in');
+      console.log('user ID is: ',auth.user.uid);
+      console.log('loading state is: ',auth.loading);
+      console.log('profile status is: ',auth.userProfile.profileSetupComplete);
       if (auth.userProfile.profileSetupComplete) {
         router.replace('/'); 
       } else {
