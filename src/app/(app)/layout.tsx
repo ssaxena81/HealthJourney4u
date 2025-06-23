@@ -19,6 +19,7 @@ import { updateUserTermsAcceptance } from '@/app/actions/auth';
 import { useToast } from '@/hooks/use-toast';
 import { syncAllConnectedData } from '@/app/actions/syncActions';
 import type { SyncResult, SyncAllResults } from '@/app/actions/syncActions';
+import { SidebarProvider } from '@/components/ui/sidebar';
 
 const LATEST_TERMS_VERSION = "1.0";
 
@@ -232,7 +233,7 @@ export default function AuthenticatedAppLayout({
   
   // If all checks passed, render the full layout and any necessary modals.
   return (
-    <>
+    <SidebarProvider>
       <AppLayoutClient onSyncAllClick={handleSyncAll}>
         {children}
       </AppLayoutClient>
@@ -331,6 +332,6 @@ We do not store raw lab results, clinical notes, or full medical records unless 
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </>
+    </SidebarProvider>
   );
 }
