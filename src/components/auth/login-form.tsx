@@ -71,6 +71,8 @@ export default function LoginForm() {
           }
           
           toast({ title: "Login Successful", description: "Redirecting..." });
+          //added code to forcefully set value for variable 'authAndProfileLoading' to false
+          authAndProfileLoading:false;
           
           // --- FIX [2024-07-26 19:14:00] ---
           // Replaced `window.location.href = '/'` with `window.location.assign()` and added intelligent routing.
