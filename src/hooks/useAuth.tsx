@@ -126,3 +126,19 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
+function async(fbUser: any): import("firebase/auth").NextOrObserver<FirebaseUser> {
+  throw new Error('Function not implemented.');
+}
+
+function setUser(fbUser: any) {
+  throw new Error('Function not implemented.');
+}
+
+function setUserProfileInternal(profile: UserProfile) {
+  throw new Error('Function not implemented.');
+}
+
+function setLoading(arg0: boolean) {
+  throw new Error('Function not implemented.');
+}
+
