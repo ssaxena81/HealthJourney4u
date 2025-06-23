@@ -571,23 +571,6 @@ export async function updateDemographics(userId: string, values: z.infer<typeof 
     }
 }
 
-export async function updateUserTermsAcceptance(userId: string, accepted: boolean, version: string): Promise<{success: boolean, error?: string, errorCode?: string}> {
-    console.log("[UPDATE_TERMS_START] Updating terms acceptance for UID:", userId, "Accepted:", accepted, "Version:", version);
-    try {
-        console.log("[UPDATE_TERMS_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId);
-        await updateDoc(doc(serverDb, "users", userId), { acceptedLatestTerms: accepted, termsVersionAccepted: version });
-        console.log("[UPDATE_TERMS_FIRESTORE_UPDATE_SUCCESS] Firestore updated successfully for UID:", userId);
-        return { success: true };
-    } catch (error: any) {
-        console.error("[UPDATE_TERMS_RAW_ERROR] Raw error in updateUserTermsAcceptance for UID:", userId, "Error:", error.message, error.stack);
-        const errorMessage = String(error.message || "Failed to update terms acceptance due to an unexpected error.");
-        const errorCode = String((error as AuthError).code || 'UNEXPECTED_ERROR');
-        console.error(`[UPDATE_TERMS_ERROR_DETAILS] Code: ${errorCode}, Message: ${errorMessage}`);
-        return { success: false, error: errorMessage, errorCode: errorCode };
-    }
-}
-
-
 export async function finalizeFitbitConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string, data?: any}> {
     console.log("[FINALIZE_FITBIT_CONNECTION_START] Finalizing Fitbit connection for UID:", userId);
     try {
