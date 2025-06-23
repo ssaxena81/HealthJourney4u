@@ -160,12 +160,15 @@ export default function AuthenticatedAppLayout({
     });
   };
 
-  // --- FIX [2024-07-26] ---
-  // The race condition fix is here.
-  // We show a consistent loading screen if the auth state is still loading OR if there is no user yet.
-  // The useEffect hook above will handle the actual redirection while this loader is displayed,
-  // preventing a "flash" of incorrect content or a premature redirect to login.
+  // [06-23-2025 6:30pm] The new code block starts here.
+  // [06-23-2025 6:30pm] This is the definitive fix for the race condition causing the redirect loop.
+  // [06-23-2025 6:30pm] This 'if' statement acts as a single, robust "loading guard".
+  // [06-23-2025 6:30pm] It ensures that the rest of the component does not render until two conditions are met:
+  // [06-23-2025 6:30pm] 1. The `authAndProfileLoading` state from `useAuth` is `false`. This means the async check with Firebase is complete.
+  // [06-23-2025 6:30pm] 2. The `user` object is no longer `null`. This confirms the user is successfully authenticated.
+  // [06-23-2025 6:30pm] By combining these checks, we prevent the component from prematurely redirecting based on initial, incomplete state.
   if (authAndProfileLoading || !user) {
+    // [06-23-2025 6:30pm] While loading, a consistent spinner is shown to the user.
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -174,9 +177,11 @@ export default function AuthenticatedAppLayout({
     );
   }
   
-  // If user is present but profile checks in useEffect are still pending redirection (e.g., to /profile)
-  // this prevents rendering children that might not be appropriate for the intermediate state.
+  // [06-23-2025 6:30pm] This second 'if' statement handles the case where the user is logged in, but their profile setup is not yet complete.
+  // [06-23-2025 6:30pm] It prevents rendering the main application layout before the `useEffect` hook has a chance to redirect them to the '/profile' page.
+  // [06-23-2025 6:30pm] This avoids showing a "flash" of the main dashboard before the redirect occurs.
   if ((!userProfile || userProfile.profileSetupComplete !== true) && pathname !== '/profile') {
+     // [06-23-2025 6:30pm] While waiting for the profile setup redirect, a specific loader is shown.
      return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -184,9 +189,47 @@ export default function AuthenticatedAppLayout({
       </div>
     );
   }
-  // --- END FIX ---
+  // [06-23-2025 6:30pm] The new code block ends here.
 
-
+  // [06-23-2025 6:30pm] --- OLD CODE BLOCK ---
+  // [06-23-2025 6:30pm] This block of code is commented out because it contained multiple separate checks
+  // [06-23-2025 6:30pm] that led to a race condition, causing the redirect loop.
+  // [06-23-2025 6:30pm] if (authAndProfileLoading) {
+  // [06-23-2025 6:30pm]   return (
+  // [06-23-2025 6:30pm]     <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
+  // [06-23-2025 6:30pm]       <Loader2 className="h-12 w-12 animate-spin text-primary" />
+  // [06-23-2025 6:30pm]       <p className="ml-4 text-lg text-foreground">Loading session...</p>
+  // [06-23-2025 6:30pm]     </div>
+  // [06-23-2025 6:30pm]   );
+  // [06-23-2025 6:30pm] }
+  // [06-23-2025 6:30pm] 
+  // [06-23-2025 6:30pm] if (!user) {
+  // [06-23-2025 6:30pm]   return (
+  // [06-23-2025 6:30pm]     <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
+  // [06-23-2025 6:30pm]       <Loader2 className="h-12 w-12 animate-spin text-primary" />
+  // [06-23-2025 6:30pm]       <p className="ml-4 text-lg text-foreground">Redirecting to login...</p>
+  // [06-23-2025 6:30pm]     </div>
+  // [06-23-2025 6:30pm]   );
+  // [06-23-2025 6:30pm] }
+  // [06-23-2025 6:30pm] 
+  // [06-23-2025 6:30pm] if (!userProfile) {
+  // [06-23-2025 6:30pm]     return (
+  // [06-23-2025 6:30pm]       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
+  // [06-23-2025 6:30pm]         <Loader2 className="h-12 w-12 animate-spin text-primary" />
+  // [06-23-2025 6:30pm]         <p className="ml-4 text-lg text-foreground">Loading profile...</p>
+  // [06-23-2025 6:30pm]       </div>
+  // [06-23-2025 6:30pm]     );
+  // [06-23-2025 6:30pm] }
+  // [06-23-2025 6:30pm] 
+  // [06-23-2025 6:30pm] if (userProfile.profileSetupComplete !== true && pathname !== '/profile') {
+  // [06-23-2025 6:30pm]    return (
+  // [06-23-2025 6:30pm]     <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
+  // [06-23-2025 6:30pm]       <Loader2 className="h-12 w-12 animate-spin text-primary" />
+  // [06-23-2025 6:30pm]       <p className="ml-4 text-lg text-foreground">Loading profile...</p>
+  // [06-23-2025 6:30pm]     </div>
+  // [06-23-2025 6:30pm]   );
+  // [06-23-2025 6:30pm] }
+  
   // If all checks passed, render the full layout and any necessary modals.
   return (
     <>
