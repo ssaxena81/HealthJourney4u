@@ -291,5 +291,3 @@ We do not store raw lab results, clinical notes, or full medical records unless 
     </>
   );
 }
-
-    
