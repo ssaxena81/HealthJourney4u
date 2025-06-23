@@ -39,20 +39,20 @@ export default function AuthenticatedAppLayout({
   const [isSyncing, startDataSyncTransition] = useReactTransition();
 
   useEffect(() => {
-    // This hook now runs only when the user's state is stable and loaded.
+    // [06-23-2025 6:30pm] This hook now runs only when the user's state is stable and loaded.
     if (authAndProfileLoading) {
-      return; // Wait for auth context to be fully resolved
+      return; // [06-23-2025 6:30pm] Wait for auth context to be fully resolved
     }
 
-    // 1. No user -> must go to login
+    // [06-23-2025 6:30pm] 1. No user -> must go to login
     if (!user) {
       if (pathname !== '/login') router.replace('/login');
       return;
     }
 
-    // After this point, the user object is guaranteed to exist.
+    // [06-23-2025 6:30pm] After this point, the user object is guaranteed to exist.
 
-    // 2. Password expired -> show modal. The modal button will navigate.
+    // [06-23-2025 6:30pm] 2. Password expired -> show modal. The modal button will navigate.
     if (userProfile?.lastPasswordChangeDate) {
       const lastPasswordChange = new Date(userProfile.lastPasswordChangeDate);
       const daysSinceLastChange = (new Date().getTime() - lastPasswordChange.getTime()) / (1000 * 3600 * 24);
@@ -60,26 +60,26 @@ export default function AuthenticatedAppLayout({
         if (pathname !== '/reset-password-required') {
           setShowPasswordResetModal(true);
         }
-        return; // Stop further checks if password needs reset
+        return; // [06-23-2025 6:30pm] Stop further checks if password needs reset
       }
     }
 
-    // 3. Terms not accepted -> show modal.
+    // [06-23-2025 6:30pm] 3. Terms not accepted -> show modal.
     if (userProfile && (userProfile.acceptedLatestTerms !== true || userProfile.termsVersionAccepted !== LATEST_TERMS_VERSION)) {
       setShowTermsModal(true);
-      return; // Stop further checks if terms need acceptance
+      return; // [06-23-2025 6:30pm] Stop further checks if terms need acceptance
     }
 
-    // 4. Profile not set up -> must go to profile page for setup
+    // [06-23-2025 6:30pm] 4. Profile not set up -> must go to profile page for setup
     if (userProfile && userProfile.profileSetupComplete !== true) {
       if (pathname !== '/profile') {
-        // Use a full page reload to avoid race conditions with the auth context
+        // [06-23-2025 6:30pm] Use a full page reload to avoid race conditions with the auth context
         window.location.assign('/profile');
       }
       return;
     }
     
-    // 5. User is fully authenticated and set up, but on an auth page -> redirect to dashboard
+    // [06-23-2025 6:30pm] 5. User is fully authenticated and set up, but on an auth page -> redirect to dashboard
     if (pathname === '/login' || pathname === '/signup') {
         router.replace('/dashboard');
         return;
@@ -93,7 +93,7 @@ export default function AuthenticatedAppLayout({
     if (result.success) {
       toast({ title: "Terms Accepted", description: "Thank you for accepting the terms and conditions." });
       
-      // Manually update the profile in the context to prevent stale state
+      // [06-23-2025 6:30pm] Manually update the profile in the context to prevent stale state
       setUserProfileStateOnly(prev => {
         if (!prev) return null;
         return {
@@ -161,11 +161,57 @@ export default function AuthenticatedAppLayout({
     });
   };
 
-  // --- FIX [2024-07-26] ---
-  // The race condition fix is here.
-  // We show a consistent loading screen if the auth state is still loading OR if there is no user yet.
-  // The useEffect hook above will handle the actual redirection while this loader is displayed,
-  // preventing a "flash" of incorrect content or a premature redirect to login.
+  // [06-23-2025 6:30pm] --- START OLD CODE ---
+  // [06-23-2025 6:30pm] The following individual checks for loading, user, and userProfile
+  // [06-23-2025 6:30pm] created a race condition. The component would render and redirect
+  // [06-23-2025 6:30pm] based on the initial `user: null` state before `onAuthStateChanged`
+  // [06-23-2025 6:30pm] could finish and provide the actual user object.
+  /*
+  if (authAndProfileLoading) {
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-4 text-lg text-foreground">Loading session...</p>
+      </div>
+    );
+  }
+
+  if (!user) {
+    // [06-23-2025 6:30pm] This block was the main cause of the redirect loop.
+    return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-4 text-lg text-foreground">Redirecting to login...</p>
+      </div>
+    );
+  }
+  
+  if (!userProfile) {
+      return (
+        <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+          <p className="ml-4 text-lg text-foreground">Loading profile...</p>
+        </div>
+      );
+  }
+
+  if (userProfile.profileSetupComplete !== true && pathname !== '/profile') {
+     return (
+      <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
+        <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        <p className="ml-4 text-lg text-foreground">Loading profile...</p>
+      </div>
+    );
+  }
+  */
+  // [06-23-2025 6:30pm] --- END OLD CODE ---
+
+  // [06-23-2025 6:30pm] --- START NEW CODE ---
+  // [06-23-2025 6:30pm] This is the new, robust loading guard that fixes the race condition.
+  // [06-23-2025 6:30pm] It waits until the `useAuth` hook has a definitive answer from Firebase
+  // [06-23-2025 6:30pm] (`authAndProfileLoading` is false) before proceeding.
+  // [06-23-2025 6:30pm] If there's no user at that point, the `useEffect` hook above will handle the redirect.
+  // [06-23-2025 6:30pm] This prevents the layout from rendering and making a bad redirect decision prematurely.
   if (authAndProfileLoading || !user) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
@@ -175,8 +221,9 @@ export default function AuthenticatedAppLayout({
     );
   }
   
-  // If user is present but profile checks in useEffect are still pending redirection (e.g., to /profile)
-  // this prevents rendering children that might not be appropriate for the intermediate state.
+  // [06-23-2025 6:30pm] This second guard ensures that if a user is logged in but their profile is not yet
+  // [06-23-2025 6:30pm] fully set up, we show a loading screen instead of flashing the main UI
+  // [06-23-2025 6:30pm] while the `useEffect` hook prepares to redirect them to the '/profile' page.
   if ((!userProfile || userProfile.profileSetupComplete !== true) && pathname !== '/profile') {
      return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
@@ -185,9 +232,9 @@ export default function AuthenticatedAppLayout({
       </div>
     );
   }
-  // --- END FIX ---
+  // [06-23-2025 6:30pm] --- END NEW CODE ---
   
-  // If all checks passed, render the full layout and any necessary modals.
+  // [06-23-2025 6:30pm] If all checks passed, render the full layout and any necessary modals.
   return (
     <SidebarProvider>
       <AppLayoutClient onSyncAllClick={handleSyncAll}>
