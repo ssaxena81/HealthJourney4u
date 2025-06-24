@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import React, { useState, useTransition, useEffect } from 'react';
@@ -17,7 +18,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Loader2 } from 'lucide-react';
 import { differenceInYears } from 'date-fns';
 import { updateUserDemographics } from '@/lib/firebase/client-firestore';
-import { markProfileSetupComplete } from '@/app/actions/userProfileActions';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 
@@ -168,30 +168,21 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
         cellPhone: values.cellPhone,
         isAgeCertified: values.ageCertification,
         isProfileCreated: true,
+        // [06-23-2025 6:30pm] Combine the profile setup completion flag into this single update.
+        // [06-23-2025 6:30pm] This avoids a separate, failing server action call.
         profileSetupComplete: true,
       };
       
       const result = await updateUserDemographics(userProfile.id, profileUpdateData);
       
       if (result.success) {
-        toast({ title: "Demographics Updated", description: "Your information has been saved." });
-        let updatedProfileDataForContext = { ...profileUpdateData };
-
-        if (userProfile.profileSetupComplete !== true) {
-          const completionResult = await markProfileSetupComplete(userProfile.id);
-          if (completionResult.success) {
-            toast({ title: "Profile Setup Complete!", description: "Your profile is now fully set up." });
-            updatedProfileDataForContext = { ...updatedProfileDataForContext, profileSetupComplete: true };
-          } else {
-            toast({ title: "Profile Status Update Failed", description: completionResult.error || "Could not mark profile as complete.", variant: "destructive" });
-          }
-        }
+        toast({ title: "Demographics Updated", description: "Your information has been saved and your profile is now complete." });
         
         if (onProfileUpdate) {
-           onProfileUpdate(updatedProfileDataForContext);
+           onProfileUpdate(profileUpdateData);
         }
         if (setUserProfile) {
-            setUserProfile(prev => prev ? ({ ...prev, ...updatedProfileDataForContext }) : null);
+            setUserProfile(prev => prev ? ({ ...prev, ...profileUpdateData }) : null);
         }
 
       } else {

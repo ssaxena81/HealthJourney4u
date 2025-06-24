@@ -399,7 +399,9 @@ export async function updateDashboardRadarMetrics(
   }
 }
 
-// --- Mark Profile Setup Complete ---
+// [06-23-2025 6:30pm] This function is being removed as it's a server action that causes permission errors.
+// [06-23-2025 6:30pm] The logic has been moved into the client-side demographics form submission handler.
+/*
 export async function markProfileSetupComplete(userId: string): Promise<{ success: boolean, error?: string }> {
   const currentUser = auth.currentUser;
   if (!currentUser || currentUser.uid !== userId) {
@@ -419,3 +421,4 @@ export async function markProfileSetupComplete(userId: string): Promise<{ succes
     return { success: false, error: String(error.message) || 'Failed to update profile completion status.' };
   }
 }
+*/
