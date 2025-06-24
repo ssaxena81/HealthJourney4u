@@ -3,6 +3,8 @@
 // to differentiate between authenticated and unauthenticated users.
 // This file previously created a route conflict and has been cleared to resolve a 404 error.
 
+import { redirect } from 'next/navigation';
+
 export default function AuthenticatedRootPage() {
-  return null;
+  redirect('/dashboard');
 }
