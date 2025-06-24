@@ -14,7 +14,13 @@ const firebaseConfig = {
 };
 
 // Initialize Firebase for client side
-const app: FirebaseApp = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+let app: FirebaseApp;
+try {
+  app = getApp();
+} catch (error) {
+  app = initializeApp(firebaseConfig);
+}
+
 const auth: Auth = getAuth(app);
 const db: Firestore = getFirestore(app);
 

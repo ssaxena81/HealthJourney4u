@@ -13,14 +13,14 @@ const firebaseConfigServer = {
 };
 
 let app: FirebaseApp;
+const appName = 'firebase-server-app';
 
 // This logic ensures that the server-side Firebase app is initialized only once.
-if (!getApps().some(app => app.name === 'firebase-server-app')) {
-  app = initializeApp(firebaseConfigServer, 'firebase-server-app');
+try {
+  app = getApp(appName);
+} catch (error) {
+  app = initializeApp(firebaseConfigServer, appName);
   console.log("[serverApp.ts] Firebase server app initialized.");
-} else {
-  app = getApp('firebase-server-app');
-  console.log("[serverApp.ts] Existing Firebase server app retrieved.");
 }
 
 const auth: Auth = getAuth(app);
