@@ -1,7 +1,8 @@
+
 // src/lib/firebase/clientApp.ts
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
-import { getFirestore, enableNetwork, type Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { getFirestore, type Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -12,13 +13,8 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase for client side
-let app: FirebaseApp;
-try {
-  app = getApp();
-} catch (error) {
-  app = initializeApp(firebaseConfig);
-}
+// Initialize Firebase for client side using a robust method that prevents re-initialization.
+const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
 
 const auth: Auth = getAuth(app);
 const db: Firestore = getFirestore(app);
@@ -38,15 +34,5 @@ if (typeof window !== 'undefined') {
     }
   });
 }
-
-// Explicitly enable the network for Firestore to potentially resolve "client is offline" issues.
-// This should be called after getFirestore() and is safe to call multiple times.
-try {
-    enableNetwork(db);
-    console.log("Firestore network connection has been explicitly enabled.");
-} catch(e) {
-    console.error("Failed to explicitly enable Firestore network", e);
-}
-
 
 export { app as firebaseApp, auth, db };
