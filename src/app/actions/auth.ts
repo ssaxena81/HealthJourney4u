@@ -515,9 +515,9 @@ const serverCalculateAge = (birthDateString: string): number => {
 };
 
 const DemographicsSchemaServer = z.object({
-  firstName: z.string().min(3, "First name must be at least 3 characters.").max(50).regex(/^[a-zA-Z\s'-]+$/, "First name can only contain letters.").trim(),
+  firstName: z.string().min(2, "First name must be at least 2 characters.").max(50).regex(/^[a-zA-Z\s'-]+$/, "First name can only contain letters.").trim(),
   middleInitial: z.string().max(1, "Middle initial can be at most 1 character.").trim().optional(),
-  lastName: z.string().min(3, "Last name must be at least 3 characters.").max(50).regex(/^[a-zA-Z\s'-]+$/, "Last name can only contain letters.").trim(),
+  lastName: z.string().min(2, "Last name must be at least 2 characters.").max(50).regex(/^[a-zA-Z\s'-]+$/, "Last name can only contain letters.").trim(),
   dateOfBirth: z.string()
                   .refine((val) => !isNaN(Date.parse(val)), { message: "Invalid date of birth" })
                   .refine((val) => serverCalculateAge(val) >= 18, { message: "User must be 18 or older." }),

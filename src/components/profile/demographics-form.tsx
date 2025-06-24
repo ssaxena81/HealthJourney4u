@@ -12,51 +12,89 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { useToast } from '@/hooks/use-toast';
 import type { UserProfile } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
 import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog';
-import { CalendarIcon, Loader2 } from 'lucide-react';
-import { format, parseISO, differenceInYears } from 'date-fns';
-import { cn } from '@/lib/utils';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Loader2 } from 'lucide-react';
+import { differenceInYears } from 'date-fns';
 import { updateDemographics } from '@/app/actions/auth';
-import { markProfileSetupComplete } from '@/app/actions/userProfileActions'; // New import
+import { markProfileSetupComplete } from '@/app/actions/userProfileActions';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
 
-const calculateAge = (birthDate: Date): number => {
-  if (!birthDate) return 0;
-  return differenceInYears(new Date(), birthDate);
+// --- Date of Birth Helpers ---
+const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const;
+const monthMap: Record<string, number> = { Jan: 0, Feb: 1, Mar: 2, Apr: 3, May: 4, Jun: 5, Jul: 6, Aug: 7, Sep: 8, Oct: 9, Nov: 10, Dec: 11 };
+const days = Array.from({ length: 31 }, (_, i) => String(i + 1));
+const currentYear = new Date().getFullYear();
+const years = Array.from({ length: currentYear - 1924 }, (_, i) => String(currentYear - i));
+
+const calculateAgeFromParts = (year?: string, month?: string, day?: string): number => {
+    if (!year || !month || !day) return 0;
+    const birthDate = new Date(parseInt(year), monthMap[month], parseInt(day));
+    if (isNaN(birthDate.getTime())) return 0;
+    return differenceInYears(new Date(), birthDate);
 };
 
+
+// --- Zod Validation Schema ---
 const demographicsSchemaClient = z.object({
   firstName: z.string()
-    .min(3, "First name must be at least 3 characters.")
+    .min(2, "First name must be at least 2 characters.")
     .max(50, "First name cannot exceed 50 characters.")
     .regex(/^[a-zA-Z\s'-]+$/, "First name contains invalid characters.")
     .trim(),
   middleInitial: z.string().max(1, "Middle initial can be at most 1 character.").trim().optional(),
   lastName: z.string()
-    .min(3, "Last name must be at least 3 characters.")
+    .min(2, "Last name must be at least 2 characters.")
     .max(50, "Last name cannot exceed 50 characters.")
     .regex(/^[a-zA-Z\s'-]+$/, "Last name contains invalid characters.")
     .trim(),
-  dateOfBirth: z.date({ required_error: "Date of birth is required."}),
+  birthMonth: z.enum(months, { required_error: "Month is required." }),
+  birthDay: z.string({ required_error: "Day is required." }).nonempty("Day is required."),
+  birthYear: z.string({ required_error: "Year is required." }).nonempty("Year is required."),
   email: z.string().email(),
   cellPhone: z.string()
     .regex(/^$|^\d{3}-\d{3}-\d{4}$/, "Invalid phone format (e.g., 999-999-9999).")
     .optional(),
   ageCertification: z.boolean().optional(),
 }).refine(data => data.email || data.cellPhone, {
-    message: "At least one contact method (Email or Cell Phone) is required for account recovery and communication.", // Rephrased
+    message: "At least one contact method (Email or Cell Phone) is required.",
     path: ["cellPhone"],
-}).refine(data => {
-    if (data.dateOfBirth && calculateAge(data.dateOfBirth) >= 18) {
-        return data.ageCertification === true;
+}).superRefine((data, ctx) => {
+    const { birthYear, birthMonth, birthDay } = data;
+    if (!birthYear || !birthMonth || !birthDay) {
+      return; // Individual field validation will catch this.
     }
-    return true; 
-}, {
-    message: "You must certify that you are 18 or older.",
-    path: ["ageCertification"],
+    const year = parseInt(birthYear, 10);
+    const day = parseInt(birthDay, 10);
+    const monthIndex = monthMap[birthMonth];
+    
+    // Check if the constructed date is valid (e.g., handles Feb 30th)
+    const testDate = new Date(year, monthIndex, day);
+    if (testDate.getFullYear() !== year || testDate.getMonth() !== monthIndex || testDate.getDate() !== day) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `Invalid date. ${birthMonth} does not have ${day} days in ${year}.`,
+        path: ["birthDay"],
+      });
+      return;
+    }
+
+    // Check age requirement
+    const age = calculateAgeFromParts(birthYear, birthMonth, birthDay);
+    if (age < 18) {
+       ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "You must be 18 or older to use this application.",
+        path: ["birthYear"],
+      });
+    } else if (!data.ageCertification) {
+        ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: "You must certify that you are 18 or older.",
+            path: ["ageCertification"],
+        });
+    }
 });
 
 type DemographicsFormValues = z.infer<typeof demographicsSchemaClient>;
@@ -68,11 +106,12 @@ interface DemographicsFormProps {
 
 export default function DemographicsForm({ userProfile, onProfileUpdate }: DemographicsFormProps) {
   const { toast } = useToast();
-  const { logout, setUserProfile } = useAuth(); // Added setUserProfile
+  const { logout, setUserProfile } = useAuth();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [showAgeRestrictionDialog, setShowAgeRestrictionDialog] = useState(false);
-  const [isUserOver18, setIsUserOver18] = useState<boolean | null>(null);
+  
+  const dob = userProfile.dateOfBirth ? new Date(userProfile.dateOfBirth) : null;
 
   const form = useForm<DemographicsFormValues>({
     resolver: zodResolver(demographicsSchemaClient),
@@ -80,31 +119,25 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
       firstName: userProfile.firstName || '',
       middleInitial: userProfile.middleInitial || '',
       lastName: userProfile.lastName || '',
-      dateOfBirth: userProfile.dateOfBirth ? parseISO(userProfile.dateOfBirth) : undefined,
+      birthMonth: dob ? months[dob.getUTCMonth()] : undefined,
+      birthDay: dob ? String(dob.getUTCDate()) : undefined,
+      birthYear: dob ? String(dob.getUTCFullYear()) : undefined,
       email: userProfile.email,
       cellPhone: userProfile.cellPhone || '',
       ageCertification: userProfile.isAgeCertified || false,
     },
   });
-
-  const dobValue = form.watch('dateOfBirth');
+  
+  const watchedDobParts = form.watch(['birthYear', 'birthMonth', 'birthDay']);
+  const isUserOver18 = calculateAgeFromParts(...watchedDobParts) >= 18;
 
   useEffect(() => {
-    if (dobValue) {
-      const age = calculateAge(dobValue);
-      if (age < 18) {
-        setIsUserOver18(false);
-        setShowAgeRestrictionDialog(true);
-        form.setValue('ageCertification', false); 
-      } else {
-        setIsUserOver18(true);
-        setShowAgeRestrictionDialog(false); 
+      const age = calculateAgeFromParts(...watchedDobParts);
+      if (watchedDobParts.every(part => part) && age < 18) {
+          setShowAgeRestrictionDialog(true);
       }
-    } else {
-      setIsUserOver18(null); 
-      form.setValue('ageCertification', false);
-    }
-  }, [dobValue, form]);
+  }, [watchedDobParts]);
+
 
   const handleAgeDialogOk = async () => {
     setShowAgeRestrictionDialog(false);
@@ -118,15 +151,18 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
   };
 
   const onSubmit = (values: DemographicsFormValues) => {
-    if (dobValue && calculateAge(dobValue) < 18) {
+    if (calculateAgeFromParts(values.birthYear, values.birthMonth, values.birthDay) < 18) {
       setShowAgeRestrictionDialog(true);
       return; 
     }
 
     startTransition(async () => {
-      const result = await updateDemographics(userProfile.id, {
+        const monthIndex = monthMap[values.birthMonth];
+        const constructedDate = new Date(Date.UTC(parseInt(values.birthYear), monthIndex, parseInt(values.birthDay)));
+      
+        const result = await updateDemographics(userProfile.id, {
         ...values,
-        dateOfBirth: values.dateOfBirth.toISOString(),
+        dateOfBirth: constructedDate.toISOString(),
         isAgeCertified: values.ageCertification,
       });
       
@@ -134,8 +170,7 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
         toast({ title: "Demographics Updated", description: "Your information has been saved." });
         let updatedProfileDataForContext = { ...result.data };
 
-        // If demographics saved successfully and profile setup wasn't complete, mark it complete
-        if (userProfile.profileSetupComplete === false || userProfile.profileSetupComplete === undefined) {
+        if (userProfile.profileSetupComplete !== true) {
           const completionResult = await markProfileSetupComplete(userProfile.id);
           if (completionResult.success) {
             toast({ title: "Profile Setup Complete!", description: "Your profile is now fully set up." });
@@ -148,7 +183,7 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
         if (onProfileUpdate) {
            onProfileUpdate(updatedProfileDataForContext);
         }
-        if (setUserProfile) { // Update context if setUserProfile is available
+        if (setUserProfile) {
             setUserProfile(prev => prev ? ({ ...prev, ...updatedProfileDataForContext }) : null);
         }
 
@@ -189,37 +224,30 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
                 {form.formState.errors.lastName && <p className="text-sm text-destructive">{form.formState.errors.lastName.message}</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="dateOfBirth">Date of Birth *</Label>
-                <Controller
-                  name="dateOfBirth"
-                  control={form.control}
-                  render={({ field }) => (
-                    <Popover>
-                      <PopoverTrigger asChild>
-                        <Button
-                          variant={"outline"}
-                          className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}
-                          disabled={isPending || showAgeRestrictionDialog}
-                        >
-                          <CalendarIcon className="mr-2 h-4 w-4" />
-                          {field.value ? format(field.value, "PPP") : <span>Pick a date</span>}
-                        </Button>
-                      </PopoverTrigger>
-                      <PopoverContent className="w-auto p-0">
-                        <Calendar
-                          mode="single"
-                          selected={field.value}
-                          onSelect={(date) => {
-                            field.onChange(date);
-                          }}
-                          disabled={(date) => date > new Date() || date < new Date("1900-01-01") || isPending || showAgeRestrictionDialog}
-                          initialFocus
-                        />
-                      </PopoverContent>
-                    </Popover>
-                  )}
-                />
-                {form.formState.errors.dateOfBirth && <p className="text-sm text-destructive">{form.formState.errors.dateOfBirth.message}</p>}
+                 <Label>Date of Birth *</Label>
+                 <div className="grid grid-cols-3 gap-2">
+                    <Controller name="birthMonth" control={form.control} render={({ field }) => (
+                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isPending || showAgeRestrictionDialog}>
+                            <SelectTrigger aria-label="Month"><SelectValue placeholder="Month" /></SelectTrigger>
+                            <SelectContent>{months.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}</SelectContent>
+                        </Select>
+                    )} />
+                     <Controller name="birthDay" control={form.control} render={({ field }) => (
+                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isPending || showAgeRestrictionDialog}>
+                            <SelectTrigger aria-label="Day"><SelectValue placeholder="Day" /></SelectTrigger>
+                            <SelectContent>{days.map(d => <SelectItem key={d} value={d}>{d}</SelectItem>)}</SelectContent>
+                        </Select>
+                    )} />
+                     <Controller name="birthYear" control={form.control} render={({ field }) => (
+                        <Select onValueChange={field.onChange} defaultValue={field.value} disabled={isPending || showAgeRestrictionDialog}>
+                            <SelectTrigger aria-label="Year"><SelectValue placeholder="Year" /></SelectTrigger>
+                            <SelectContent>{years.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}</SelectContent>
+                        </Select>
+                    )} />
+                 </div>
+                 {form.formState.errors.birthMonth && <p className="text-sm text-destructive">{form.formState.errors.birthMonth.message}</p>}
+                 {form.formState.errors.birthDay && <p className="text-sm text-destructive">{form.formState.errors.birthDay.message}</p>}
+                 {form.formState.errors.birthYear && <p className="text-sm text-destructive">{form.formState.errors.birthYear.message}</p>}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="email">Email (Login ID)</Label>
@@ -259,11 +287,8 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
             )}
             {form.formState.errors.ageCertification && <p className="text-sm text-destructive">{form.formState.errors.ageCertification.message}</p>}
 
-            {form.formState.errors.root && <p className="text-sm text-destructive mt-2">{form.formState.errors.root.message}</p>}
-            {(!form.getValues("email") && !form.getValues("cellPhone")) && <p className="text-sm text-destructive mt-2">At least Email or Cell Phone is required for contact.</p>}
-
             <div className="flex justify-end">
-              <Button type="submit" disabled={isPending || showAgeRestrictionDialog || (isUserOver18 === false) || (isUserOver18 === true && !form.watch('ageCertification'))}>
+              <Button type="submit" disabled={isPending || showAgeRestrictionDialog || !isUserOver18 || (isUserOver18 && !form.watch('ageCertification'))}>
                 {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Save Demographics'}
               </Button>
             </div>
@@ -276,7 +301,7 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
           <AlertDialogHeader>
             <AlertDialogTitle>Age Restriction</AlertDialogTitle>
             <AlertDialogDescription>
-              You must be 18 or older to use the app.
+              You must be 18 or older to use this application. Your session will be terminated.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
