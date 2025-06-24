@@ -5,7 +5,7 @@ import { randomBytes } from 'crypto';
 
 export async function GET() { // Make async if other async operations are needed
   const clientId = process.env.NEXT_PUBLIC_STRAVA_CLIENT_ID;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9004'; // Corrected fallback
   const oauthStateSecret = process.env.OAUTH_STATE_SECRET;
 
   if (!clientId || !appUrl || !oauthStateSecret) {
@@ -40,4 +40,3 @@ export async function GET() { // Make async if other async operations are needed
 
   return response;
 }
-

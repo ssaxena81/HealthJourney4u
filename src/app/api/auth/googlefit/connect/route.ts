@@ -7,7 +7,7 @@ const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 
 export async function GET() { // Make async if other async operations are needed, but not for just setting cookies on response
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID_WEB; // Use Web Client ID
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9004'; // Corrected fallback
   const oauthStateSecret = process.env.OAUTH_STATE_SECRET; // Re-use for consistency if desired, or generate unique
 
   if (!clientId || !appUrl || !oauthStateSecret) {
@@ -48,4 +48,3 @@ export async function GET() { // Make async if other async operations are needed
 
   return response;
 }
-

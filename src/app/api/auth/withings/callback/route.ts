@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
   // Withings might also return an 'error' parameter or a non-zero status in the body
   const withingsError = searchParams.get('error'); 
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9002';
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9004'; // Corrected fallback
   const profileUrl = `${appUrl}/profile`;
 
   const cookieStore = await cookies();
