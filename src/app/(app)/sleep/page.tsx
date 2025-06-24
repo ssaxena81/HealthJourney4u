@@ -62,7 +62,7 @@ export default function SleepPage() {
     }
     startDataFetchTransition(async () => {
       try {
-        const result = await getFitbitSleepLogsForDateRange({
+        const result = await getFitbitSleepLogsForDateRange(user.uid, {
           from: format(viewDateRange.from!, 'yyyy-MM-dd'),
           to: format(viewDateRange.to!, 'yyyy-MM-dd'),
         });

@@ -1,7 +1,7 @@
 
 'use server';
 
-import { auth, db } from '@/lib/firebase/serverApp';
+import { db } from '@/lib/firebase/serverApp';
 import { collection, query, where, getDocs, orderBy, Timestamp, doc, getDoc, documentId } from 'firebase/firestore';
 import type { 
   UserProfile, 
@@ -191,14 +191,12 @@ async function calculateTotalWorkouts(userId: string, dateRange: DateRange, numb
 }
 
 export async function getDashboardRadarData(
+  userId: string,
   dateRange: DateRange
 ): Promise<{ success: boolean; data?: RadarDataPoint[]; error?: string }> {
-  // This will fail because auth.currentUser is null on the server.
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
+  if (!userId) {
     return { success: false, error: 'User not authenticated.' };
   }
-  const userId = currentUser.uid;
 
   try {
     const userProfileDocRef = doc(db, 'users', userId);

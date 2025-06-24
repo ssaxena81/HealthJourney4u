@@ -14,6 +14,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter }
 import { useToast } from '@/hooks/use-toast';
 import { updateDashboardRadarMetrics } from '@/app/actions/userProfileActions';
 import { Loader2 } from 'lucide-react';
+import { useAuth } from '@/hooks/useAuth';
 
 const allMetricIds = AVAILABLE_DASHBOARD_METRICS.map(m => m.id) as [DashboardMetricIdValue, ...DashboardMetricIdValue[]];
 
@@ -38,6 +39,7 @@ const defaultSelectedMetrics: DashboardMetricIdValue[] = [
 ];
 
 export default function DashboardMetricsForm({ userProfile, onProfileUpdate }: DashboardMetricsFormProps) {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
@@ -52,7 +54,11 @@ export default function DashboardMetricsForm({ userProfile, onProfileUpdate }: D
 
   const onSubmit = (values: DashboardMetricsFormValues) => {
     startTransition(async () => {
-      const result = await updateDashboardRadarMetrics(values.selectedMetrics);
+      if (!user) {
+        toast({ title: 'Error', description: 'You must be logged in to update preferences.', variant: 'destructive' });
+        return;
+      }
+      const result = await updateDashboardRadarMetrics(user.uid, values.selectedMetrics);
 
       if (result.success && result.data) {
         toast({ title: 'Dashboard Metrics Updated', description: 'Your dashboard radar chart preferences have been saved.' });

@@ -1,9 +1,8 @@
 
-
 'use server';
 
 import { z } from 'zod';
-import { auth, db } from '@/lib/firebase/serverApp';
+import { db } from '@/lib/firebase/serverApp';
 import { doc, updateDoc } from 'firebase/firestore';
 import type { WalkingRadarGoals, RunningRadarGoals, HikingRadarGoals, SwimmingRadarGoals, SleepRadarGoals, DashboardMetricIdValue } from '@/types';
 import { DashboardMetricId, AVAILABLE_DASHBOARD_METRICS } from '@/types';
@@ -45,13 +44,12 @@ interface UpdateWalkingRadarGoalsResult {
 }
 
 export async function updateWalkingRadarGoals(
+  userId: string,
   values: WalkingRadarGoals 
 ): Promise<UpdateWalkingRadarGoalsResult> {
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
+  if (!userId) {
     return { success: false, error: 'User not authenticated.' };
   }
-  const userId = currentUser.uid;
 
   console.log('[USER_PROFILE_ACTIONS] Attempting to update walking radar goals for UID:', userId, 'with values:', values);
 
@@ -115,13 +113,12 @@ interface UpdateRunningRadarGoalsResult {
 }
 
 export async function updateRunningRadarGoals(
+  userId: string,
   values: RunningRadarGoals
 ): Promise<UpdateRunningRadarGoalsResult> {
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
+  if (!userId) {
     return { success: false, error: 'User not authenticated.' };
   }
-  const userId = currentUser.uid;
 
   console.log('[USER_PROFILE_ACTIONS] Attempting to update running radar goals for UID:', userId, 'with values:', values);
 
@@ -186,13 +183,12 @@ interface UpdateHikingRadarGoalsResult {
 }
 
 export async function updateHikingRadarGoals(
+  userId: string,
   values: HikingRadarGoals
 ): Promise<UpdateHikingRadarGoalsResult> {
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
+  if (!userId) {
     return { success: false, error: 'User not authenticated.' };
   }
-  const userId = currentUser.uid;
 
   console.log('[USER_PROFILE_ACTIONS] Attempting to update hiking radar goals for UID:', userId, 'with values:', values);
 
@@ -257,13 +253,12 @@ interface UpdateSwimmingRadarGoalsResult {
 }
 
 export async function updateSwimmingRadarGoals(
+  userId: string,
   values: SwimmingRadarGoals
 ): Promise<UpdateSwimmingRadarGoalsResult> {
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
+  if (!userId) {
     return { success: false, error: 'User not authenticated.' };
   }
-  const userId = currentUser.uid;
 
   console.log('[USER_PROFILE_ACTIONS] Attempting to update swimming radar goals for UID:', userId, 'with values:', values);
 
@@ -314,13 +309,12 @@ interface UpdateSleepRadarGoalsResult {
 }
 
 export async function updateSleepRadarGoals(
+  userId: string,
   values: SleepRadarGoals
 ): Promise<UpdateSleepRadarGoalsResult> {
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
+  if (!userId) {
     return { success: false, error: 'User not authenticated.' };
   }
-  const userId = currentUser.uid;
 
   console.log('[USER_PROFILE_ACTIONS] Attempting to update sleep radar goals for UID:', userId, 'with values:', values);
 
@@ -369,13 +363,12 @@ interface UpdateDashboardRadarMetricsResult {
 }
 
 export async function updateDashboardRadarMetrics(
+  userId: string,
   selectedMetricIds: DashboardMetricIdValue[]
 ): Promise<UpdateDashboardRadarMetricsResult> {
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
+  if (!userId) {
     return { success: false, error: 'User not authenticated.' };
   }
-  const userId = currentUser.uid;
 
   console.log('[USER_PROFILE_ACTIONS] Attempting to update dashboard radar metrics for UID:', userId, 'with IDs:', selectedMetricIds);
 
@@ -399,5 +392,3 @@ export async function updateDashboardRadarMetrics(
     return { success: false, error: String(error.message) || 'Failed to update dashboard metric selection.' };
   }
 }
-
-    

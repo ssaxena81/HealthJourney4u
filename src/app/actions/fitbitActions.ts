@@ -1,7 +1,7 @@
 
 'use server';
 
-import { auth, db } from '@/lib/firebase/serverApp';
+import { db } from '@/lib/firebase/serverApp';
 import { doc, getDoc, setDoc, updateDoc, collection, query, where, getDocs, orderBy, Timestamp, documentId } from 'firebase/firestore';
 import type { UserProfile, SubscriptionTier, FitbitActivitySummaryFirestore, FitbitHeartRateFirestore, FitbitSleepLogFirestore, NormalizedActivityFirestore, FitbitApiCallStats } from '@/types';
 import { NormalizedActivityType } from '@/types';
@@ -81,15 +81,14 @@ function mapFitbitUnitToMeters(distance?: number, unit?: string): number | undef
 
 
 export async function fetchAndStoreFitbitDailyActivity(
+  userId: string,
   targetDate: string // YYYY-MM-DD format
 ): Promise<FetchFitbitDataResult> {
-  console.log(`[FitbitActions] Initiating fetchAndStoreFitbitDailyActivity for date: ${targetDate}`);
+  console.log(`[FitbitActions] Initiating fetchAndStoreFitbitDailyActivity for user ${userId}, date: ${targetDate}`);
 
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
+  if (!userId) {
     return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   }
-  const userId = currentUser.uid;
 
   try {
     const userProfileDocRef = doc(db, 'users', userId);
@@ -181,13 +180,12 @@ export async function fetchAndStoreFitbitDailyActivity(
 }
 
 export async function getFitbitActivitySummariesForDateRange(
+  userId: string,
   dateRange: { from: string; to: string } // Dates in 'yyyy-MM-dd' format
 ): Promise<{ success: boolean; data?: FitbitActivitySummaryFirestore[]; error?: string }> {
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
+  if (!userId) {
     return { success: false, error: 'User not authenticated.' };
   }
-  const userId = currentUser.uid;
 
   try {
     console.log(`[FitbitActions] Fetching fitbit_activity_summaries for user ${userId} from ${dateRange.from} to ${dateRange.to}`);
@@ -215,13 +213,12 @@ export async function getFitbitActivitySummariesForDateRange(
 }
 
 export async function fetchAndStoreFitbitHeartRate(
+  userId: string,
   targetDate: string,
   detailLevel: '1min' | '1sec' = '1min'
 ): Promise<FetchFitbitDataResult> {
-  console.log(`[FitbitActions] Initiating fetchAndStoreFitbitHeartRate for date: ${targetDate}, detail: ${detailLevel}`);
-  const currentUser = auth.currentUser;
-  if (!currentUser) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
-  const userId = currentUser.uid;
+  console.log(`[FitbitActions] Initiating fetchAndStoreFitbitHeartRate for user ${userId}, date: ${targetDate}, detail: ${detailLevel}`);
+  if (!userId) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
 
   try {
     const userProfileDocRef = doc(db, 'users', userId);
@@ -299,12 +296,11 @@ export async function fetchAndStoreFitbitHeartRate(
 }
 
 export async function fetchAndStoreFitbitSleep(
+  userId: string,
   targetDate: string // YYYY-MM-DD
 ): Promise<FetchFitbitDataResult> {
-  console.log(`[FitbitActions] Initiating fetchAndStoreFitbitSleep for date: ${targetDate}`);
-  const currentUser = auth.currentUser;
-  if (!currentUser) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
-  const userId = currentUser.uid;
+  console.log(`[FitbitActions] Initiating fetchAndStoreFitbitSleep for user ${userId}, date: ${targetDate}`);
+  if (!userId) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
 
   try {
     const userProfileDocRef = doc(db, 'users', userId);
@@ -402,12 +398,11 @@ export async function fetchAndStoreFitbitSleep(
 }
 
 export async function fetchAndStoreFitbitSwimmingData(
+  userId: string,
   targetDate: string // YYYY-MM-DD format
 ): Promise<FetchFitbitDataResult> {
-  console.log(`[FitbitActions] Initiating fetchAndStoreFitbitSwimmingData for date: ${targetDate}`);
-  const currentUser = auth.currentUser;
-  if (!currentUser) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
-  const userId = currentUser.uid;
+  console.log(`[FitbitActions] Initiating fetchAndStoreFitbitSwimmingData for user ${userId}, date: ${targetDate}`);
+  if (!userId) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
 
   try {
     const userProfileDocRef = doc(db, 'users', userId);
@@ -510,12 +505,11 @@ export async function fetchAndStoreFitbitSwimmingData(
 }
 
 export async function fetchAndStoreFitbitLoggedActivities(
+  userId: string,
   targetDate: string // YYYY-MM-DD format
 ): Promise<FetchFitbitDataResult> {
-  console.log(`[FitbitActions] Initiating fetchAndStoreFitbitLoggedActivities for date: ${targetDate}`);
-  const currentUser = auth.currentUser;
-  if (!currentUser) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
-  const userId = currentUser.uid;
+  console.log(`[FitbitActions] Initiating fetchAndStoreFitbitLoggedActivities for user ${userId}, date: ${targetDate}`);
+  if (!userId) return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
 
   try {
     const userProfileDocRef = doc(db, 'users', userId);
@@ -639,13 +633,12 @@ export async function fetchAndStoreFitbitLoggedActivities(
 }
 
 export async function getFitbitSleepLogsForDateRange(
+  userId: string,
   dateRange: { from: string; to: string } // Dates in 'yyyy-MM-dd' format
 ): Promise<{ success: boolean; data?: FitbitSleepLogFirestore[]; error?: string }> {
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
+  if (!userId) {
     return { success: false, error: 'User not authenticated.' };
   }
-  const userId = currentUser.uid;
 
   try {
     console.log(`[FitbitActions] Fetching fitbit_sleep logs for user ${userId} from ${dateRange.from} to ${dateRange.to}`);

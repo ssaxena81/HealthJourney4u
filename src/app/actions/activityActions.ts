@@ -1,7 +1,7 @@
 
 'use server';
 
-import { auth, db } from '@/lib/firebase/serverApp';
+import { db } from '@/lib/firebase/serverApp';
 import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore';
 import type { NormalizedActivityFirestore, NormalizedActivityType } from '@/types';
 import { format, parseISO } from 'date-fns';
@@ -13,22 +13,13 @@ interface GetActivitiesResponse {
 }
 
 export async function getNormalizedActivitiesForDateRangeAndType(
+  userId: string,
   dateRange: { from: string; to: string }, // Dates in 'yyyy-MM-dd' format
   activityType: NormalizedActivityType
 ): Promise<GetActivitiesResponse> {
-  // Note: auth.currentUser will be null on the server.
-  // This action needs to be called by an authenticated client,
-  // and ideally, the user's UID should be passed in or derived from a session.
-  // For now, this code relies on the client to provide the UID, but it is not passed in.
-  // This will need to be addressed to make it functional.
-  // The current `currentUser` check is left for illustrating the issue.
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
-    // This will currently always fail because auth.currentUser is a client-side concept.
-    // The server needs a different way to verify the user, like validating an ID token.
-    return { success: false, error: 'User not authenticated on the server.' };
+  if (!userId) {
+    return { success: false, error: 'User not authenticated.' };
   }
-  const userId = currentUser.uid;
 
   try {
     console.log(`[ActivityActions] Fetching ${activityType} activities for user ${userId} from ${dateRange.from} to ${dateRange.to}`);

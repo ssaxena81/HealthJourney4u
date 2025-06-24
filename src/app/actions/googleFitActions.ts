@@ -1,7 +1,7 @@
 
 'use server';
 
-import { auth, db } from '@/lib/firebase/serverApp';
+import { db } from '@/lib/firebase/serverApp';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import type { UserProfile, SubscriptionTier, NormalizedActivityFirestore, GoogleFitApiCallStats } from '@/types';
 import { NormalizedActivityType, normalizedActivityTypeDisplayNames } from '@/types';
@@ -53,17 +53,16 @@ function mapGoogleFitActivityTypeToNormalizedType(activityType: number): Normali
 
 
 export async function fetchAndStoreGoogleFitActivities(
+  userId: string,
   params: { startTimeIso: string; endTimeIso: string }
 ): Promise<FetchGoogleFitDataResult> {
   console.log('[GoogleFitActions] Initiating fetchAndStoreGoogleFitActivities with params:', params);
 
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
+  if (!userId) {
     console.error('[GoogleFitActions] User not authenticated.');
     return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   }
-  const userId = currentUser.uid;
-
+  
   let userProfile: UserProfile;
   try {
     const userProfileDocRef = doc(db, 'users', userId);

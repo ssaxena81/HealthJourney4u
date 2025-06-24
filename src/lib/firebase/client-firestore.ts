@@ -1,8 +1,7 @@
 
-
 'use client';
 
-import { doc, updateDoc } from 'firebase/firestore';
+import { doc, updateDoc, setDoc } from 'firebase/firestore';
 import { db } from './clientApp';
 import type { UserProfile } from '@/types';
 
@@ -29,7 +28,8 @@ export async function updateUserTermsAcceptance(userId: string, accepted: boolea
 export async function updateUserDemographics(userId: string, dataToUpdate: Partial<UserProfile>): Promise<UpdateResult> {
     try {
         const userDocRef = doc(db, "users", userId);
-        await updateDoc(userDocRef, dataToUpdate);
+        // Use setDoc with merge:true to create the doc if it doesn't exist, or update it if it does.
+        await setDoc(userDocRef, dataToUpdate, { merge: true });
         console.log("[ClientFirestore] Demographics updated successfully for UID:", userId);
         return { success: true };
     } catch (error: any) {
@@ -37,5 +37,3 @@ export async function updateUserDemographics(userId: string, dataToUpdate: Parti
         return { success: false, error: error.message || "An unknown error occurred while updating profile." };
     }
 }
-
-    

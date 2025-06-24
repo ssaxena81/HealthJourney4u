@@ -1,7 +1,7 @@
 
 'use server';
 
-import { auth, db } from '@/lib/firebase/serverApp';
+import { db } from '@/lib/firebase/serverApp';
 import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 import type { UserProfile, SubscriptionTier, StravaApiCallStats, NormalizedActivityFirestore } from '@/types';
 import { NormalizedActivityType } from '@/types';
@@ -59,16 +59,15 @@ function mapStravaTypeToNormalizedType(stravaType: string): NormalizedActivityTy
 
 
 export async function fetchAndStoreStravaRecentActivities(
+  userId: string,
   params?: { before?: number; after?: number; page?: number; per_page?: number }
 ): Promise<FetchStravaDataResult> {
   console.log('[StravaActions] Initiating fetchAndStoreStravaRecentActivities with params:', params);
 
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
+  if (!userId) {
     console.error('[StravaActions] User not authenticated.');
     return { success: false, message: 'User not authenticated.', errorCode: 'AUTH_REQUIRED' };
   }
-  const userId = currentUser.uid;
 
   try {
     const userProfileDocRef = doc(db, 'users', userId);

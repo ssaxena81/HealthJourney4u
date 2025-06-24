@@ -93,6 +93,7 @@ export default function RunningExercisePage() {
     startDataFetchTransition(async () => {
       try {
         const result = await getNormalizedActivitiesForDateRangeAndType(
+          user.uid,
           {
             from: format(viewDateRange.from!, 'yyyy-MM-dd'),
             to: format(viewDateRange.to!, 'yyyy-MM-dd'),

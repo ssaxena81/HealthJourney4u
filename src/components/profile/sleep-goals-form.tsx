@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { updateSleepRadarGoals } from '@/app/actions/userProfileActions';
 import { Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { useAuth } from '@/hooks/useAuth';
 
 const optionalNonNegativeNumberWithEmptyAsUndefined = z.preprocess(
   (val) => (val === "" || val === null || val === undefined ? undefined : Number(val)),
@@ -37,6 +38,7 @@ interface SleepGoalsFormProps {
 }
 
 export default function SleepGoalsForm({ userProfile, onProfileUpdate }: SleepGoalsFormProps) {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
@@ -54,6 +56,10 @@ export default function SleepGoalsForm({ userProfile, onProfileUpdate }: SleepGo
 
   const onSubmit = (values: SleepGoalsFormValues) => {
     startTransition(async () => {
+      if (!user) {
+        toast({ title: 'Error', description: 'You must be logged in to update goals.', variant: 'destructive' });
+        return;
+      }
       const goalsToSave: SleepRadarGoals = {
         targetSleepDurationHours: values.targetSleepDurationHours === null ? undefined : values.targetSleepDurationHours,
         minSleepEfficiencyPercent: values.minSleepEfficiencyPercent === null ? undefined : values.minSleepEfficiencyPercent,
@@ -61,7 +67,7 @@ export default function SleepGoalsForm({ userProfile, onProfileUpdate }: SleepGo
         minTimeInRemSleepMinutes: values.minTimeInRemSleepMinutes === null ? undefined : values.minTimeInRemSleepMinutes,
       };
       
-      const result = await updateSleepRadarGoals(goalsToSave);
+      const result = await updateSleepRadarGoals(user.uid, goalsToSave);
 
       if (result.success) {
         toast({ title: 'Sleep Goals Updated', description: 'Your sleep radar chart goals have been saved.' });

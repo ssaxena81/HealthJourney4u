@@ -109,7 +109,7 @@ export default function AuthenticatedAppLayout({
   };
 
   const handleSyncAll = async () => {
-    if (!userProfile) {
+    if (!user || !userProfile) {
         toast({ title: "Sync Error", description: "User profile not available.", variant: "destructive" });
         return;
     }
@@ -125,7 +125,7 @@ export default function AuthenticatedAppLayout({
 
     startDataSyncTransition(async () => {
       toast({ title: "Sync Started", description: "Fetching latest data from connected services...", duration: 3000 });
-      const response: SyncAllResults = await syncAllConnectedData();
+      const response: SyncAllResults = await syncAllConnectedData(user.uid);
       let overallSuccess = response.success;
       let successCount = 0;
       let errorCount = 0;
@@ -161,57 +161,6 @@ export default function AuthenticatedAppLayout({
     });
   };
 
-  // [06-23-2025 6:30pm] --- START OLD CODE ---
-  // [06-23-2025 6:30pm] The following individual checks for loading, user, and userProfile
-  // [06-23-2025 6:30pm] created a race condition. The component would render and redirect
-  // [06-23-2025 6:30pm] based on the initial `user: null` state before `onAuthStateChanged`
-  // [06-23-2025 6:30pm] could finish and provide the actual user object.
-  /*
-  if (authAndProfileLoading) {
-    return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="ml-4 text-lg text-foreground">Loading session...</p>
-      </div>
-    );
-  }
-
-  if (!user) {
-    // [06-23-2025 6:30pm] This block was the main cause of the redirect loop.
-    return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="ml-4 text-lg text-foreground">Redirecting to login...</p>
-      </div>
-    );
-  }
-  
-  if (!userProfile) {
-      return (
-        <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
-          <Loader2 className="h-12 w-12 animate-spin text-primary" />
-          <p className="ml-4 text-lg text-foreground">Loading profile...</p>
-        </div>
-      );
-  }
-
-  if (userProfile.profileSetupComplete !== true && pathname !== '/profile') {
-     return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="ml-4 text-lg text-foreground">Loading profile...</p>
-      </div>
-    );
-  }
-  */
-  // [06-23-2025 6:30pm] --- END OLD CODE ---
-
-  // [06-23-2025 6:30pm] --- START NEW CODE ---
-  // [06-23-2025 6:30pm] This is the new, robust loading guard that fixes the race condition.
-  // [06-23-2025 6:30pm] It waits until the `useAuth` hook has a definitive answer from Firebase
-  // [06-23-2025 6:30pm] (`authAndProfileLoading` is false) before proceeding.
-  // [06-23-2025 6:30pm] If there's no user at that point, the `useEffect` hook above will handle the redirect.
-  // [06-23-2025 6:30pm] This prevents the layout from rendering and making a bad redirect decision prematurely.
   if (authAndProfileLoading || !user) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
@@ -221,9 +170,6 @@ export default function AuthenticatedAppLayout({
     );
   }
   
-  // [06-23-2025 6:30pm] This second guard ensures that if a user is logged in but their profile is not yet
-  // [06-23-2025 6:30pm] fully set up, we show a loading screen instead of flashing the main UI
-  // [06-23-2025 6:30pm] while the `useEffect` hook prepares to redirect them to the '/profile' page.
   if ((!userProfile || userProfile.profileSetupComplete !== true) && pathname !== '/profile') {
      return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
@@ -232,9 +178,7 @@ export default function AuthenticatedAppLayout({
       </div>
     );
   }
-  // [06-23-2025 6:30pm] --- END NEW CODE ---
   
-  // [06-23-2025 6:30pm] If all checks passed, render the full layout and any necessary modals.
   return (
     <SidebarProvider>
       <AppLayoutClient onSyncAllClick={handleSyncAll}>

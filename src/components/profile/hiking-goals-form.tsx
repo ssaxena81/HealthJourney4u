@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { updateHikingRadarGoals } from '@/app/actions/userProfileActions';
 import { Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { useAuth } from '@/hooks/useAuth';
 
 const optionalNonNegativeNumberWithEmptyAsUndefined = z.preprocess(
   (val) => (val === "" || val === null || val === undefined ? undefined : Number(val)),
@@ -51,6 +52,7 @@ interface HikingGoalsFormProps {
 }
 
 export default function HikingGoalsForm({ userProfile, onProfileUpdate }: HikingGoalsFormProps) {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
@@ -72,6 +74,10 @@ export default function HikingGoalsForm({ userProfile, onProfileUpdate }: Hiking
 
   const onSubmit = (values: HikingGoalsFormValues) => {
     startTransition(async () => {
+      if (!user) {
+        toast({ title: 'Error', description: 'You must be logged in to update goals.', variant: 'destructive' });
+        return;
+      }
       const goalsToSave: HikingRadarGoals = {
         maxDailyDistanceMeters: values.maxDailyDistanceMeters === null ? undefined : values.maxDailyDistanceMeters,
         maxDailyDurationSec: values.maxDailyDurationMinutes === null ? undefined : (values.maxDailyDurationMinutes !== undefined ? values.maxDailyDurationMinutes * 60 : undefined),
@@ -83,7 +89,7 @@ export default function HikingGoalsForm({ userProfile, onProfileUpdate }: Hiking
         minDailyElevationGainMeters: values.minDailyElevationGainMeters === null ? undefined : values.minDailyElevationGainMeters,
       };
       
-      const result = await updateHikingRadarGoals(goalsToSave);
+      const result = await updateHikingRadarGoals(user.uid, goalsToSave);
 
       if (result.success) {
         toast({ title: 'Hiking Goals Updated', description: 'Your hiking radar chart goals have been saved.' });

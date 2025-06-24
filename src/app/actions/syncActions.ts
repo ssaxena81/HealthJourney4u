@@ -1,7 +1,7 @@
 
 'use server';
 
-import { auth, db } from '@/lib/firebase/serverApp';
+import { db } from '@/lib/firebase/serverApp';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import type { UserProfile } from '@/types';
 import {
@@ -29,16 +29,14 @@ export interface SyncAllResults {
   error?: string;
 }
 
-export async function syncAllConnectedData(): Promise<SyncAllResults> {
+export async function syncAllConnectedData(userId: string): Promise<SyncAllResults> {
   console.log('[SyncActions] Starting syncAllConnectedData...');
 
-  const currentUser = auth.currentUser;
-  if (!currentUser) {
+  if (!userId) {
     console.error('[SyncActions] User not authenticated for syncAllConnectedData.');
     return { success: false, results: [], error: 'User not authenticated.' };
   }
-  const userId = currentUser.uid;
-
+  
   let userProfile: UserProfile | null = null;
   const userProfileDocRef = doc(db, 'users', userId);
   try {
@@ -81,35 +79,35 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
 
     for (const dateStr of datesToSyncFitbit) {
       try {
-        const activityRes = await fetchAndStoreFitbitDailyActivity(dateStr);
+        const activityRes = await fetchAndStoreFitbitDailyActivity(userId, dateStr);
         if (!activityRes.success) {
             fitbitSyncSuccess = false;
             syncResults.push({ service: `Fitbit Daily Activity (${dateStr})`, ...activityRes });
             if (activityRes.errorCode === 'FITBIT_AUTH_ERROR' || activityRes.errorCode === 'FITBIT_AUTH_EXPIRED_POST_REFRESH') throw new Error('Fitbit Auth Error');
         } else { totalFitbitActivitiesProcessed += activityRes.data ? 1 : 0; }
 
-        const heartRes = await fetchAndStoreFitbitHeartRate(dateStr);
+        const heartRes = await fetchAndStoreFitbitHeartRate(userId, dateStr);
         if (!heartRes.success) {
             fitbitSyncSuccess = false;
             syncResults.push({ service: `Fitbit Heart Rate (${dateStr})`, ...heartRes });
              if (heartRes.errorCode === 'FITBIT_AUTH_ERROR' || heartRes.errorCode === 'FITBIT_AUTH_EXPIRED_POST_REFRESH') throw new Error('Fitbit Auth Error');
         } else { totalFitbitActivitiesProcessed += heartRes.data ? 1 : 0; }
 
-        const sleepRes = await fetchAndStoreFitbitSleep(dateStr);
+        const sleepRes = await fetchAndStoreFitbitSleep(userId, dateStr);
         if (!sleepRes.success) {
             fitbitSyncSuccess = false;
             syncResults.push({ service: `Fitbit Sleep (${dateStr})`, ...sleepRes });
              if (sleepRes.errorCode === 'FITBIT_AUTH_ERROR' || sleepRes.errorCode === 'FITBIT_AUTH_EXPIRED_POST_REFRESH') throw new Error('Fitbit Auth Error');
         } else { totalFitbitActivitiesProcessed += sleepRes.activitiesProcessed || 0; }
 
-        const swimmingRes = await fetchAndStoreFitbitSwimmingData(dateStr);
+        const swimmingRes = await fetchAndStoreFitbitSwimmingData(userId, dateStr);
         if (!swimmingRes.success) {
             fitbitSyncSuccess = false;
             syncResults.push({ service: `Fitbit Swimming (${dateStr})`, ...swimmingRes });
              if (swimmingRes.errorCode === 'FITBIT_AUTH_ERROR' || swimmingRes.errorCode === 'FITBIT_AUTH_EXPIRED_POST_REFRESH') throw new Error('Fitbit Auth Error');
         } else { totalFitbitActivitiesProcessed += swimmingRes.activitiesProcessed || 0; }
 
-        const loggedActivitiesRes = await fetchAndStoreFitbitLoggedActivities(dateStr);
+        const loggedActivitiesRes = await fetchAndStoreFitbitLoggedActivities(userId, dateStr);
         if (!loggedActivitiesRes.success) {
             fitbitSyncSuccess = false;
             syncResults.push({ service: `Fitbit Logged Activities (${dateStr})`, ...loggedActivitiesRes });
@@ -147,7 +145,7 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
 
       console.log(`[SyncActions] Strava: Fetching activities after timestamp: ${afterTimestamp}`);
 
-      const stravaRes = await fetchAndStoreStravaRecentActivities({
+      const stravaRes = await fetchAndStoreStravaRecentActivities(userId, {
           after: afterTimestamp,
           per_page: 50
       });
@@ -176,7 +174,7 @@ export async function syncAllConnectedData(): Promise<SyncAllResults> {
     try {
       const startTimeIso = userProfile.googleFitLastSuccessfulSync ? userProfile.googleFitLastSuccessfulSync : subDays(today, 7).toISOString();
       const endTimeIso = today.toISOString();
-      const googleFitRes = await fetchAndStoreGoogleFitActivities({ startTimeIso, endTimeIso });
+      const googleFitRes = await fetchAndStoreGoogleFitActivities(userId, { startTimeIso, endTimeIso });
       syncResults.push({ service: 'Google Fit Activities', ...googleFitRes });
       if (googleFitRes.success) {
         await updateDoc(userProfileDocRef, { googleFitLastSuccessfulSync: endTimeIso });

@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { updateWalkingRadarGoals } from '@/app/actions/userProfileActions';
 import { Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { useAuth } from '@/hooks/useAuth';
 
 const optionalNonNegativeNumberWithEmptyAsUndefined = z.preprocess(
   (val) => (val === "" || val === null || val === undefined ? undefined : Number(val)),
@@ -68,6 +69,7 @@ interface WalkingGoalsFormProps {
 }
 
 export default function WalkingGoalsForm({ userProfile, onProfileUpdate }: WalkingGoalsFormProps) {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
@@ -89,6 +91,10 @@ export default function WalkingGoalsForm({ userProfile, onProfileUpdate }: Walki
 
   const onSubmit = (values: WalkingGoalsFormValues) => {
     startTransition(async () => {
+      if (!user) {
+        toast({ title: 'Error', description: 'You must be logged in to update goals.', variant: 'destructive' });
+        return;
+      }
       const goalsToSave: WalkingRadarGoals = {
         maxDailySteps: values.maxDailySteps === null ? undefined : values.maxDailySteps,
         maxDailyDistanceMeters: values.maxDailyDistanceMeters === null ? undefined : values.maxDailyDistanceMeters,
@@ -100,7 +106,7 @@ export default function WalkingGoalsForm({ userProfile, onProfileUpdate }: Walki
         minDailySessions: values.minDailySessions === null ? undefined : values.minDailySessions,
       };
       
-      const result = await updateWalkingRadarGoals(goalsToSave);
+      const result = await updateWalkingRadarGoals(user.uid, goalsToSave);
 
       if (result.success) {
         toast({ title: 'Walking Goals Updated', description: 'Your walking radar chart goals have been saved.' });

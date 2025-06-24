@@ -64,7 +64,7 @@ export default function DashboardPage() {
     if (user && hasConfiguredMetrics && viewDateRange.from && viewDateRange.to) {
       startChartDataFetch(async () => {
         try {
-          const result = await getDashboardRadarData({
+          const result = await getDashboardRadarData(user.uid, {
             from: format(viewDateRange.from!, 'yyyy-MM-dd'),
             to: format(viewDateRange.to!, 'yyyy-MM-dd'),
           });

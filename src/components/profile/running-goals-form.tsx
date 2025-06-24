@@ -14,6 +14,7 @@ import { useToast } from '@/hooks/use-toast';
 import { updateRunningRadarGoals } from '@/app/actions/userProfileActions';
 import { Loader2 } from 'lucide-react';
 import { Separator } from '@/components/ui/separator';
+import { useAuth } from '@/hooks/useAuth';
 
 const optionalNonNegativeNumberWithEmptyAsUndefined = z.preprocess(
   (val) => (val === "" || val === null || val === undefined ? undefined : Number(val)),
@@ -48,6 +49,7 @@ interface RunningGoalsFormProps {
 }
 
 export default function RunningGoalsForm({ userProfile, onProfileUpdate }: RunningGoalsFormProps) {
+  const { user } = useAuth();
   const { toast } = useToast();
   const [isPending, startTransition] = useTransition();
 
@@ -67,6 +69,10 @@ export default function RunningGoalsForm({ userProfile, onProfileUpdate }: Runni
 
   const onSubmit = (values: RunningGoalsFormValues) => {
     startTransition(async () => {
+      if (!user) {
+        toast({ title: 'Error', description: 'You must be logged in to update goals.', variant: 'destructive' });
+        return;
+      }
       const goalsToSave: RunningRadarGoals = {
         maxDailyDistanceMeters: values.maxDailyDistanceMeters === null ? undefined : values.maxDailyDistanceMeters,
         maxDailyDurationSec: values.maxDailyDurationMinutes === null ? undefined : (values.maxDailyDurationMinutes !== undefined ? values.maxDailyDurationMinutes * 60 : undefined),
@@ -76,7 +82,7 @@ export default function RunningGoalsForm({ userProfile, onProfileUpdate }: Runni
         minDailySessions: values.minDailySessions === null ? undefined : values.minDailySessions,
       };
       
-      const result = await updateRunningRadarGoals(goalsToSave);
+      const result = await updateRunningRadarGoals(user.uid, goalsToSave);
 
       if (result.success) {
         toast({ title: 'Running Goals Updated', description: 'Your running radar chart goals have been saved.' });
