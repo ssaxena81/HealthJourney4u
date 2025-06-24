@@ -1,9 +1,8 @@
-
-import { redirect } from 'next/navigation';
+// This file is intentionally left blank.
+// The root route ('/') is handled by `src/app/page.tsx`, which contains logic
+// to differentiate between authenticated and unauthenticated users.
+// This file previously created a route conflict and has been cleared to resolve a 404 error.
 
 export default function AuthenticatedRootPage() {
-  // This page exists to resolve a routing conflict with the public-facing home page.
-  // It immediately redirects any authenticated traffic targeting the root URL ('/')
-  // to the main user dashboard, which is the correct destination.
-  redirect('/dashboard');
+  return null;
 }

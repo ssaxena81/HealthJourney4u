@@ -1,2 +1,3 @@
 // This file is intentionally left empty.
-// Configuration is now handled by next.config.js to support the build environment.
+// Its presence can cause potential build issues. All Next.js configuration
+// should be handled in `next.config.js`.
