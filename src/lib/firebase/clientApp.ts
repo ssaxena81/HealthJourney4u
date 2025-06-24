@@ -1,8 +1,7 @@
-
 // src/lib/firebase/clientApp.ts
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
-import { getFirestore, enableNetwork, type Firestore } from 'firebase/firestore';
+import { getFirestore, enableNetwork, type Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -23,6 +22,22 @@ try {
 
 const auth: Auth = getAuth(app);
 const db: Firestore = getFirestore(app);
+
+// Enable persistence to allow offline data access and potentially stabilize the client state.
+// This must only be attempted in the browser environment.
+if (typeof window !== 'undefined') {
+  enableIndexedDbPersistence(db).catch((err) => {
+    if (err.code === 'failed-precondition') {
+      console.warn(
+        'Firestore persistence failed: This can happen if you have multiple tabs open.'
+      );
+    } else if (err.code === 'unimplemented') {
+      console.warn(
+        'Firestore persistence failed: Browser does not support this feature.'
+      );
+    }
+  });
+}
 
 // Explicitly enable the network for Firestore to potentially resolve "client is offline" issues.
 // This should be called after getFirestore() and is safe to call multiple times.
