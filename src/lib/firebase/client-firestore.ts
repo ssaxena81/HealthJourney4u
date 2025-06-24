@@ -1,4 +1,5 @@
 
+
 'use client';
 
 import { doc, updateDoc } from 'firebase/firestore';
@@ -36,3 +37,5 @@ export async function updateUserDemographics(userId: string, dataToUpdate: Parti
         return { success: false, error: error.message || "An unknown error occurred while updating profile." };
     }
 }
+
+    

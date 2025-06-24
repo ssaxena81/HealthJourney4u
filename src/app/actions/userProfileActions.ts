@@ -1,4 +1,5 @@
 
+
 'use server';
 
 import { z } from 'zod';
@@ -399,26 +400,4 @@ export async function updateDashboardRadarMetrics(
   }
 }
 
-// [06-23-2025 6:30pm] This function is being removed as it's a server action that causes permission errors.
-// [06-23-2025 6:30pm] The logic has been moved into the client-side demographics form submission handler.
-/*
-export async function markProfileSetupComplete(userId: string): Promise<{ success: boolean, error?: string }> {
-  const currentUser = auth.currentUser;
-  if (!currentUser || currentUser.uid !== userId) {
-    return { success: false, error: 'Authorization error.' };
-  }
-
-  console.log('[USER_PROFILE_ACTIONS] Marking profile setup as complete for UID:', userId);
-  try {
-    const userProfileDocRef = doc(db, 'users', userId);
-    await updateDoc(userProfileDocRef, {
-      profileSetupComplete: true,
-    });
-    console.log('[USER_PROFILE_ACTIONS] Profile setup marked as complete in Firestore for UID:', userId);
-    return { success: true };
-  } catch (error: any) {
-    console.error('[USER_PROFILE_ACTIONS] Error marking profile setup complete for UID:', userId, error);
-    return { success: false, error: String(error.message) || 'Failed to update profile completion status.' };
-  }
-}
-*/
+    
