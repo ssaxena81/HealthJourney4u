@@ -276,5 +276,3 @@ export async function getSwimmingActivities(accessToken: string, date: string /*
   }
   return [];
 }
-
-    

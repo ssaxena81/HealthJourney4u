@@ -237,8 +237,8 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
                   </SelectTrigger>
                   <SelectContent>
                     {availableAppsToConnect.map(app => (
-                      <SelectItem key={app.id} value={app.id} disabled={!implementedApps.includes(app.id) && app.id !== 'withings' /* Temporarily allow Withings for dev */}>
-                        {app.name} {!implementedApps.includes(app.id) && app.id !== 'withings' && '(Coming Soon)'}
+                      <SelectItem key={app.id} value={app.id} disabled={!implementedApps.includes(app.id)}>
+                        {app.name} {!implementedApps.includes(app.id) && '(Coming Soon)'}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -246,10 +246,10 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
               </div>
               <Button
                 asChild={implementedApps.includes(selectedAppId)}
-                disabled={!selectedAppId || isLoading[selectedAppId] || (!implementedApps.includes(selectedAppId) && selectedAppId !== 'withings')}
+                disabled={!selectedAppId || isLoading[selectedAppId] || !implementedApps.includes(selectedAppId)}
                 className="w-full sm:w-auto"
                 onClick={() => {
-                  if (!implementedApps.includes(selectedAppId) && selectedAppId !== 'withings') { // Adjust condition
+                  if (!implementedApps.includes(selectedAppId)) {
                     toast({title: "Coming Soon", description: `${mockFitnessApps.find(a => a.id === selectedAppId)?.name || 'This app'} integration is not yet available.`});
                   }
                 }}
