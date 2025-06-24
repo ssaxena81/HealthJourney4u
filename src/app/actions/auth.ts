@@ -27,7 +27,6 @@ import type {
 } from '@/types';
 import { passwordSchema } from '@/types';
 import { doc, setDoc, getDoc, updateDoc, Timestamp, collection, query, where, getDocs } from 'firebase/firestore';
-import { differenceInYears, format } from 'date-fns';
 import { auth as serverAuth, db as serverDb } from '@/lib/firebase/serverApp';
 
 
@@ -507,70 +506,8 @@ export async function resetPassword(values: z.infer<typeof FinalResetPasswordSch
   }
 }
 
+
 // --- Update Profile Actions ---
-const serverCalculateAge = (birthDateString: string): number => {
-  const birthDate = new Date(birthDateString);
-  if (isNaN(birthDate.getTime())) return 0;
-  return differenceInYears(new Date(), birthDate);
-};
-
-const DemographicsSchemaServer = z.object({
-  firstName: z.string().min(2, "First name must be at least 2 characters.").max(50).regex(/^[a-zA-Z\s'-]+$/, "First name can only contain letters.").trim(),
-  middleInitial: z.string().max(1, "Middle initial can be at most 1 character.").trim().optional(),
-  lastName: z.string().min(2, "Last name must be at least 2 characters.").max(50).regex(/^[a-zA-Z\s'-]+$/, "Last name can only contain letters.").trim(),
-  dateOfBirth: z.string()
-                  .refine((val) => !isNaN(Date.parse(val)), { message: "Invalid date of birth" })
-                  .refine((val) => serverCalculateAge(val) >= 18, { message: "User must be 18 or older." }),
-  email: z.string().email(),
-  cellPhone: z.string().regex(/^$|^\d{3}-\d{3}-\d{4}$/, "Invalid phone format (e.g., 999-999-9999).").optional(),
-  isAgeCertified: z.boolean().optional(),
-}).refine(data => data.email || data.cellPhone, {
-    message: "Either email or cell phone must be provided for contact purposes.",
-    path: ["cellPhone"],
-}).refine(data => {
-    if (serverCalculateAge(data.dateOfBirth) >= 18) {
-        return data.isAgeCertified === true;
-    }
-    return true;
-}, {
-    message: "Age certification is required for users 18 or older.",
-    path: ["isAgeCertified"],
-});
-
-
-export async function updateDemographics(userId: string, values: z.infer<typeof DemographicsSchemaServer>): Promise<{success: boolean, error?: string, data?: Partial<UserProfile>, details?: z.inferFlattenedErrors<typeof DemographicsSchemaServer>, errorCode?: string}> {
-    console.log("[UPDATE_DEMOGRAPHICS_START] Updating demographics for UID:", userId, "with values:", values);
-    try {
-      const validatedValues = DemographicsSchemaServer.parse(values);
-      console.log("[UPDATE_DEMOGRAPHICS_VALIDATION_PASSED] Server-side validation passed for UID:", userId);
-
-      const profileUpdateData: Partial<UserProfile> = {
-          firstName: validatedValues.firstName,
-          middleInitial: validatedValues.middleInitial,
-          lastName: validatedValues.lastName,
-          dateOfBirth: validatedValues.dateOfBirth,
-          cellPhone: validatedValues.cellPhone,
-          isAgeCertified: validatedValues.isAgeCertified,
-          isProfileCreated: true, 
-          profileSetupComplete: true, 
-      };
-      console.log("[UPDATE_DEMOGRAPHICS_FIRESTORE_UPDATE_START] Attempting to update Firestore for UID:", userId);
-      await updateDoc(doc(serverDb, "users", userId), profileUpdateData);
-      console.log("[UPDATE_DEMOGRAPHICS_FIRESTORE_UPDATE_SUCCESS] Firestore updated successfully for UID:", userId);
-      return { success: true, data: profileUpdateData };
-    } catch (error: any) {
-        console.error("[UPDATE_DEMOGRAPHICS_RAW_ERROR] Raw error in updateDemographics for UID:", userId, "Error:", error.message, error.stack);
-        if (error instanceof z.ZodError) {
-          console.error("[UPDATE_DEMOGRAPHICS_ZOD_ERROR_DETAILS] ZodError:", error.flatten());
-          return { success: false, error: 'Invalid input from server validation.', details: error.flatten(), errorCode: 'VALIDATION_ERROR' };
-        }
-        const errorMessage = String(error.message || "Failed to update profile due to an unexpected error.");
-        const errorCode = String((error as AuthError).code || 'UNEXPECTED_ERROR');
-        console.error(`[UPDATE_DEMOGRAPHICS_ERROR_DETAILS] Code: ${errorCode}, Message: ${errorMessage}`);
-        return { success: false, error: errorMessage, errorCode: errorCode };
-    }
-}
-
 export async function finalizeFitbitConnection(userId: string): Promise<{success: boolean, error?: string, errorCode?: string, data?: any}> {
     console.log("[FINALIZE_FITBIT_CONNECTION_START] Finalizing Fitbit connection for UID:", userId);
     try {
@@ -584,7 +521,7 @@ export async function finalizeFitbitConnection(userId: string): Promise<{success
         const userProfile = userProfileSnap.data() as UserProfile;
         const existingConnections = userProfile.connectedFitnessApps || [];
         const now = new Date();
-        const todayDateString = format(now, 'yyyy-MM-dd');
+        const todayDateString = now.toISOString().substring(0, 10);
 
         const connectionUpdateData: Partial<UserProfile> = {
             connectedFitnessApps: [...existingConnections.filter(app => app.id !== 'fitbit'), { id: 'fitbit', name: 'Fitbit', connectedAt: now.toISOString() }],

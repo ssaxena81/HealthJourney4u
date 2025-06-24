@@ -16,7 +16,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogContent, AlertDialogDescript
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Loader2 } from 'lucide-react';
 import { differenceInYears } from 'date-fns';
-import { updateDemographics } from '@/app/actions/auth';
+import { updateUserDemographics } from '@/lib/firebase/client-firestore';
 import { markProfileSetupComplete } from '@/app/actions/userProfileActions';
 import { useAuth } from '@/hooks/useAuth';
 import { useRouter } from 'next/navigation';
@@ -157,18 +157,25 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
     }
 
     startTransition(async () => {
-        const monthIndex = monthMap[values.birthMonth];
-        const constructedDate = new Date(Date.UTC(parseInt(values.birthYear), monthIndex, parseInt(values.birthDay)));
-      
-        const result = await updateDemographics(userProfile.id, {
-        ...values,
+      const monthIndex = monthMap[values.birthMonth];
+      const constructedDate = new Date(Date.UTC(parseInt(values.birthYear), monthIndex, parseInt(values.birthDay)));
+    
+      const profileUpdateData: Partial<UserProfile> = {
+        firstName: values.firstName,
+        middleInitial: values.middleInitial,
+        lastName: values.lastName,
         dateOfBirth: constructedDate.toISOString(),
+        cellPhone: values.cellPhone,
         isAgeCertified: values.ageCertification,
-      });
+        isProfileCreated: true,
+        profileSetupComplete: true,
+      };
+      
+      const result = await updateUserDemographics(userProfile.id, profileUpdateData);
       
       if (result.success) {
         toast({ title: "Demographics Updated", description: "Your information has been saved." });
-        let updatedProfileDataForContext = { ...result.data };
+        let updatedProfileDataForContext = { ...profileUpdateData };
 
         if (userProfile.profileSetupComplete !== true) {
           const completionResult = await markProfileSetupComplete(userProfile.id);
@@ -189,11 +196,7 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
 
       } else {
         toast({ title: "Update Failed", description: result.error || "Could not save demographics.", variant: "destructive" });
-        if (result.details?.fieldErrors) {
-            Object.entries(result.details.fieldErrors).forEach(([field, messages]) => {
-                form.setError(field as keyof DemographicsFormValues, { type: 'server', message: (messages as string[]).join(', ') });
-            });
-        }
+        form.setError("root", { type: "server", message: result.error });
       }
     });
   };
