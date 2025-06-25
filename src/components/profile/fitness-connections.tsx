@@ -1,53 +1,111 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useTransition } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import type { UserProfile, SelectableService } from '@/types';
-import { mockFitnessApps } from '@/types'; // Keep using mock for now
+import { mockFitnessApps } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { XCircle, CheckCircle2, Link2, Loader2 } from 'lucide-react';
+import { XCircle, CheckCircle2, Link2, Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { updateConnectedFitnessApps } from '@/app/actions/userProfileActions';
+import { syncFitbitSleepData } from '@/app/actions/fitbitActions';
+import { format, subDays } from 'date-fns';
 
 interface FitnessConnectionsProps {
   userProfile: UserProfile;
 }
 
 export default function FitnessConnections({ userProfile }: FitnessConnectionsProps) {
+  const { user, setUserProfile } = useAuth();
   const { toast } = useToast();
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  
   const [selectedAppId, setSelectedAppId] = useState<string>('');
   const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
-  
-  // This is a placeholder. A real implementation would persist this to the DB.
-  const [currentConnections, setCurrentConnections] = useState<SelectableService[]>(userProfile.connectedFitnessApps || []);
+  const [isSyncing, startSyncTransition] = useTransition();
+
+  const currentConnections = userProfile.connectedFitnessApps || [];
 
   const availableAppsToConnect = mockFitnessApps.filter(
     app => !currentConnections.some(conn => conn.id === app.id)
   );
-  
+
+  // Handle toast notifications on redirect from OAuth flow
+  useEffect(() => {
+    const fitbitConnected = searchParams.get('fitbit_connected');
+    const fitbitError = searchParams.get('fitbit_error');
+
+    if (fitbitConnected) {
+      toast({
+        title: 'Fitbit Connected!',
+        description: 'Your Fitbit account has been successfully linked.',
+      });
+      router.replace('/profile'); // Clear query params
+    }
+    if (fitbitError) {
+      toast({
+        title: 'Fitbit Connection Failed',
+        description: `Error: ${fitbitError}`,
+        variant: 'destructive',
+      });
+      router.replace('/profile'); // Clear query params
+    }
+  }, [searchParams, toast, router]);
+
   const handleConnect = async () => {
     if (!selectedAppId) return;
-
     const appToConnect = mockFitnessApps.find(app => app.id === selectedAppId);
     if (!appToConnect) return;
 
+    setIsLoading(prev => ({ ...prev, [selectedAppId]: true }));
     // The actual OAuth flow is triggered by redirecting the user.
-    // The redirect URL is the API route for the specific service.
     window.location.href = `/api/auth/${appToConnect.id}/connect`;
   };
 
   const handleDisconnect = async (appId: string) => {
+    if (!user) return;
     setIsLoading(prev => ({ ...prev, [appId]: true }));
-    // In a real app, this would be a server action to revoke tokens and update the DB.
-    toast({ title: `Disconnecting ${appId} (Simulated)...` });
-    await new Promise(res => setTimeout(res, 1000));
-    setCurrentConnections(prev => prev.filter(c => c.id !== appId));
+    
+    const serviceToDisconnect = currentConnections.find(c => c.id === appId);
+    if (!serviceToDisconnect) return;
+
+    const result = await updateConnectedFitnessApps(user.uid, serviceToDisconnect, 'disconnect');
+
+    if (result.success && result.data) {
+      setUserProfile(prev => prev ? ({ ...prev, ...result.data }) : null);
+      toast({ title: `${serviceToDisconnect.name} Disconnected` });
+    } else {
+      toast({ title: 'Error', description: result.error || 'Failed to disconnect app.', variant: 'destructive' });
+    }
     setIsLoading(prev => ({ ...prev, [appId]: false }));
-    toast({ title: `${appId} Disconnected (Simulated)` });
   };
+
+  const handleSyncFitbit = () => {
+    startSyncTransition(async () => {
+      if (!user) {
+        toast({ title: 'Error', description: 'Not authenticated.', variant: 'destructive'});
+        return;
+      }
+      toast({ title: 'Syncing Fitbit Data...', description: 'Fetching sleep data for the last 7 days.' });
+      const endDate = format(new Date(), 'yyyy-MM-dd');
+      const startDate = format(subDays(new Date(), 6), 'yyyy-MM-dd');
+      const result = await syncFitbitSleepData(user.uid, startDate, endDate);
+      if (result.success) {
+        toast({ title: 'Fitbit Sync Complete!', description: result.message });
+        if (result.syncedCount && result.syncedCount > 0 && setUserProfile) {
+            setUserProfile(prev => prev ? ({...prev, fitbitLastSuccessfulSync: new Date().toISOString()}) : null);
+        }
+      } else {
+        toast({ title: 'Fitbit Sync Failed', description: result.message, variant: 'destructive'});
+      }
+    });
+  }
   
   return (
     <Card>
@@ -66,17 +124,30 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
                 <li key={conn.id} className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
                   <div className="flex items-center space-x-2">
                     <CheckCircle2 className="h-5 w-5 text-green-600" />
-                    <span className="capitalize">{conn.name}</span>
+                    <span className="capitalize font-medium">{conn.name}</span>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleDisconnect(conn.id)}
-                    disabled={isLoading[conn.id]}
-                    aria-label={`Disconnect ${conn.name}`}
-                  >
-                    {isLoading[conn.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4 text-destructive/70 hover:text-destructive" />}
-                  </Button>
+                  <div className="flex items-center space-x-2">
+                    {conn.id === 'fitbit' && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleSyncFitbit}
+                            disabled={isSyncing}
+                        >
+                           {isSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                           <span className="hidden sm:inline ml-2">Sync Now</span>
+                        </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleDisconnect(conn.id)}
+                      disabled={isLoading[conn.id]}
+                      aria-label={`Disconnect ${conn.name}`}
+                    >
+                      {isLoading[conn.id] ? <Loader2 className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4 text-destructive/70 hover:text-destructive" />}
+                    </Button>
+                  </div>
                 </li>
               ))}
             </ul>

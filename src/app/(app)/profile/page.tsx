@@ -1,19 +1,33 @@
 
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DemographicsForm from '@/components/profile/demographics-form';
 import ChangePasswordForm from '@/components/profile/change-password-form';
 import FitnessConnections from '@/components/profile/fitness-connections';
 import DiagnosticsConnections from '@/components/profile/diagnostics-connections';
 import InsuranceConnections from '@/components/profile/insurance-connections';
+import DashboardMetricsForm from '@/components/profile/dashboard-metrics-form';
+import WalkingGoalsForm from '@/components/profile/walking-goals-form';
+import RunningGoalsForm from '@/components/profile/running-goals-form';
+import HikingGoalsForm from '@/components/profile/hiking-goals-form';
+import SwimmingGoalsForm from '@/components/profile/swimming-goals-form';
+import SleepGoalsForm from '@/components/profile/sleep-goals-form';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
+import type { UserProfile } from '@/types';
 
 export default function ProfilePage() {
-  const { user, userProfile, loading } = useAuth();
+  const { user, userProfile, loading, setUserProfile } = useAuth();
+  
+  // Optimistically update the UI after a successful form submission
+  const handleProfileUpdate = (updatedData: Partial<UserProfile>) => {
+    if (setUserProfile) {
+      setUserProfile(prev => prev ? { ...prev, ...updatedData } : null);
+    }
+  };
 
   if (loading || !user) { 
     return (
@@ -41,28 +55,38 @@ export default function ProfilePage() {
         </CardHeader>
       </Card>
 
-      <Tabs defaultValue="demographics" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 mb-6">
+      <Tabs defaultValue="demographics" className="w-full" orientation="vertical">
+        <TabsList className="w-full md:w-48 shrink-0 mb-6 md:mb-0 md:mr-6 grid-cols-2 md:grid-cols-1">
           <TabsTrigger value="demographics">Demographics</TabsTrigger>
-          <TabsTrigger value="fitness">Fitness Apps</TabsTrigger>
-          <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>
-          <TabsTrigger value="insurance">Insurance</TabsTrigger>
+          <TabsTrigger value="connections">Connections</TabsTrigger>
+          <TabsTrigger value="goals">Activity Goals</TabsTrigger>
+          <TabsTrigger value="dashboard">Dashboard</TabsTrigger>
           <TabsTrigger value="security">Security</TabsTrigger>
         </TabsList>
 
-        <TabsContent value="demographics">
+        <TabsContent value="demographics" className="flex-grow">
           <DemographicsForm userProfile={userProfile} />
         </TabsContent>
-        <TabsContent value="fitness">
-           <FitnessConnections userProfile={userProfile} />
+        <TabsContent value="connections" className="flex-grow">
+           <div className="space-y-6">
+            <FitnessConnections userProfile={userProfile} />
+            <DiagnosticsConnections userProfile={userProfile} />
+            <InsuranceConnections userProfile={userProfile} />
+           </div>
         </TabsContent>
-        <TabsContent value="diagnostics">
-           <DiagnosticsConnections userProfile={userProfile} />
+         <TabsContent value="goals" className="flex-grow">
+          <div className="space-y-6">
+             <WalkingGoalsForm userProfile={userProfile} onProfileUpdate={handleProfileUpdate} />
+             <RunningGoalsForm userProfile={userProfile} onProfileUpdate={handleProfileUpdate} />
+             <HikingGoalsForm userProfile={userProfile} onProfileUpdate={handleProfileUpdate} />
+             <SwimmingGoalsForm userProfile={userProfile} onProfileUpdate={handleProfileUpdate} />
+             <SleepGoalsForm userProfile={userProfile} onProfileUpdate={handleProfileUpdate} />
+          </div>
         </TabsContent>
-        <TabsContent value="insurance">
-           <InsuranceConnections userProfile={userProfile} />
+        <TabsContent value="dashboard" className="flex-grow">
+          <DashboardMetricsForm userProfile={userProfile} onProfileUpdate={handleProfileUpdate} />
         </TabsContent>
-        <TabsContent value="security">
+        <TabsContent value="security" className="flex-grow">
           <ChangePasswordForm />
         </TabsContent>
       </Tabs>
