@@ -6,6 +6,4 @@ import { redirect } from 'next/navigation';
 // This resolves routing conflicts by ensuring this path doesn't try to render a page.
 export default function AuthenticatedRootRedirectPage() {
   redirect('/dashboard');
-  // This return is technically unreachable but required by React's component signature.
-  return null;
 }

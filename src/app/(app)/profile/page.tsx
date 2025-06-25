@@ -1,7 +1,7 @@
 
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DemographicsForm from '@/components/profile/demographics-form';
 import FitnessConnections from '@/components/profile/fitness-connections';
@@ -13,18 +13,13 @@ import RunningGoalsForm from '@/components/profile/running-goals-form';
 import HikingGoalsForm from '@/components/profile/hiking-goals-form';
 import SwimmingGoalsForm from '@/components/profile/swimming-goals-form';
 import SleepGoalsForm from '@/components/profile/sleep-goals-form';
-import DashboardMetricsForm from '@/components/profile/dashboard-metrics-form'; // New import
+import DashboardMetricsForm from '@/components/profile/dashboard-metrics-form';
 import { useAuth } from '@/hooks/useAuth';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { useToast } from '@/hooks/use-toast';
+import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
-import { Separator } from '@/components/ui/separator';
-import type { UserProfile } from '@/types'; // Ensure UserProfile is imported
 
 export default function ProfilePage() {
-  const { user, userProfile, loading, setUserProfileStateOnly: setUserProfile } = useAuth();
-  const { toast } = useToast();
+  const { user, userProfile, loading } = useAuth();
 
   if (loading || !user) { 
     return (
@@ -42,12 +37,6 @@ export default function ProfilePage() {
         </div>
       );
   }
-
-  const handleProfilePartUpdate = (updatedData: Partial<UserProfile>) => {
-    if (setUserProfile) {
-      setUserProfile(prev => prev ? ({ ...prev, ...updatedData }) : null);
-    }
-  };
 
   return (
     <div className="container mx-auto py-8 px-4 md:px-6">
@@ -71,31 +60,28 @@ export default function ProfilePage() {
         </TabsList>
 
         <TabsContent value="demographics">
-          <DemographicsForm userProfile={userProfile} onProfileUpdate={handleProfilePartUpdate} />
+          <DemographicsForm userProfile={userProfile} />
         </TabsContent>
         <TabsContent value="fitness">
-          <FitnessConnections userProfile={userProfile} onConnectionsUpdate={handleProfilePartUpdate} />
+          <FitnessConnections userProfile={userProfile} />
         </TabsContent>
         <TabsContent value="diagnostics">
-          <DiagnosticsConnections userProfile={userProfile} onConnectionsUpdate={handleProfilePartUpdate} />
+          <DiagnosticsConnections userProfile={userProfile} />
         </TabsContent>
         <TabsContent value="insurance">
-          <InsuranceConnections userProfile={userProfile} onConnectionsUpdate={handleProfilePartUpdate} />
+          <InsuranceConnections userProfile={userProfile} />
         </TabsContent>
         <TabsContent value="activity_goals" className="space-y-6">
-          <WalkingGoalsForm userProfile={userProfile} onProfileUpdate={handleProfilePartUpdate} />
-          <Separator />
-          <RunningGoalsForm userProfile={userProfile} onProfileUpdate={handleProfilePartUpdate} />
-          <Separator />
-          <HikingGoalsForm userProfile={userProfile} onProfileUpdate={handleProfilePartUpdate} />
-          <Separator />
-          <SwimmingGoalsForm userProfile={userProfile} onProfileUpdate={handleProfilePartUpdate} />
+          <WalkingGoalsForm userProfile={userProfile} />
+          <RunningGoalsForm userProfile={userProfile} />
+          <HikingGoalsForm userProfile={userProfile} />
+          <SwimmingGoalsForm userProfile={userProfile} />
         </TabsContent>
         <TabsContent value="sleep_goals"> 
-          <SleepGoalsForm userProfile={userProfile} onProfileUpdate={handleProfilePartUpdate} />
+          <SleepGoalsForm userProfile={userProfile} />
         </TabsContent>
          <TabsContent value="dashboard_metrics">
-          <DashboardMetricsForm userProfile={userProfile} onProfileUpdate={handleProfilePartUpdate} />
+          <DashboardMetricsForm userProfile={userProfile} />
         </TabsContent>
          <TabsContent value="security">
           <ChangePasswordForm />
@@ -105,4 +91,3 @@ export default function ProfilePage() {
     </div>
   );
 }
-    

@@ -14,7 +14,7 @@ export default function RootPage() {
 
   useEffect(() => {
     // If auth state is resolved and we have a user, redirect to the authenticated section.
-    // The (app) layout will then handle redirecting to /dashboard or /profile.
+    // The (app) layout will then handle redirecting to /dashboard.
     if (!loading && user) {
       router.replace('/dashboard');
     }

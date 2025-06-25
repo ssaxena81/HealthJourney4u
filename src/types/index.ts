@@ -176,98 +176,43 @@ export const healthMetricDisplayNames: Record<HealthMetricType, string> = {
 
 
 // --- User Profile and Authentication Types ---
+// This is a simplified UserProfile for stabilization.
+// We can add back the more complex fields once the app is stable.
+export interface UserProfile {
+  id: string; 
+  email: string; 
+  firstName?: string; 
+  lastName?: string; 
+  dateOfBirth?: string;
+  createdAt: string; // ISO 8601 string
+  lastLoggedInDate?: string; // ISO 8601 string
+  lastPasswordChangeDate?: string; // ISO 8601 string
+}
+
+// --- LoginResult Type ---
+export interface LoginResult {
+  success: boolean;
+  userId?: string;
+  error?: string;
+  errorCode?: string;
+}
+// --- End LoginResult Type ---
 
 export type SubscriptionTier = 'free' | 'silver' | 'gold' | 'platinum';
-
-export interface FitbitApiCallStatDetail {
-  lastCalledAt?: string; // ISO string
-  callCountToday?: number;
-}
-
-export interface FitbitApiCallStats {
-  dailyActivitySummary?: FitbitApiCallStatDetail;
-  heartRateTimeSeries?: FitbitApiCallStatDetail;
-  sleepData?: FitbitApiCallStatDetail;
-  swimmingData?: FitbitApiCallStatDetail; 
-  loggedActivities?: FitbitApiCallStatDetail; 
-}
-
-export interface StravaApiCallStatDetail {
-  lastCalledAt?: string; // ISO string
-  callCountToday?: number;
-}
-
-export interface StravaApiCallStats {
-  activities?: StravaApiCallStatDetail;
-}
-
-export interface GoogleFitApiCallStatDetail {
-  lastCalledAt?: string; // ISO string
-  callCountToday?: number;
-}
-
-export interface GoogleFitApiCallStats {
-  sessions?: GoogleFitApiCallStatDetail; 
-  aggregateData?: GoogleFitApiCallStatDetail; 
-}
-
-export interface WithingsApiCallStatDetail {
-  lastCalledAt?: string; // ISO string
-  callCountToday?: number;
-}
-export interface WithingsApiCallStats {
-  measurements?: WithingsApiCallStatDetail; // For things like weight, heart rate
-  activity?: WithingsApiCallStatDetail;    // For activities
-  sleep?: WithingsApiCallStatDetail;       // For sleep data
-}
+export const subscriptionTiers: SubscriptionTier[] = ['free', 'silver', 'gold', 'platinum'];
 
 
-export interface WalkingRadarGoals {
-  maxDailySteps?: number | null;
-  maxDailyDistanceMeters?: number | null;
-  maxDailyDurationSec?: number | null; 
-  maxDailySessions?: number | null;
-  minDailySteps?: number | null;
-  minDailyDistanceMeters?: number | null;
-  minDailyDurationSec?: number | null; 
-  minDailySessions?: number | null;
-}
-
-export interface RunningRadarGoals {
-  maxDailyDistanceMeters?: number | null;
-  maxDailyDurationSec?: number | null;
-  maxDailySessions?: number | null;
-  minDailyDistanceMeters?: number | null;
-  minDailyDurationSec?: number | null;
-  minDailySessions?: number | null;
-}
-
-export interface HikingRadarGoals {
-  maxDailyDistanceMeters?: number | null;
-  maxDailyDurationSec?: number | null;
-  maxDailySessions?: number | null;
-  maxDailyElevationGainMeters?: number | null;
-  minDailyDistanceMeters?: number | null;
-  minDailyDurationSec?: number | null;
-  minDailySessions?: number | null;
-  minDailyElevationGainMeters?: number | null;
-}
-
-export interface SwimmingRadarGoals {
-  maxDailyDistanceMeters?: number | null;
-  maxDailyDurationSec?: number | null;
-  maxDailySessions?: number | null;
-  minDailyDistanceMeters?: number | null;
-  minDailyDurationSec?: number | null;
-  minDailySessions?: number | null;
-}
-
-export interface SleepRadarGoals {
-  targetSleepDurationHours?: number | null;
-  minSleepEfficiencyPercent?: number | null;
-  minTimeInDeepSleepMinutes?: number | null;
-  minTimeInRemSleepMinutes?: number | null;
-}
+// --- Placeholder types for now, can be expanded later ---
+export interface FitbitApiCallStats {}
+export interface StravaApiCallStats {}
+export interface GoogleFitApiCallStats {}
+export interface WithingsApiCallStats {}
+export interface WalkingRadarGoals {}
+export interface RunningRadarGoals {}
+export interface HikingRadarGoals {}
+export interface SwimmingRadarGoals {}
+export interface SleepRadarGoals {}
+export type DashboardMetricIdValue = string;
 
 // --- Dashboard Metric Selection Types ---
 export const DashboardMetricId = {
@@ -278,8 +223,6 @@ export const DashboardMetricId = {
   AVG_WORKOUT_DURATION: 'avgWorkoutDuration', 
   TOTAL_WORKOUTS: 'totalWorkouts',        
 } as const;
-
-export type DashboardMetricIdValue = typeof DashboardMetricId[keyof typeof DashboardMetricId];
 
 export interface DashboardMetricConfig {
   id: DashboardMetricIdValue;
@@ -306,126 +249,6 @@ export interface RadarDataPoint {
   fullMark: number; 
 }
 
-export interface PerformanceRadarChartDataPoint {
-  metric: string;
-  minGoalNormalized?: number;
-  actualNormalized: number;  
-  maxGoalNormalized: number;  
-  minGoalFormatted?: string;  
-  actualFormatted: string;    
-  maxGoalFormatted?: string;  
-  isOverGoal?: boolean;       
-  isBelowMinGoal?: boolean;   
-}
-
-export interface AppAuthStateCookie {
-  isProfileCreated: boolean;
-  authSyncComplete: boolean;
-}
-
-export interface UserProfile {
-  id: string; 
-  firstName?: string; 
-  middleInitial?: string; 
-  lastName?: string; 
-  dateOfBirth?: string; 
-  email: string; 
-  cellPhone?: string; 
-  passwordResetCodeAttempt?: { code: string; expiresAt: string; }; 
-  isAgeCertified?: boolean; 
-  profileSetupComplete?: boolean; 
-  isProfileCreated?: boolean; 
-
-  lastPasswordChangeDate: string; 
-  lastLoggedInDate?: string; 
-  acceptedLatestTerms: boolean;
-  termsVersionAccepted?: string | null; 
-
-  subscriptionTier: SubscriptionTier;
-  paymentDetails?: any; 
-
-  connectedFitnessApps: Array<{
-    id: string; 
-    name: string; 
-    connectedAt: string; 
-  }>;
-
-  connectedDiagnosticsServices: Array<{
-    id: string; 
-    name: string; 
-    connectedAt: string; 
-  }>;
-
-  connectedInsuranceProviders: Array<{
-    id: string; 
-    name: string; 
-    memberId: string; 
-    groupId?: string; 
-    connectedAt: string; 
-  }>;
-
-  fitbitApiCallStats?: FitbitApiCallStats;
-  stravaApiCallStats?: StravaApiCallStats;
-  googleFitApiCallStats?: GoogleFitApiCallStats;
-  withingsApiCallStats?: WithingsApiCallStats; 
-
-  fitbitLastSuccessfulSync?: string; 
-  stravaLastSyncTimestamp?: number; 
-  googleFitLastSuccessfulSync?: string; 
-  withingsLastSuccessfulSync?: string; 
-  withingsUserId?: string; 
-
-  walkingRadarGoals?: WalkingRadarGoals;
-  runningRadarGoals?: RunningRadarGoals;
-  hikingRadarGoals?: HikingRadarGoals;
-  swimmingRadarGoals?: SwimmingRadarGoals;
-  sleepRadarGoals?: SleepRadarGoals;
-  dashboardRadarMetrics?: DashboardMetricIdValue[]; 
-}
-
-// --- LoginResult Type ---
-export interface LoginResult {
-  success: boolean;
-  userId?: string;
-  passwordExpired?: boolean;
-  userProfile?: UserProfile | null; 
-  error?: string;
-  errorCode?: string;
-  initialCookieState?: AppAuthStateCookie;
-}
-// --- End LoginResult Type ---
-
-
-export const subscriptionTiers: SubscriptionTier[] = ['free', 'silver', 'gold', 'platinum'];
-
-export interface TierFeatureComparison {
-  feature: string;
-  free: string | boolean;
-  silver: string | boolean;
-  gold: string | boolean;
-  platinum: string | boolean;
-}
-
-export const featureComparisonData: TierFeatureComparison[] = [
-  { feature: "Fitness App Connections", free: "1", silver: "2", gold: "3", platinum: "All" },
-  { feature: "Diagnostic Service Connections", free: "None", silver: "None", gold: "1", platinum: "All" },
-  { feature: "Insurance Provider Connections", free: "1", silver: "2", gold: "3", platinum: "All" },
-  { feature: "Advanced Data Analysis", free: false, silver: true, gold: true, platinum: true },
-  { feature: "Detailed Reports", free: "Basic", silver: "Standard", gold: "Advanced", platinum: "Premium" },
-  { feature: "Password Expiry (90 days)", free: true, silver: true, gold: true, platinum: true },
-  { feature: "Terms & Conditions Acceptance", free: true, silver: true, gold: true, platinum: true },
-  { feature: "Fitbit Daily Summary Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
-  { feature: "Fitbit Heart Rate Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
-  { feature: "Fitbit Sleep Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
-  { feature: "Fitbit Swimming Data Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
-  { feature: "Fitbit Logged Activities Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
-  { feature: "Strava Activity Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
-  { feature: "Google Fit Session Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
-  { feature: "Google Fit Metric Aggregation", free: "5/day", silver: "5/day", gold: "10/day", platinum: "20/day" },
-  { feature: "Withings Data Fetch (Activity, Sleep, Measurements)", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
-  { feature: "Sync Connected Apps", free: "Auto (1/24h) + Manual", silver: "Auto (1/24h) + Manual", gold: "Auto (1/24h) + Manual", platinum: "Auto (1/24h) + Manual" },
-];
-
 export interface SelectableService {
   id: string;
   name: string;
@@ -436,25 +259,17 @@ export const mockFitnessApps: SelectableService[] = [
   { id: 'strava', name: 'Strava' },
   { id: 'google-fit', name: 'Google Fit' },
   { id: 'withings', name: 'Withings' },
-  { id: 'garmin', name: 'Garmin Connect' },
-  { id: 'oura', name: 'Oura Ring' },
-  { id: 'whoop', name: 'WHOOP' },
-  { id: 'polar', name: 'Polar Flow' },
-  { id: 'apple_health', name: 'Apple Health (Companion App Needed)' },
-  { id: 'samsung_health', name: 'Samsung Health (Platform Integration)' },
 ];
 
 export const mockDiagnosticServices: SelectableService[] = [
   { id: 'quest', name: 'Quest Diagnostics' },
   { id: 'labcorp', name: 'LabCorp of America' },
-  { id: 'sonic', name: 'Sonic Healthcare' },
 ];
 
 export const mockInsuranceProviders: SelectableService[] = [
   { id: 'uhc', name: 'United Healthcare' },
   { id: 'aetna', name: 'Aetna' },
   { id: 'cigna', name: 'Cigna' },
-  { id: 'blueshield', name: 'Blue Cross Blue Shield' },
 ];
 
 // Firestore specific data structures (examples)
