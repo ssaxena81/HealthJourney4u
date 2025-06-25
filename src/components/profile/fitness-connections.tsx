@@ -46,7 +46,8 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
         title: 'Fitbit Connected!',
         description: 'Your Fitbit account has been successfully linked.',
       });
-      router.replace('/profile'); // Clear query params
+      // Use router.replace to clean up the URL without adding to history
+      router.replace('/profile', { scroll: false });
     }
     if (fitbitError) {
       toast({
@@ -54,8 +55,9 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
         description: `Error: ${fitbitError}`,
         variant: 'destructive',
       });
-      router.replace('/profile'); // Clear query params
+      router.replace('/profile', { scroll: false });
     }
+    // This effect should only run when searchParams change.
   }, [searchParams, toast, router]);
 
   const handleConnect = async () => {
@@ -78,7 +80,7 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
     const result = await updateConnectedFitnessApps(user.uid, serviceToDisconnect, 'disconnect');
 
     if (result.success && result.data) {
-      setUserProfile(prev => prev ? ({ ...prev, ...result.data }) : null);
+      if(setUserProfile) setUserProfile(prev => prev ? ({ ...prev, ...result.data }) : null);
       toast({ title: `${serviceToDisconnect.name} Disconnected` });
     } else {
       toast({ title: 'Error', description: result.error || 'Failed to disconnect app.', variant: 'destructive' });

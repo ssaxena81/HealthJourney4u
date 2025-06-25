@@ -3,9 +3,9 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { setFitbitTokens } from '@/lib/fitbit-auth-utils';
-import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '@/lib/firebase/serverApp';
-import { getFirebaseUserFromCookie } from '@/lib/auth/server-auth-utils'; // Assuming this utility exists
+import { getFirebaseUserFromCookie } from '@/lib/auth/server-auth-utils';
 
 async function addFitbitConnectionToProfile(userId: string) {
     const userRef = doc(db, 'users', userId);
@@ -17,12 +17,13 @@ async function addFitbitConnectionToProfile(userId: string) {
     const currentConnections = userProfile.connectedFitnessApps || [];
     
     if (!currentConnections.some((conn: any) => conn.id === 'fitbit')) {
-        const updatedConnections = [...currentConnections, {
-            id: 'fitbit',
-            name: 'Fitbit',
-            connectedAt: new Date().toISOString()
-        }];
-        await updateDoc(userRef, { connectedFitnessApps: updatedConnections });
+        await updateDoc(userRef, { 
+            connectedFitnessApps: arrayUnion({
+                id: 'fitbit',
+                name: 'Fitbit',
+                connectedAt: new Date().toISOString()
+            }) 
+        });
     }
 }
 
@@ -99,6 +100,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${profileUrl}?fitbit_connected=true`);
 
   } catch (err: any) {
+    console.error('[Fitbit Callback] Exception during token exchange:', err.message);
     return NextResponse.redirect(`${profileUrl}?fitbit_error=${encodeURIComponent(err.message || 'unknown_exception')}`);
   }
 }

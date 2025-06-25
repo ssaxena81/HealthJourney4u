@@ -2,7 +2,7 @@
 'use server';
 
 import { db } from '@/lib/firebase/serverApp';
-import { doc, getDoc, setDoc, collection, writeBatch } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, writeBatch, query, where, getDocs } from 'firebase/firestore';
 import { getValidFitbitAccessToken } from '@/lib/fitbit-auth-utils';
 import { getSleepLogs, type FitbitSleepLog } from '@/lib/services/fitbitService';
 import type { UserProfile, FitbitSleepLogFirestore } from '@/types';
@@ -91,4 +91,41 @@ export async function syncFitbitSleepData(userId: string, startDate: string, end
     console.error(`[FitbitActions] An error occurred during the Fitbit sleep sync process for user ${userId}:`, error);
     return { success: false, message: 'An unexpected error occurred during sync.', error: error.message };
   }
+}
+
+interface GetSleepLogsResponse {
+  success: boolean;
+  data?: FitbitSleepLogFirestore[];
+  error?: string;
+}
+
+export async function getFitbitSleepLogsForDateRange(
+    userId: string,
+    dateRange: { from: string; to: string }
+): Promise<GetSleepLogsResponse> {
+    if (!userId) {
+        return { success: false, error: 'User not authenticated.' };
+    }
+    
+    try {
+        const sleepLogsRef = collection(db, 'users', userId, 'fitbit_sleep');
+        const q = query(
+            sleepLogsRef,
+            where('dateOfSleep', '>=', dateRange.from),
+            where('dateOfSleep', '<=', dateRange.to),
+            orderBy('dateOfSleep', 'desc')
+        );
+
+        const querySnapshot = await getDocs(q);
+        const sleepLogs: FitbitSleepLogFirestore[] = [];
+        querySnapshot.forEach((docSnap) => {
+            sleepLogs.push(docSnap.data() as FitbitSleepLogFirestore);
+        });
+
+        return { success: true, data: sleepLogs };
+
+    } catch (error: any) {
+        console.error(`[FitbitActions] Error fetching sleep logs from Firestore for user ${userId}:`, error);
+        return { success: false, error: `Failed to fetch sleep logs: ${String(error.message || 'Unknown Firestore error')}` };
+    }
 }
