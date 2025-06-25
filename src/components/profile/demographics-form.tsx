@@ -1,5 +1,4 @@
 
-
 'use client';
 
 import React, { useState, useTransition, useEffect } from 'react';
@@ -63,13 +62,12 @@ const demographicsSchemaClient = z.object({
 }).superRefine((data, ctx) => {
     const { birthYear, birthMonth, birthDay } = data;
     if (!birthYear || !birthMonth || !birthDay) {
-      return; // Individual field validation will catch this.
+      return; 
     }
     const year = parseInt(birthYear, 10);
     const day = parseInt(birthDay, 10);
     const monthIndex = monthMap[birthMonth];
     
-    // Check if the constructed date is valid (e.g., handles Feb 30th)
     const testDate = new Date(year, monthIndex, day);
     if (testDate.getFullYear() !== year || testDate.getMonth() !== monthIndex || testDate.getDate() !== day) {
       ctx.addIssue({
@@ -80,7 +78,6 @@ const demographicsSchemaClient = z.object({
       return;
     }
 
-    // Check age requirement
     const age = calculateAgeFromParts(birthYear, birthMonth, birthDay);
     if (age < 18) {
        ctx.addIssue({
@@ -106,7 +103,7 @@ interface DemographicsFormProps {
 
 export default function DemographicsForm({ userProfile, onProfileUpdate }: DemographicsFormProps) {
   const { toast } = useToast();
-  const { logout, setUserProfile } = useAuth();
+  const { user, logout, setUserProfile } = useAuth();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [showAgeRestrictionDialog, setShowAgeRestrictionDialog] = useState(false);
@@ -142,12 +139,6 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
   const handleAgeDialogOk = async () => {
     setShowAgeRestrictionDialog(false);
     await logout();
-    router.push('/login');
-    toast({
-      title: "Registration Halted",
-      description: "You must be 18 or older to use this application.",
-      variant: "destructive",
-    });
   };
 
   const onSubmit = (values: DemographicsFormValues) => {
@@ -157,6 +148,10 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
     }
 
     startTransition(async () => {
+      if (!user) {
+        toast({ title: "Error", description: "Not authenticated", variant: "destructive" });
+        return;
+      }
       const monthIndex = monthMap[values.birthMonth];
       const constructedDate = new Date(Date.UTC(parseInt(values.birthYear), monthIndex, parseInt(values.birthDay)));
     
@@ -167,26 +162,21 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
         dateOfBirth: constructedDate.toISOString(),
         cellPhone: values.cellPhone,
         isAgeCertified: values.ageCertification,
-        isProfileCreated: true,
-        // [06-23-2025 6:30pm] Combine the profile setup completion flag into this single update.
-        // [06-23-2025 6:30pm] This avoids a separate, failing server action call.
-        profileSetupComplete: true,
+        profileSetupComplete: true, // Mark as complete on successful submission
       };
       
-      const result = await updateUserDemographics(userProfile.id, profileUpdateData);
+      const result = await updateUserDemographics(user.uid, profileUpdateData);
       
       if (result.success) {
-        toast({ title: "Demographics Updated", description: "Your information has been saved and your profile is now complete." });
-        
+        toast({ title: "Profile Updated", description: "Your information has been saved." });
         if (onProfileUpdate) {
            onProfileUpdate(profileUpdateData);
         }
         if (setUserProfile) {
             setUserProfile(prev => prev ? ({ ...prev, ...profileUpdateData }) : null);
         }
-
       } else {
-        toast({ title: "Update Failed", description: result.error || "Could not save demographics.", variant: "destructive" });
+        toast({ title: "Update Failed", description: result.error || "Could not save profile.", variant: "destructive" });
         form.setError("root", { type: "server", message: result.error });
       }
     });
@@ -306,5 +296,3 @@ export default function DemographicsForm({ userProfile, onProfileUpdate }: Demog
     </>
   );
 }
-
-    

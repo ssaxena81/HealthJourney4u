@@ -13,13 +13,14 @@ export default function RootPage() {
   const router = useRouter();
 
   useEffect(() => {
-    // If auth state is resolved and we have a user, redirect to dashboard.
+    // If auth state is resolved and we have a user, redirect to the authenticated section.
+    // The (app) layout will then handle redirecting to /dashboard or /profile.
     if (!loading && user) {
       router.replace('/dashboard');
     }
   }, [user, loading, router]);
 
-  // Show a loader while checking auth state or if redirect is pending.
+  // While checking auth state or if redirect is pending for a logged-in user, show a loader.
   if (loading || user) {
     return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">

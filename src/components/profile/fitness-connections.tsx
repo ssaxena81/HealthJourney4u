@@ -3,12 +3,11 @@
 
 import React, { useState, useEffect } from 'react';
 import type { UserProfile, SelectableService, SubscriptionTier } from '@/types';
-// TODO: This should eventually be fetched dynamically via an admin config action
 import { mockFitnessApps } from '@/types';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Label } from '@/components/ui/label'; // Added import
+import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { XCircle, CheckCircle2, Link2, Loader2 } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
@@ -19,15 +18,6 @@ interface FitnessConnectionsProps {
   userProfile: UserProfile;
   onConnectionsUpdate?: (updatedProfileData: Partial<UserProfile>) => void;
 }
-
-// Define a common result type for finalize actions
-interface FinalizeActionResult {
-  success: boolean;
-  error?: string;
-  errorCode?: string;
-  data?: any; // Allows for optional data, like withingsUserId
-}
-
 
 const getMaxConnections = (tier: SubscriptionTier): number => {
   switch (tier) {
@@ -47,7 +37,7 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
 
   const [selectedAppId, setSelectedAppId] = useState<string>('');
   const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
-  const [availableApps, setAvailableApps] = useState<SelectableService[]>(mockFitnessApps); // Using mock for now
+  const [availableApps, setAvailableApps] = useState<SelectableService[]>(mockFitnessApps);
 
   const currentConnections = userProfile.connectedFitnessApps || [];
   const maxConnections = getMaxConnections(userProfile.subscriptionTier);
@@ -58,94 +48,48 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
   );
 
   useEffect(() => {
-    const fitbitConnected = searchParams.get('fitbit_connected');
-    const fitbitError = searchParams.get('fitbit_error');
-    const stravaConnected = searchParams.get('strava_connected');
-    const stravaError = searchParams.get('strava_error');
-    const googleFitConnected = searchParams.get('googlefit_connected');
-    const googleFitError = searchParams.get('googlefit_error');
-    const withingsConnected = searchParams.get('withings_connected');
-    const withingsError = searchParams.get('withings_error');
-
-    const handleConnectionResult = async (
-        serviceId: string,
-        serviceName: string,
-        finalizeAction: (userId: string, apiSpecificId?: string) => Promise<FinalizeActionResult>
-    ) => {
-      if (!user?.uid) {
-        toast({ title: `Error Finalizing ${serviceName} Connection`, description: "User session not found.", variant: "destructive" });
-        router.replace('/profile', { scroll: false }); 
+    const handleConnectionCallback = async (serviceId: string, serviceName: string, connectedParam: string | null, errorParam: string | null, finalizeAction: (userId: string) => Promise<any>) => {
+      if (connectedParam !== 'true') {
+        if (errorParam) {
+          toast({ title: `${serviceName} Connection Failed`, description: decodeURIComponent(errorParam), variant: "destructive" });
+          router.replace('/profile', { scroll: false });
+        }
         return;
       }
+
+      if (!user?.uid) {
+        toast({ title: `Error Finalizing ${serviceName} Connection`, description: "User session not found.", variant: "destructive" });
+        router.replace('/profile', { scroll: false });
+        return;
+      }
+
       setIsLoading(prev => ({ ...prev, [serviceId]: true }));
-      
       const result = await finalizeAction(user.uid);
+      
       if (result.success) {
         toast({ title: `${serviceName} Connected!`, description: `Successfully linked your ${serviceName} account.` });
-        
-        const newConnectionDetails = { id: serviceId, name: serviceName, connectedAt: new Date().toISOString()};
-
+        const newConnectionDetails = { id: serviceId, name: serviceName, connectedAt: new Date().toISOString() };
         if (onConnectionsUpdate) {
-            const updatedProfilePartial: Partial<UserProfile> = { 
-                connectedFitnessApps: [...(userProfile.connectedFitnessApps || []).filter(c => c.id !== serviceId), newConnectionDetails]
-            };
-             if (serviceId === 'withings' && result.data && (result.data as { withingsUserId?: string }).withingsUserId) {
-                (updatedProfilePartial as any).withingsUserId = (result.data as { withingsUserId?: string }).withingsUserId;
-            }
-            onConnectionsUpdate(updatedProfilePartial);
-        }
-        if (setAuthUserProfile) {
-            setAuthUserProfile(prev => {
-                if (!prev) return null;
-                const existingConnections = prev.connectedFitnessApps || [];
-                 const updatedProfile: UserProfile = {
-                    ...prev,
-                    connectedFitnessApps: [...existingConnections.filter(c => c.id !== serviceId), newConnectionDetails]
-                };
-                if (serviceId === 'withings' && result.data && (result.data as { withingsUserId?: string }).withingsUserId) {
-                    (updatedProfile as any).withingsUserId = (result.data as { withingsUserId?: string }).withingsUserId;
-                }
-                return updatedProfile;
-            });
+            onConnectionsUpdate({ connectedFitnessApps: [...(userProfile.connectedFitnessApps || []).filter(c => c.id !== serviceId), newConnectionDetails] });
         }
       } else {
         toast({ title: `Failed to Finalize ${serviceName} Connection`, description: result.error || "An unexpected error occurred.", variant: "destructive" });
       }
+
       setIsLoading(prev => ({ ...prev, [serviceId]: false }));
-      router.replace('/profile', { scroll: false }); 
+      router.replace('/profile', { scroll: false });
     };
 
-    if (fitbitConnected === 'true') {
-      handleConnectionResult('fitbit', 'Fitbit', finalizeFitbitConnection as any);
-    } else if (fitbitError) {
-      toast({ title: "Fitbit Connection Failed", description: decodeURIComponent(fitbitError), variant: "destructive" });
-      router.replace('/profile', { scroll: false });
-    }
-
-    if (stravaConnected === 'true') {
-      handleConnectionResult('strava', 'Strava', finalizeStravaConnection as any);
-    } else if (stravaError) {
-      toast({ title: "Strava Connection Failed", description: decodeURIComponent(stravaError), variant: "destructive" });
-      router.replace('/profile', { scroll: false });
-    }
-
-    if (googleFitConnected === 'true') {
-      handleConnectionResult('google-fit', 'Google Fit', finalizeGoogleFitConnection as any);
-    } else if (googleFitError) {
-      toast({ title: "Google Fit Connection Failed", description: decodeURIComponent(googleFitError), variant: "destructive" });
-      router.replace('/profile', { scroll: false });
-    }
-
-    if (withingsConnected === 'true') {
-      handleConnectionResult('withings', 'Withings', finalizeWithingsConnection as any);
-    } else if (withingsError) {
-      toast({ title: "Withings Connection Failed", description: decodeURIComponent(withingsError), variant: "destructive" });
-      router.replace('/profile', { scroll: false });
-    }
-
+    handleConnectionCallback('fitbit', 'Fitbit', searchParams.get('fitbit_connected'), searchParams.get('fitbit_error'), finalizeFitbitConnection);
+    handleConnectionCallback('strava', 'Strava', searchParams.get('strava_connected'), searchParams.get('strava_error'), finalizeStravaConnection);
+    handleConnectionCallback('google-fit', 'Google Fit', searchParams.get('googlefit_connected'), searchParams.get('googlefit_error'), finalizeGoogleFitConnection);
+    handleConnectionCallback('withings', 'Withings', searchParams.get('withings_connected'), searchParams.get('withings_error'), finalizeWithingsConnection);
+    
+  // NOTE: This exhaustive-deps warning is tricky because including all dependencies
+  // like `onConnectionsUpdate` can cause re-renders. We are intentionally running this only
+  // when searchParams change, as it's the trigger for this logic.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, user?.uid, toast, router, onConnectionsUpdate, setAuthUserProfile, userProfile.connectedFitnessApps]);
-
+  }, [searchParams]);
 
   const handleDisconnect = async (appId: string) => {
     const appToDisconnect = currentConnections.find(c => c.id === appId);
@@ -153,29 +97,12 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
 
     setIsLoading(prev => ({ ...prev, [appId]: true }));
     toast({ title: `Disconnecting ${appToDisconnect.name}...` });
-
-    // TODO: Implement server action to revoke tokens and update user profile in DB.
-    // For now, we just update the local state and call onConnectionsUpdate.
-    await new Promise(resolve => setTimeout(resolve, 1000)); // Simulate server call
+    // TODO: Server action to revoke tokens and update user profile in DB.
+    await new Promise(resolve => setTimeout(resolve, 1000));
 
     const updatedConnections = currentConnections.filter(conn => conn.id !== appId);
-    const updatedProfilePartial: Partial<UserProfile> = { connectedFitnessApps: updatedConnections };
-    if (appId === 'withings') {
-        (updatedProfilePartial as any).withingsUserId = null; // Remove Withings User ID
-    }
-
     if (onConnectionsUpdate) {
-      onConnectionsUpdate(updatedProfilePartial);
-    }
-    if (setAuthUserProfile) {
-        setAuthUserProfile(prev => {
-            if (!prev) return null;
-            const finalProfile = {...prev, connectedFitnessApps: updatedConnections};
-            if (appId === 'withings') {
-                (finalProfile as any).withingsUserId = null;
-            }
-            return finalProfile;
-        });
+      onConnectionsUpdate({ connectedFitnessApps: updatedConnections });
     }
     toast({ title: `${appToDisconnect.name} Disconnected` });
     setIsLoading(prev => ({ ...prev, [appId]: false }));
@@ -186,7 +113,7 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
     if (appId === 'strava') return '/api/auth/strava/connect';
     if (appId === 'google-fit') return '/api/auth/googlefit/connect';
     if (appId === 'withings') return '/api/auth/withings/connect';
-    return '#'; 
+    return '#';
   };
 
   const implementedApps = ['fitbit', 'strava', 'google-fit', 'withings'];
@@ -249,20 +176,22 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
                 disabled={!selectedAppId || isLoading[selectedAppId] || !implementedApps.includes(selectedAppId)}
                 className="w-full sm:w-auto"
                 onClick={() => {
-                  if (!implementedApps.includes(selectedAppId)) {
+                  if (implementedApps.includes(selectedAppId)) {
+                    setIsLoading(prev => ({...prev, [selectedAppId]: true}));
+                  } else {
                     toast({title: "Coming Soon", description: `${mockFitnessApps.find(a => a.id === selectedAppId)?.name || 'This app'} integration is not yet available.`});
                   }
                 }}
               >
                 { implementedApps.includes(selectedAppId) ? (
-                    <a href={getConnectLink(selectedAppId)} onClick={() => setIsLoading(prev => ({...prev, [selectedAppId]: true}))}>
+                    <a href={getConnectLink(selectedAppId)}>
                         {isLoading[selectedAppId] ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link2 className="mr-2 h-4 w-4" />}
-                        Connect {mockFitnessApps.find(app => app.id === selectedAppId)?.name}
+                        Connect
                     </a>
                 ) : (
                     <>
-                        {isLoading[selectedAppId] ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : <Link2 className="mr-2 h-4 w-4" />}
-                        Connect {mockFitnessApps.find(app => app.id === selectedAppId)?.name || ''}
+                        <Link2 className="mr-2 h-4 w-4" />
+                        Connect
                     </>
                 )}
               </Button>
@@ -271,7 +200,6 @@ export default function FitnessConnections({ userProfile, onConnectionsUpdate }:
         )}
         {!canAddMore && <p className="text-sm text-muted-foreground">You have reached the maximum number of connections for your plan.</p>}
         {canAddMore && availableAppsToConnect.length === 0 && currentConnections.length > 0 && <p className="text-sm text-muted-foreground">All available apps are connected.</p>}
-         {availableAppsToConnect.length === 0 && currentConnections.length === 0 && <p className="text-sm text-muted-foreground">No fitness apps available to connect currently.</p>}
       </CardContent>
     </Card>
   );

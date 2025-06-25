@@ -383,7 +383,7 @@ export interface UserProfile {
   dashboardRadarMetrics?: DashboardMetricIdValue[]; 
 }
 
-// --- LoginResult Type (Moved from auth.ts) ---
+// --- LoginResult Type ---
 export interface LoginResult {
   success: boolean;
   userId?: string;
@@ -391,7 +391,7 @@ export interface LoginResult {
   userProfile?: UserProfile | null; 
   error?: string;
   errorCode?: string;
-  initialCookieState?: AppAuthStateCookie; // Replaced previous InitialCookieStateType
+  initialCookieState?: AppAuthStateCookie;
 }
 // --- End LoginResult Type ---
 
@@ -422,7 +422,7 @@ export const featureComparisonData: TierFeatureComparison[] = [
   { feature: "Strava Activity Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Google Fit Session Fetch", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Google Fit Metric Aggregation", free: "5/day", silver: "5/day", gold: "10/day", platinum: "20/day" },
-  { feature: "Withings Data Fetch (Activity, Sleep, Measurements)", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" }, // Placeholder for Withings
+  { feature: "Withings Data Fetch (Activity, Sleep, Measurements)", free: "1/day", silver: "1/day", gold: "1/day", platinum: "3/day" },
   { feature: "Sync Connected Apps", free: "Auto (1/24h) + Manual", silver: "Auto (1/24h) + Manual", gold: "Auto (1/24h) + Manual", platinum: "Auto (1/24h) + Manual" },
 ];
 

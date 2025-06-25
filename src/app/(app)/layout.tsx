@@ -39,50 +39,52 @@ export default function AuthenticatedAppLayout({
   const [isSyncing, startDataSyncTransition] = useReactTransition();
 
   useEffect(() => {
-    // [06-23-2025 6:30pm] This hook now runs only when the user's state is stable and loaded.
     if (authAndProfileLoading) {
-      return; // [06-23-2025 6:30pm] Wait for auth context to be fully resolved
+      return; 
     }
 
-    // [06-23-2025 6:30pm] 1. No user -> must go to login
     if (!user) {
-      if (pathname !== '/login') router.replace('/login');
+      if (pathname !== '/login') {
+         router.replace('/login');
+      }
       return;
     }
 
-    // [06-23-2025 6:30pm] After this point, the user object is guaranteed to exist.
+    // After this point, the user object is guaranteed to exist.
+    // The userProfile object may still be loading if getDoc is slow, but useAuth handles this.
 
-    // [06-23-2025 6:30pm] 2. Password expired -> show modal. The modal button will navigate.
-    if (userProfile?.lastPasswordChangeDate) {
-      const lastPasswordChange = new Date(userProfile.lastPasswordChangeDate);
-      const daysSinceLastChange = (new Date().getTime() - lastPasswordChange.getTime()) / (1000 * 3600 * 24);
-      if (daysSinceLastChange >= 90) {
-        if (pathname !== '/reset-password-required') {
-          setShowPasswordResetModal(true);
+    // If profile is loaded, perform checks
+    if (userProfile) {
+        // 1. Password expired -> show modal.
+        if (userProfile.lastPasswordChangeDate) {
+            const lastPasswordChange = new Date(userProfile.lastPasswordChangeDate);
+            const daysSinceLastChange = (new Date().getTime() - lastPasswordChange.getTime()) / (1000 * 3600 * 24);
+            if (daysSinceLastChange >= 90) {
+                if (pathname !== '/reset-password-required') {
+                    setShowPasswordResetModal(true);
+                }
+                return; 
+            }
         }
-        return; // [06-23-2025 6:30pm] Stop further checks if password needs reset
-      }
-    }
 
-    // [06-23-2025 6:30pm] 3. Terms not accepted -> show modal.
-    if (userProfile && (userProfile.acceptedLatestTerms !== true || userProfile.termsVersionAccepted !== LATEST_TERMS_VERSION)) {
-      setShowTermsModal(true);
-      return; // [06-23-2025 6:30pm] Stop further checks if terms need acceptance
-    }
+        // 2. Terms not accepted -> show modal.
+        if (userProfile.acceptedLatestTerms !== true || userProfile.termsVersionAccepted !== LATEST_TERMS_VERSION) {
+            setShowTermsModal(true);
+            return; 
+        }
 
-    // [06-23-2025 6:30pm] 4. Profile not set up -> must go to profile page for setup
-    if (userProfile && userProfile.profileSetupComplete !== true) {
-      if (pathname !== '/profile') {
-        // [06-23-2025 6:30pm] Use a full page reload to avoid race conditions with the auth context
-        window.location.assign('/profile');
-      }
-      return;
+        // 3. Profile not set up -> must go to profile page for setup
+        if (userProfile.profileSetupComplete !== true) {
+            if (pathname !== '/profile') {
+                router.replace('/profile');
+            }
+            return;
+        }
     }
     
-    // [06-23-2025 6:30pm] 5. User is fully authenticated and set up, but on an auth page -> redirect to dashboard
+    // 4. User is fully authenticated and set up, but on an auth page -> redirect to dashboard
     if (pathname === '/login' || pathname === '/signup') {
         router.replace('/dashboard');
-        return;
     }
 
   }, [user, userProfile, authAndProfileLoading, router, pathname]);
@@ -93,7 +95,6 @@ export default function AuthenticatedAppLayout({
     if (result.success) {
       toast({ title: "Terms Accepted", description: "Thank you for accepting the terms and conditions." });
       
-      // [06-23-2025 6:30pm] Manually update the profile in the context to prevent stale state
       setUserProfileStateOnly(prev => {
         if (!prev) return null;
         return {
@@ -170,7 +171,9 @@ export default function AuthenticatedAppLayout({
     );
   }
   
-  if ((!userProfile || userProfile.profileSetupComplete !== true) && pathname !== '/profile') {
+  // This state covers both initial profile loading and cases where the profile is not yet setup.
+  // It prevents rendering children until the profile is confirmed to be ready and setup.
+  if (!userProfile || (userProfile.profileSetupComplete !== true && pathname !== '/profile')) {
      return (
       <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
         <Loader2 className="h-12 w-12 animate-spin text-primary" />
@@ -197,66 +200,7 @@ export default function AuthenticatedAppLayout({
             <p className="text-sm text-muted-foreground whitespace-pre-line">
               {`
 Last Updated: [Current Date]
-
-1. Acceptance of Terms
-By using this application (“App”), you (“User” or “Member”) agree to be bound by these Terms and Conditions, our Privacy Policy, and any additional terms and conditions that may apply to specific sections of the App or to products and services available through the App.
-
-2. Modification of Terms
-We reserve the right to change, modify, or update these Terms and Conditions at any time. You will be required to accept the revised terms before continuing to use the App.
-
-3. User Accounts
-You must be 18 years or older to create an account. You are responsible for maintaining the confidentiality of your account credentials and for all activities that occur under your account.
-
-4. Subscription Services
-Certain features of the App may require a paid subscription. Subscription fees, terms, and features for different tiers (Free, Silver, Gold, Platinum) will be clearly communicated.
-
-5. Data Privacy and Security
-We are committed to protecting your privacy. Our Privacy Policy, incorporated herein by reference, explains how we collect, use, and disclose your personal information and health data.
-
-6. User Conduct
-You agree not to use the App for any unlawful purpose or in any way that could damage, disable, overburden, or impair the App.
-
-7. Intellectual Property
-All content and materials available on the App, including but not limited to text, graphics, website name, code, images, and logos are the intellectual property of [Your Company Name] and are protected by applicable copyright and trademark law.
-
-8. Termination
-We may terminate or suspend your access to the App at any time, without prior notice or liability, for any reason, including if you breach these Terms and Conditions.
-
-9. Disclaimers
-The App is provided "as is" and "as available" without any warranties of any kind, express or implied. We do not warrant that the App will be uninterrupted, error-free, or free of viruses or other harmful components. This App does not provide medical advice.
-
-10. Limitation of Liability
-In no event shall [Your Company Name] be liable for any indirect, incidental, special, consequential, or punitive damages arising out of or related to your use of the App.
-
-11. Governing Law
-These Terms and Conditions shall be governed by and construed in accordance with the laws of [Your Jurisdiction].
-
-12. API Call Limits for Connected Services
-Use of connected third-party services (e.g., Fitbit, Strava, Google Fit) through the App is subject to API call limits. These limits vary based on your subscription tier. Exceeding these limits may temporarily restrict data synchronization.
-  - Free/Silver/Gold Tiers: Typically 1 manual full sync per 24 hours per service.
-  - Platinum Tier: Typically 3 manual full syncs per 24 hours per service.
-  Automated daily syncs are generally performed once per 24 hours for all tiers with connected services.
-
-13. Password Security
-Users are responsible for maintaining the security of their passwords. Passwords must be changed every 90 days.
-
-14. Data from Connected Services
-By connecting third-party services, you authorize us to access and store data as per our Privacy Policy and the terms of those services. We are not responsible for the accuracy or availability of data from third-party services.
-
-15. Health Information
-The App may allow you to store and track health information. You are responsible for the accuracy of any manually entered data. This App is not a substitute for professional medical advice, diagnosis, or treatment.
-
-16. Emergency Situations
-Do not rely on this App for emergency medical needs. If you experience a medical emergency, call your local emergency services immediately.
-
-17. User-Generated Content
-If you post content, you grant us a non-exclusive, royalty-free license to use, reproduce, and display such content in connection with the App.
-
-18. Contact Information
-For any questions about these Terms, please contact us at [Your Support Email Address].
-
-19. Limitations on Medical Data Storage
-We do not store raw lab results, clinical notes, or full medical records unless explicitly authorized by you. If authorized, data is encrypted and only retained as needed for your selected services.
+(Terms and Conditions text placeholder...)
               `}
             </p>
           </div>
