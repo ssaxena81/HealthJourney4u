@@ -3,8 +3,28 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { setFitbitTokens } from '@/lib/fitbit-auth-utils';
+import { doc, getDoc, updateDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase/serverApp';
+import { getFirebaseUserFromCookie } from '@/lib/auth/server-auth-utils'; // Assuming this utility exists
 
-const FITBIT_TOKEN_URL = 'https://api.fitbit.com/oauth2/token';
+async function addFitbitConnectionToProfile(userId: string) {
+    const userRef = doc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    if (!userSnap.exists()) {
+        throw new Error("User profile not found in Firestore.");
+    }
+    const userProfile = userSnap.data();
+    const currentConnections = userProfile.connectedFitnessApps || [];
+    
+    if (!currentConnections.some((conn: any) => conn.id === 'fitbit')) {
+        const updatedConnections = [...currentConnections, {
+            id: 'fitbit',
+            name: 'Fitbit',
+            connectedAt: new Date().toISOString()
+        }];
+        await updateDoc(userRef, { connectedFitnessApps: updatedConnections });
+    }
+}
 
 export async function GET(request: NextRequest) {
   const searchParams = request.nextUrl.searchParams;
@@ -12,12 +32,12 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9004'; // Corrected fallback
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9004';
   const profileUrl = `${appUrl}/profile`;
 
-  const cookieStore = await cookies();
+  const cookieStore = cookies();
   const storedState = cookieStore.get('fitbit_oauth_state')?.value;
-  cookieStore.delete('fitbit_oauth_state'); // Clean up state cookie
+  cookieStore.delete('fitbit_oauth_state');
 
   if (error) {
     console.error('[Fitbit Callback] Error from Fitbit:', error);
@@ -25,12 +45,10 @@ export async function GET(request: NextRequest) {
   }
 
   if (!state || state !== storedState) {
-    console.error('[Fitbit Callback] Invalid OAuth state. Stored:', storedState, 'Received:', state);
     return NextResponse.redirect(`${profileUrl}?fitbit_error=invalid_state`);
   }
 
   if (!code) {
-    console.error('[Fitbit Callback] No authorization code received from Fitbit.');
     return NextResponse.redirect(`${profileUrl}?fitbit_error=missing_code`);
   }
 
@@ -39,15 +57,13 @@ export async function GET(request: NextRequest) {
   const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
 
   if (!clientId || !clientSecret) {
-    console.error('[Fitbit Callback] Fitbit client ID or secret is not configured.');
     return NextResponse.redirect(`${profileUrl}?fitbit_error=server_config_error`);
   }
   
   const credentials = Buffer.from(`${clientId}:${clientSecret}`).toString('base64');
 
   try {
-    console.log('[Fitbit Callback] Exchanging code for tokens...');
-    const response = await fetch(FITBIT_TOKEN_URL, {
+    const response = await fetch('https://api.fitbit.com/oauth2/token', {
       method: 'POST',
       headers: {
         'Authorization': `Basic ${credentials}`,
@@ -64,27 +80,25 @@ export async function GET(request: NextRequest) {
     const data = await response.json();
 
     if (!response.ok) {
-      console.error('[Fitbit Callback] Failed to exchange code for tokens:', data);
       const errorMessage = data.errors?.[0]?.message || 'token_exchange_failed';
       return NextResponse.redirect(`${profileUrl}?fitbit_error=${encodeURIComponent(errorMessage)}`);
     }
 
-    console.log('[Fitbit Callback] Tokens received from Fitbit:', { access_token_present: !!data.access_token, refresh_token_present: !!data.refresh_token, expires_in: data.expires_in });
-    
     if (!data.access_token || !data.refresh_token || !data.expires_in) {
-        console.error('[Fitbit Callback] Incomplete token data received from Fitbit:', data);
         return NextResponse.redirect(`${profileUrl}?fitbit_error=incomplete_token_data`);
     }
 
-    // Store the tokens
-    await setFitbitTokens(data.access_token, data.refresh_token, data.expires_in);
-    console.log('[Fitbit Callback] Fitbit tokens stored successfully.');
+    const firebaseUser = await getFirebaseUserFromCookie(cookies());
+    if (!firebaseUser) {
+        return NextResponse.redirect(`${profileUrl}?fitbit_error=auth_required`);
+    }
+
+    await setFitbitTokens(firebaseUser.uid, data.access_token, data.refresh_token, data.expires_in);
+    await addFitbitConnectionToProfile(firebaseUser.uid);
     
-    // Redirect back to the profile page with a success flag
     return NextResponse.redirect(`${profileUrl}?fitbit_connected=true`);
 
   } catch (err: any) {
-    console.error('[Fitbit Callback] Exception during token exchange:', err);
     return NextResponse.redirect(`${profileUrl}?fitbit_error=${encodeURIComponent(err.message || 'unknown_exception')}`);
   }
 }

@@ -13,26 +13,36 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
-// Initialize Firebase for client side using a robust method that prevents re-initialization.
-const app: FirebaseApp = !getApps().length ? initializeApp(firebaseConfig) : getApp();
+let app: FirebaseApp;
+let auth: Auth;
+let db: Firestore;
 
-const auth: Auth = getAuth(app);
-const db: Firestore = getFirestore(app);
-
-// Enable persistence to allow offline data access and potentially stabilize the client state.
-// This must only be attempted in the browser environment.
+// This check ensures that Firebase is only initialized on the client side.
 if (typeof window !== 'undefined') {
-  enableIndexedDbPersistence(db).catch((err) => {
-    if (err.code === 'failed-precondition') {
-      console.warn(
-        'Firestore persistence failed: This can happen if you have multiple tabs open.'
-      );
-    } else if (err.code === 'unimplemented') {
-      console.warn(
-        'Firestore persistence failed: Browser does not support this feature.'
-      );
+    if (!getApps().length) {
+        app = initializeApp(firebaseConfig);
+    } else {
+        app = getApp();
     }
-  });
+    auth = getAuth(app);
+    db = getFirestore(app);
+
+    // Enable persistence to allow offline data access and potentially stabilize the client state.
+    enableIndexedDbPersistence(db).catch((err) => {
+        if (err.code === 'failed-precondition') {
+        console.warn(
+            'Firestore persistence failed: This can happen if you have multiple tabs open.'
+        );
+        } else if (err.code === 'unimplemented') {
+        console.warn(
+            'Firestore persistence failed: Browser does not support this feature.'
+        );
+        }
+    });
+} else {
+    // On the server, we need to avoid initializing the client app.
+    // We can assign dummy objects or handle it gracefully.
+    // For this app's structure, server-side logic uses `serverApp.ts`.
 }
 
 export { app as firebaseApp, auth, db };

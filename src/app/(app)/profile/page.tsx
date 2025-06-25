@@ -4,16 +4,10 @@
 import React from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import DemographicsForm from '@/components/profile/demographics-form';
+import ChangePasswordForm from '@/components/profile/change-password-form';
 import FitnessConnections from '@/components/profile/fitness-connections';
 import DiagnosticsConnections from '@/components/profile/diagnostics-connections';
 import InsuranceConnections from '@/components/profile/insurance-connections';
-import ChangePasswordForm from '@/components/profile/change-password-form';
-import WalkingGoalsForm from '@/components/profile/walking-goals-form';
-import RunningGoalsForm from '@/components/profile/running-goals-form';
-import HikingGoalsForm from '@/components/profile/hiking-goals-form';
-import SwimmingGoalsForm from '@/components/profile/swimming-goals-form';
-import SleepGoalsForm from '@/components/profile/sleep-goals-form';
-import DashboardMetricsForm from '@/components/profile/dashboard-metrics-form';
 import { useAuth } from '@/hooks/useAuth';
 import { Card, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Loader2 } from 'lucide-react';
@@ -43,19 +37,16 @@ export default function ProfilePage() {
       <Card className="mb-8 shadow-md rounded-xl">
         <CardHeader>
           <CardTitle className="text-3xl font-bold tracking-tight">User Profile</CardTitle>
-          <CardDescription className="text-muted-foreground">Manage your personal information, connections, activity goals, and account settings.</CardDescription>
+          <CardDescription className="text-muted-foreground">Manage your personal information, connections, and account settings.</CardDescription>
         </CardHeader>
       </Card>
 
       <Tabs defaultValue="demographics" className="w-full">
-        <TabsList className="grid w-full grid-cols-2 md:grid-cols-4 lg:grid-cols-8 mb-6">
+        <TabsList className="grid w-full grid-cols-2 md:grid-cols-5 mb-6">
           <TabsTrigger value="demographics">Demographics</TabsTrigger>
           <TabsTrigger value="fitness">Fitness Apps</TabsTrigger>
           <TabsTrigger value="diagnostics">Diagnostics</TabsTrigger>
           <TabsTrigger value="insurance">Insurance</TabsTrigger>
-          <TabsTrigger value="activity_goals">Activity Goals</TabsTrigger>
-          <TabsTrigger value="sleep_goals">Sleep Goals</TabsTrigger>
-          <TabsTrigger value="dashboard_metrics">Dashboard</TabsTrigger> 
           <TabsTrigger value="security">Security</TabsTrigger>
         </TabsList>
 
@@ -63,27 +54,15 @@ export default function ProfilePage() {
           <DemographicsForm userProfile={userProfile} />
         </TabsContent>
         <TabsContent value="fitness">
-          <FitnessConnections userProfile={userProfile} />
+           <FitnessConnections userProfile={userProfile} />
         </TabsContent>
         <TabsContent value="diagnostics">
-          <DiagnosticsConnections userProfile={userProfile} />
+           <DiagnosticsConnections userProfile={userProfile} />
         </TabsContent>
         <TabsContent value="insurance">
-          <InsuranceConnections userProfile={userProfile} />
+           <InsuranceConnections userProfile={userProfile} />
         </TabsContent>
-        <TabsContent value="activity_goals" className="space-y-6">
-          <WalkingGoalsForm userProfile={userProfile} />
-          <RunningGoalsForm userProfile={userProfile} />
-          <HikingGoalsForm userProfile={userProfile} />
-          <SwimmingGoalsForm userProfile={userProfile} />
-        </TabsContent>
-        <TabsContent value="sleep_goals"> 
-          <SleepGoalsForm userProfile={userProfile} />
-        </TabsContent>
-         <TabsContent value="dashboard_metrics">
-          <DashboardMetricsForm userProfile={userProfile} />
-        </TabsContent>
-         <TabsContent value="security">
+        <TabsContent value="security">
           <ChangePasswordForm />
         </TabsContent>
       </Tabs>

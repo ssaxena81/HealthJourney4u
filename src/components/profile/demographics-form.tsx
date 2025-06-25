@@ -72,6 +72,7 @@ export default function DemographicsForm({ userProfile }: DemographicsFormProps)
         firstName: values.firstName,
         lastName: values.lastName,
         dateOfBirth: constructedDate.toISOString(),
+        profileSetupComplete: true, // Mark profile as setup
       };
       
       const result = await updateUserDemographics(user.uid, profileUpdateData);

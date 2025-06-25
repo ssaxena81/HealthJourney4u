@@ -28,9 +28,6 @@ export default function AuthenticatedAppLayout({
       return;
     }
 
-    // If user is authenticated but profile is still loading, we can show a loader
-    // This case is handled by the page-level check below for simplicity now.
-    
     // If user is authenticated and on an auth page, redirect to dashboard
     if (pathname === '/login' || pathname === '/signup') {
         router.replace('/dashboard');
@@ -47,7 +44,7 @@ export default function AuthenticatedAppLayout({
       </div>
     );
   }
-
+  
   if (!userProfile) {
     // If the user is logged in but the profile hasn't loaded yet
      return (

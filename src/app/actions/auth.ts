@@ -45,10 +45,14 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     );
 
     const nowIso = new Date().toISOString();
+    // Create a simplified, stable UserProfile
     const initialProfile: UserProfile = {
       id: userCredential.user.uid,
       email: userCredential.user.email!,
       createdAt: nowIso,
+      subscriptionTier: 'free', // Default to free tier
+      profileSetupComplete: false,
+      acceptedLatestTerms: false,
     };
 
     await setDoc(doc(serverDb, "users", userCredential.user.uid), initialProfile);
@@ -62,12 +66,9 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     if (error instanceof z.ZodError) {
       errorMessage = "Invalid input data for sign-up.";
       errorCode = "VALIDATION_ERROR";
-      return { success: false, error: errorMessage, errorCode };
-    } 
-    
-    if ((error as AuthError).code) {
-      errorMessage = (error as AuthError).message;
+    } else if ((error as AuthError).code) {
       errorCode = (error as AuthError).code;
+      errorMessage = (error as AuthError).message;
       if (errorCode === 'auth/email-already-in-use') {
         errorMessage = 'This email address is already in use.';
       }
@@ -98,7 +99,6 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     
     await updateDoc(userProfileDocRef, { lastLoggedInDate: new Date().toISOString() });
 
-    // The profile will be fetched client-side by the useAuth hook
     return { success: true, userId };
 
   } catch (error: any) {
@@ -121,6 +121,7 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
   }
 }
 
+
 // --- Reset Password ---
 const FinalResetPasswordSchema = z.object({
   email: z.string().email(),
@@ -138,22 +139,25 @@ interface ResetPasswordResult {
   errorCode?: string;
 }
 
-export async function resetPassword(values: z.infer<typeof FinalResetPasswordSchema>): Promise<ResetPasswordResult> {
-  // This function is simplified. It assumes a logged-in user is changing their own password.
-  // A full "forgot password" flow is more complex.
+// This server action is for a LOGGED-IN user changing their password.
+// A forgot password flow would be different and require an oobCode.
+export async function resetPassword(userId: string, values: Omit<z.infer<typeof FinalResetPasswordSchema>, 'email'>): Promise<ResetPasswordResult> {
   try {
-    const validatedValues = FinalResetPasswordSchema.parse(values);
-    const currentUser = serverAuth.currentUser;
-
-    if (currentUser && currentUser.email === validatedValues.email) {
-      await firebaseUpdatePassword(currentUser, validatedValues.newPassword);
-      await updateDoc(doc(serverDb, "users", currentUser.uid), { lastPasswordChangeDate: new Date().toISOString() });
-      return { success: true, message: "Password has been reset successfully." };
-    } else {
-        // This case would be for a non-logged-in user, which requires a different flow (e.g., oobCode)
-        // For now, we return an error to keep it simple and fix the build.
-        return { success: false, error: "User not authenticated for this action.", errorCode: "AUTH_REQUIRED" };
+    // Validate just the passwords
+    const { newPassword } = FinalResetPasswordSchema.pick({ newPassword: true, confirmNewPassword: true }).parse(values);
+    
+    const userProfileDoc = await getDoc(doc(serverDb, "users", userId));
+    if (!userProfileDoc.exists()) {
+        return { success: false, error: "User not found.", errorCode: "USER_NOT_FOUND"};
     }
+    // Note: We can't use serverAuth.currentUser here. This action must be called with a validated user ID.
+    // The actual password update needs to happen on the client with a re-authenticated user.
+    // This server action will just update the Firestore timestamp.
+    // The component logic should handle the Firebase client-side password update.
+
+    await updateDoc(doc(serverDb, "users", userId), { lastPasswordChangeDate: new Date().toISOString() });
+    
+    return { success: true, message: "Password change has been recorded." };
 
   } catch (error: any) {
      let errorMessage = "Password reset failed due to an unexpected error.";

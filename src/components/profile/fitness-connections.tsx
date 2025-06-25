@@ -3,7 +3,7 @@
 
 import React, { useState } from 'react';
 import type { UserProfile, SelectableService } from '@/types';
-import { mockFitnessApps } from '@/types';
+import { mockFitnessApps } from '@/types'; // Keep using mock for now
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -21,8 +21,8 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
   const [selectedAppId, setSelectedAppId] = useState<string>('');
   const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
   
-  // For now, connections are not persisted. This is a UI placeholder.
-  const [currentConnections, setCurrentConnections] = useState<SelectableService[]>([]);
+  // This is a placeholder. A real implementation would persist this to the DB.
+  const [currentConnections, setCurrentConnections] = useState<SelectableService[]>(userProfile.connectedFitnessApps || []);
 
   const availableAppsToConnect = mockFitnessApps.filter(
     app => !currentConnections.some(conn => conn.id === app.id)
@@ -31,27 +31,22 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
   const handleConnect = async () => {
     if (!selectedAppId) return;
 
-    setIsLoading(prev => ({...prev, [selectedAppId]: true}));
     const appToConnect = mockFitnessApps.find(app => app.id === selectedAppId);
-    
-    // Placeholder for OAuth flow
-    toast({ title: `Connecting to ${appToConnect?.name}...`, description: "This is a placeholder for the OAuth flow."});
-    await new Promise(res => setTimeout(res, 1500));
-    
-    if (appToConnect) {
-      setCurrentConnections(prev => [...prev, appToConnect]);
-      toast({ title: "Connected (Simulated)", description: `Connection to ${appToConnect.name} is simulated.` });
-    }
-    
-    setIsLoading(prev => ({...prev, [selectedAppId]: false}));
-    setSelectedAppId('');
+    if (!appToConnect) return;
+
+    // The actual OAuth flow is triggered by redirecting the user.
+    // The redirect URL is the API route for the specific service.
+    window.location.href = `/api/auth/${appToConnect.id}/connect`;
   };
 
   const handleDisconnect = async (appId: string) => {
     setIsLoading(prev => ({ ...prev, [appId]: true }));
+    // In a real app, this would be a server action to revoke tokens and update the DB.
+    toast({ title: `Disconnecting ${appId} (Simulated)...` });
     await new Promise(res => setTimeout(res, 1000));
     setCurrentConnections(prev => prev.filter(c => c.id !== appId));
     setIsLoading(prev => ({ ...prev, [appId]: false }));
+    toast({ title: `${appId} Disconnected (Simulated)` });
   };
   
   return (
@@ -59,7 +54,7 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
       <CardHeader>
         <CardTitle>Fitness App Connections</CardTitle>
         <CardDescription>
-          Connect your favorite fitness apps. (Functionality is currently simulated).
+          Connect your favorite fitness apps to sync your activity data automatically.
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -71,7 +66,7 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
                 <li key={conn.id} className="flex items-center justify-between p-3 border rounded-md bg-muted/30">
                   <div className="flex items-center space-x-2">
                     <CheckCircle2 className="h-5 w-5 text-green-600" />
-                    <span>{conn.name}</span>
+                    <span className="capitalize">{conn.name}</span>
                   </div>
                   <Button
                     variant="ghost"
@@ -99,7 +94,7 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
                   </SelectTrigger>
                   <SelectContent>
                     {availableAppsToConnect.map(app => (
-                      <SelectItem key={app.id} value={app.id}>
+                      <SelectItem key={app.id} value={app.id} className="capitalize">
                         {app.name}
                       </SelectItem>
                     ))}

@@ -9,6 +9,76 @@ export const passwordSchema = z.string()
   .regex(/[^A-Za-z0-9]/, { message: "Password must contain at least one special character." });
 
 
+// --- User Profile and Authentication Types ---
+export interface UserProfile {
+  id: string; 
+  email: string; 
+  firstName?: string; 
+  lastName?: string; 
+  dateOfBirth?: string; // ISO 8601 string for consistency
+  createdAt: string; // ISO 8601 string
+  lastLoggedInDate?: string; // ISO 8601 string
+  lastPasswordChangeDate?: string; // ISO 8601 string
+  
+  // Simplified service connections
+  connectedFitnessApps?: SelectableService[];
+  connectedDiagnosticsServices?: SelectableService[];
+  connectedInsuranceProviders?: (SelectableService & { memberId: string; groupId?: string })[];
+
+  // Simplified subscription tier
+  subscriptionTier: SubscriptionTier;
+
+  // Simplified API call stats
+  fitbitApiCallStats?: FitbitApiCallStats;
+  stravaApiCallStats?: StravaApiCallStats;
+  googleFitApiCallStats?: GoogleFitApiCallStats;
+  withingsApiCallStats?: WithingsApiCallStats;
+  
+  // Simplified goals
+  walkingRadarGoals?: WalkingRadarGoals;
+  runningRadarGoals?: RunningRadarGoals;
+  hikingRadarGoals?: HikingRadarGoals;
+  swimmingRadarGoals?: SwimmingRadarGoals;
+  sleepRadarGoals?: SleepRadarGoals;
+  
+  // Dashboard metrics
+  dashboardRadarMetrics?: DashboardMetricIdValue[];
+  
+  profileSetupComplete?: boolean;
+  acceptedLatestTerms?: boolean;
+  termsVersionAccepted?: string;
+
+  // Last sync timestamps
+  fitbitLastSuccessfulSync?: string;
+  stravaLastSyncTimestamp?: number;
+  googleFitLastSuccessfulSync?: string;
+}
+
+export interface SelectableService {
+  id: string;
+  name: string;
+  connectedAt?: string;
+}
+
+export type SubscriptionTier = 'free' | 'silver' | 'gold' | 'platinum';
+export const subscriptionTiers: SubscriptionTier[] = ['free', 'silver', 'gold', 'platinum'];
+
+export interface TierFeatureComparison {
+    feature: string;
+    free: string | boolean;
+    silver: string | boolean;
+    gold: string | boolean;
+    platinum: string | boolean;
+}
+
+export const featureComparisonData: TierFeatureComparison[] = [
+    { feature: "Basic Dashboard", free: true, silver: true, gold: true, platinum: true },
+    { feature: "Manual Data Entry", free: true, silver: true, gold: true, platinum: true },
+    { feature: "Fitness App Connections", free: 1, silver: 2, gold: 4, platinum: 'All' },
+    { feature: "Insurance Connections", free: 0, silver: 1, gold: 2, platinum: 'All' },
+];
+
+
 // --- Standardized Activity Data Types ---
 export enum NormalizedActivityType {
   Walking = 'walking',
@@ -32,38 +102,30 @@ export const normalizedActivityTypeDisplayNames: Record<NormalizedActivityType, 
 
 
 export interface NormalizedActivityFirestore {
-  id: string; // Unique ID in our database (e.g., dataSource-originalId)
+  id: string;
   userId: string;
-  originalId: string; // ID from the source platform
+  originalId: string;
   dataSource: 'fitbit' | 'strava' | 'google-fit' | 'apple_health' | 'manual' | 'withings' | string; 
-  
   type: NormalizedActivityType;
-  name?: string; // User-defined name/title if available
-  
-  startTimeUtc: string; // ISO 8601 format (UTC)
-  startTimeLocal?: string; // ISO 8601 format (local time of activity, if available)
-  timezone?: string; // e.g., "America/Los_Angeles"
-  
-  durationMovingSec?: number; // Active duration in seconds
-  durationElapsedSec?: number; // Total duration in seconds
-  
+  name?: string;
+  startTimeUtc: string;
+  startTimeLocal?: string;
+  timezone?: string;
+  durationMovingSec?: number;
+  durationElapsedSec?: number;
   distanceMeters?: number;
   calories?: number;
   steps?: number;
-  
   averageHeartRateBpm?: number;
   maxHeartRateBpm?: number;
-  
   elevationGainMeters?: number;
-  
   mapPolyline?: string;
-  
-  date: string; // YYYY-MM-DD format (derived from startTimeLocal or startTimeUtc)
-  lastFetched: string; // ISO 8601 string
+  date: string;
+  lastFetched: string;
 }
 
 
-// --- Health Metric Types for Manual Entry & Timeline (Example) ---
+// --- Health Metric Types for Manual Entry & Timeline ---
 export type HealthMetricType = 
   | 'walking'
   | 'standing'
@@ -75,146 +137,88 @@ export type HealthMetricType =
   | 'condition';
 
 export interface LipidPanelData {
-  totalCholesterol: number; // mg/dL
-  ldl: number; // mg/dL
-  hdl: number; // mg/dL
-  triglycerides: number; // mg/dL
+  totalCholesterol: number;
+  ldl: number;
+  hdl: number;
+  triglycerides: number;
 }
 
 export interface BaseHealthEntry {
   id: string;
-  date: string; // ISO 8601 format
+  date: string;
   type: HealthMetricType;
   title: string;
   notes?: string;
   source?: 'manual' | 'quest' | 'uhc' | 'fitbit' | 'strava' | 'google-fit' | 'withings';
 }
 
-export interface WalkingEntry extends BaseHealthEntry {
-  type: 'walking';
-  value: number;
-  unit: 'steps' | 'km' | 'miles';
-}
-
-export interface StandingEntry extends BaseHealthEntry {
-  type: 'standing';
-  value: number;
-  unit: 'minutes' | 'hours';
-}
-
-export interface BreathingEntry extends BaseHealthEntry {
-  type: 'breathing';
-  value: number;
-  unit: 'breaths/min';
-  quality?: string;
-}
-
-export interface PulseEntry extends BaseHealthEntry {
-  type: 'pulse';
-  value: number;
-  unit: 'bpm';
-}
-
-export interface LipidPanelEntry extends BaseHealthEntry {
-  type: 'lipidPanel';
-  value: LipidPanelData;
-}
-
-export interface AppointmentEntry extends BaseHealthEntry {
-  type: 'appointment';
-  doctor?: string;
-  location?: string;
-  reason?: string;
-  visitNotes?: string; 
-}
-
-export interface MedicationEntry extends BaseHealthEntry {
-  type: 'medication';
-  medicationName: string; 
-  dosage: string;
-  frequency: string;
-}
-
-export interface ConditionEntry extends BaseHealthEntry {
-  type: 'condition';
-  conditionName: string; 
-  diagnosisDate?: string; // ISO 8601
-  status?: 'active' | 'resolved' | 'chronic';
-}
+export interface WalkingEntry extends BaseHealthEntry { type: 'walking'; value: number; unit: 'steps' | 'km' | 'miles'; }
+export interface StandingEntry extends BaseHealthEntry { type: 'standing'; value: number; unit: 'minutes' | 'hours'; }
+export interface BreathingEntry extends BaseHealthEntry { type: 'breathing'; value: number; unit: 'breaths/min'; quality?: string; }
+export interface PulseEntry extends BaseHealthEntry { type: 'pulse'; value: number; unit: 'bpm'; }
+export interface LipidPanelEntry extends BaseHealthEntry { type: 'lipidPanel'; value: LipidPanelData; }
+export interface AppointmentEntry extends BaseHealthEntry { type: 'appointment'; doctor?: string; location?: string; reason?: string; visitNotes?: string; }
+export interface MedicationEntry extends BaseHealthEntry { type: 'medication'; medicationName: string; dosage: string; frequency: string; }
+export interface ConditionEntry extends BaseHealthEntry { type: 'condition'; conditionName: string; diagnosisDate?: string; status?: 'active' | 'resolved' | 'chronic'; }
 
 export type HealthEntry =
-  | WalkingEntry
-  | StandingEntry
-  | BreathingEntry
-  | PulseEntry
-  | LipidPanelEntry
-  | AppointmentEntry
-  | MedicationEntry
-  | ConditionEntry;
+  | WalkingEntry | StandingEntry | BreathingEntry | PulseEntry | LipidPanelEntry
+  | AppointmentEntry | MedicationEntry | ConditionEntry;
 
 export const healthMetricCategories: HealthMetricType[] = [
-  'walking',
-  'standing',
-  'breathing',
-  'pulse',
-  'lipidPanel',
-  'appointment',
-  'medication',
-  'condition',
+  'walking', 'standing', 'breathing', 'pulse', 'lipidPanel', 'appointment', 'medication', 'condition'
 ];
 
 export const healthMetricDisplayNames: Record<HealthMetricType, string> = {
-  walking: 'Walking',
-  standing: 'Standing',
-  breathing: 'Breathing',
-  pulse: 'Pulse',
-  lipidPanel: 'Lipid Panel',
-  appointment: 'Appointment',
-  medication: 'Medication',
-  condition: 'Condition',
+  walking: 'Walking', standing: 'Standing', breathing: 'Breathing', pulse: 'Pulse',
+  lipidPanel: 'Lipid Panel', appointment: 'Appointment', medication: 'Medication', condition: 'Condition'
 };
 
 
-// --- User Profile and Authentication Types ---
-// This is a simplified UserProfile for stabilization.
-// We can add back the more complex fields once the app is stable.
-export interface UserProfile {
-  id: string; 
-  email: string; 
-  firstName?: string; 
-  lastName?: string; 
-  dateOfBirth?: string;
-  createdAt: string; // ISO 8601 string
-  lastLoggedInDate?: string; // ISO 8601 string
-  lastPasswordChangeDate?: string; // ISO 8601 string
-}
+// --- Auth & API Related Types ---
 
-// --- LoginResult Type ---
 export interface LoginResult {
   success: boolean;
   userId?: string;
   error?: string;
   errorCode?: string;
 }
-// --- End LoginResult Type ---
 
-export type SubscriptionTier = 'free' | 'silver' | 'gold' | 'platinum';
-export const subscriptionTiers: SubscriptionTier[] = ['free', 'silver', 'gold', 'platinum'];
+export type ApiCallStat = {
+    lastCalledAt?: string;
+    callCountToday?: number;
+}
+export type FitbitApiCallStats = {
+    [key in 'dailyActivitySummary' | 'heartRateTimeSeries' | 'sleepData' | 'swimmingData' | 'loggedActivities']?: ApiCallStat;
+};
+export type StravaApiCallStats = { activities?: ApiCallStat };
+export type GoogleFitApiCallStats = { sessions?: ApiCallStat, aggregateData?: ApiCallStat };
+export type WithingsApiCallStats = { [key: string]: ApiCallStat }; // More generic for Withings
 
 
-// --- Placeholder types for now, can be expanded later ---
-export interface FitbitApiCallStats {}
-export interface StravaApiCallStats {}
-export interface GoogleFitApiCallStats {}
-export interface WithingsApiCallStats {}
-export interface WalkingRadarGoals {}
-export interface RunningRadarGoals {}
-export interface HikingRadarGoals {}
-export interface SwimmingRadarGoals {}
-export interface SleepRadarGoals {}
-export type DashboardMetricIdValue = string;
+// --- Goal Configuration Types ---
+export interface WalkingRadarGoals {
+  maxDailySteps?: number; maxDailyDistanceMeters?: number; maxDailyDurationSec?: number; maxDailySessions?: number;
+  minDailySteps?: number; minDailyDistanceMeters?: number; minDailyDurationSec?: number; minDailySessions?: number;
+}
+export interface RunningRadarGoals {
+  maxDailyDistanceMeters?: number; maxDailyDurationSec?: number; maxDailySessions?: number;
+  minDailyDistanceMeters?: number; minDailyDurationSec?: number; minDailySessions?: number;
+}
+export interface HikingRadarGoals {
+  maxDailyDistanceMeters?: number; maxDailyDurationSec?: number; maxDailySessions?: number; maxDailyElevationGainMeters?: number;
+  minDailyDistanceMeters?: number; minDailyDurationSec?: number; minDailySessions?: number; minDailyElevationGainMeters?: number;
+}
+export interface SwimmingRadarGoals {
+  maxDailyDistanceMeters?: number; maxDailyDurationSec?: number; maxDailySessions?: number;
+  minDailyDistanceMeters?: number; minDailyDurationSec?: number; minDailySessions?: number;
+}
+export interface SleepRadarGoals {
+  targetSleepDurationHours?: number; minSleepEfficiencyPercent?: number; minTimeInDeepSleepMinutes?: number; minTimeInRemSleepMinutes?: number;
+}
 
-// --- Dashboard Metric Selection Types ---
+
+// --- Dashboard Types ---
 export const DashboardMetricId = {
   AVG_DAILY_STEPS: 'avgDailySteps',
   AVG_SLEEP_DURATION: 'avgSleepDuration',
@@ -223,6 +227,8 @@ export const DashboardMetricId = {
   AVG_WORKOUT_DURATION: 'avgWorkoutDuration', 
   TOTAL_WORKOUTS: 'totalWorkouts',        
 } as const;
+
+export type DashboardMetricIdValue = typeof DashboardMetricId[keyof typeof DashboardMetricId];
 
 export interface DashboardMetricConfig {
   id: DashboardMetricIdValue;
@@ -239,9 +245,7 @@ export const AVAILABLE_DASHBOARD_METRICS: DashboardMetricConfig[] = [
   { id: DashboardMetricId.AVG_WORKOUT_DURATION, label: 'Average Workout Duration', unit: 'min', defaultMaxValue: 90 },
   { id: DashboardMetricId.TOTAL_WORKOUTS, label: 'Total Workouts in Period', unit: 'sessions', defaultMaxValue: 10 },
 ];
-// --- End Dashboard Metric Selection Types ---
 
-// --- Radar Chart Data Point Type ---
 export interface RadarDataPoint { 
   metric: string; 
   value: number; 
@@ -249,15 +253,11 @@ export interface RadarDataPoint {
   fullMark: number; 
 }
 
-export interface SelectableService {
-  id: string;
-  name: string;
-}
-
+// Mock Connectable Services
 export const mockFitnessApps: SelectableService[] = [
   { id: 'fitbit', name: 'Fitbit' },
   { id: 'strava', name: 'Strava' },
-  { id: 'google-fit', name: 'Google Fit' },
+  { id: 'googlefit', name: 'Google Fit' },
   { id: 'withings', name: 'Withings' },
 ];
 
@@ -272,7 +272,8 @@ export const mockInsuranceProviders: SelectableService[] = [
   { id: 'cigna', name: 'Cigna' },
 ];
 
-// Firestore specific data structures (examples)
+
+// --- Firestore specific data structures (examples from Fitbit) ---
 export interface FitbitActivitySummaryFirestore {
     date: string; 
     steps?: number; 
@@ -286,19 +287,9 @@ export interface FitbitActivitySummaryFirestore {
 export interface FitbitHeartRateFirestore {
   date: string; 
   restingHeartRate?: number;
-  heartRateZones?: Array<{
-    name: string;
-    min: number;
-    max: number;
-    minutes: number;
-    caloriesOut?: number;
-  }>;
-  intradaySeries?: {
-    dataset: Array<{ time: string; value: number }>;
-    datasetInterval: number;
-    datasetType: string;
-  };
-  lastFetched: string; // ISO string
+  heartRateZones?: Array<{ name: string; min: number; max: number; minutes: number; caloriesOut?: number; }>;
+  intradaySeries?: { dataset: Array<{ time: string; value: number }>; datasetInterval: number; datasetType: string; };
+  lastFetched: string;
   dataSource: 'fitbit';
 }
 
@@ -307,7 +298,7 @@ export interface FitbitSleepLogFirestore {
   logId: number; 
   startTime: string; 
   endTime: string; 
-  duration: number; // milliseconds
+  duration: number; // ms
   isMainSleep: boolean;
   minutesToFallAsleep: number;
   minutesAsleep: number;
@@ -321,35 +312,28 @@ export interface FitbitSleepLogFirestore {
       light?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
       rem?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
       wake?: { count: number; minutes: number; thirtyDayAvgMinutes?: number };
-      asleep?: { count: number; minutes: number };
-      awake?: { count: number; minutes: number };
-      restless?: { count: number; minutes: number };
+      asleep?: { count: number; minutes: number; };
+      awake?: { count: number; minutes: number; };
+      restless?: { count: number; minutes: number; };
     };
-    data: Array<{
-      dateTime: string;
-      level: 'deep' | 'light' | 'rem' | 'wake' | 'asleep' | 'awake' | 'restless';
-      seconds: number;
-    }>;
-    shortData?: Array<{
-        dateTime: string;
-        level: 'wake' | 'deep' | 'light' | 'rem' | 'asleep' | 'awake' | 'restless';
-        seconds: number;
-    }>;
+    data: Array<{ dateTime: string; level: 'deep' | 'light' | 'rem' | 'wake' | 'asleep' | 'awake' | 'restless'; seconds: number; }>;
+    shortData?: Array<{ dateTime: string; level: 'wake' | 'deep' | 'light' | 'rem' | 'asleep' | 'awake' | 'restless'; seconds: number; }>;
   };
-  lastFetched: string; // ISO string
+  lastFetched: string;
   dataSource: 'fitbit';
 }
+
 
 // --- Admin Configuration Types ---
 export interface ConnectableServicesConfig {
   fitnessApps: SelectableService[];
   diagnosticServices: SelectableService[];
   insuranceProviders: SelectableService[];
-  lastUpdated?: string; // ISO Timestamp
+  lastUpdated?: string;
 }
 
 export interface TermsAndConditionsConfig {
   currentVersion: string;
   text: string;
-  publishedAt?: string; // ISO Timestamp
+  publishedAt?: string;
 }

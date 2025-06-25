@@ -1,32 +1,22 @@
 
 import { NextResponse } from 'next/server';
-// cookies import is no longer needed here for setting
 import { randomBytes } from 'crypto';
 
-export async function GET() { // Make async if other async operations are needed
+export async function GET() {
   const clientId = process.env.NEXT_PUBLIC_FITBIT_CLIENT_ID;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9004'; // Corrected fallback
-  const oauthStateSecret = process.env.OAUTH_STATE_SECRET;
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9004';
 
-  if (!clientId || !appUrl || !oauthStateSecret) {
-    console.error("Fitbit OAuth configuration is missing in environment variables (connect route).");
+  if (!clientId) {
+    console.error("Fitbit OAuth configuration is missing (connect route).");
     return NextResponse.json({ error: 'Server configuration error for Fitbit OAuth.' }, { status: 500 });
   }
 
   const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
-  
   const state = randomBytes(16).toString('hex');
   
   const scopes = [
-    'activity',
-    'heartrate',
-    'location',
-    'nutrition',
-    'profile',
-    'settings',
-    'sleep',
-    'social',
-    'weight'
+    'activity', 'heartrate', 'location', 'nutrition',
+    'profile', 'settings', 'sleep', 'social', 'weight'
   ].join(' ');
   
   const fitbitAuthUrl = new URL('https://www.fitbit.com/oauth2/authorize');
@@ -36,8 +26,6 @@ export async function GET() { // Make async if other async operations are needed
   fitbitAuthUrl.searchParams.append('scope', scopes);
   fitbitAuthUrl.searchParams.append('state', state);
 
-  console.log('[Fitbit Connect] Redirecting to Fitbit for authorization:', fitbitAuthUrl.toString());
-  
   const response = NextResponse.redirect(fitbitAuthUrl.toString());
   response.cookies.set('fitbit_oauth_state', state, {
     httpOnly: true,
