@@ -2,7 +2,7 @@
 
 import { auth } from 'firebase-admin';
 import { cookies } from 'next/headers';
-import { getFirebaseAdminApp } from './firebase-admin';
+import { getFirebaseAdminApp } from './firebase-admin-config'; // Updated import
 
 // This utility requires Firebase Admin SDK to be set up.
 // It's used to verify session cookies on the server.

@@ -1,8 +1,13 @@
 'use server';
 
 import * as admin from 'firebase-admin';
+import type { App } from 'firebase-admin/app';
 
-export async function initFirebaseAdminApp() {
+// This file consolidates Firebase Admin initialization to avoid module resolution conflicts.
+
+let app: App;
+
+async function initFirebaseAdminApp() {
     const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
     if (!serviceAccountKey) {
         throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set.');
@@ -21,4 +26,11 @@ export async function initFirebaseAdminApp() {
         console.error('Error parsing Firebase service account key:', error);
         throw new Error('Could not initialize Firebase Admin SDK.');
     }
+}
+
+export async function getFirebaseAdminApp() {
+    if (!app) {
+        app = await initFirebaseAdminApp();
+    }
+    return app;
 }
