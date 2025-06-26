@@ -5,25 +5,18 @@ import { randomBytes } from 'crypto';
 export async function GET(request: NextRequest) {
   const clientId = process.env.NEXT_PUBLIC_FITBIT_CLIENT_ID;
 
-  let redirectUri: string;
+  // Dynamically determine the app URL from request headers for robust proxy support.
+  // This avoids hardcoding localhost and works for dev, staging, and prod.
+  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  const host = request.headers.get('host');
 
-  if (process.env.NODE_ENV === 'development') {
-    redirectUri = 'http://localhost:9004/api/auth/fitbit/callback';
-  } else {
-    const protocol = request.headers.get('x-forwarded-proto') || 'https';
-    const host = request.headers.get('host');
-    if (!host) {
-      console.error("Fitbit OAuth configuration is missing or host could not be determined. Required: host header.");
-      return NextResponse.json({ error: 'Server configuration error for Fitbit OAuth.' }, { status: 500 });
-    }
-    const appUrl = `${protocol}://${host}`;
-    redirectUri = `${appUrl}/api/auth/fitbit/callback`;
-  }
-
-  if (!clientId) {
-    console.error("Fitbit OAuth configuration is missing. Required: NEXT_PUBLIC_FITBIT_CLIENT_ID.");
+  if (!clientId || !host) {
+    console.error("Fitbit OAuth configuration is missing or host could not be determined. Required: NEXT_PUBLIC_FITBIT_CLIENT_ID, host header.");
     return NextResponse.json({ error: 'Server configuration error for Fitbit OAuth.' }, { status: 500 });
   }
+
+  const appUrl = `${protocol}://${host}`;
+  const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
   
   const state = randomBytes(16).toString('hex');
   

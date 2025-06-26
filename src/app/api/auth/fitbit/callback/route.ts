@@ -33,23 +33,18 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  let profileUrl: string;
-  let redirectUri: string;
+  // Dynamically determine the app URL from request headers for robust proxy support.
+  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  const host = request.headers.get('host');
 
-  if (process.env.NODE_ENV === 'development') {
-      profileUrl = 'http://localhost:9004/profile';
-      redirectUri = 'http://localhost:9004/api/auth/fitbit/callback';
-  } else {
-    const protocol = request.headers.get('x-forwarded-proto') || 'https';
-    const host = request.headers.get('host');
-    if (!host) {
-        console.error("Fitbit callback failed: could not determine host from request headers.");
-        return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_host');
-    }
-    const appUrl = `${protocol}://${host}`;
-    profileUrl = `${appUrl}/profile`;
-    redirectUri = `${appUrl}/api/auth/fitbit/callback`;
+  if (!host) {
+      console.error("Fitbit callback failed: could not determine host from request headers.");
+      return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_host');
   }
+
+  const appUrl = `${protocol}://${host}`;
+  const profileUrl = `${appUrl}/profile`;
+  const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
   
   const cookieStore = cookies();
   const storedState = cookieStore.get('fitbit_oauth_state')?.value;
