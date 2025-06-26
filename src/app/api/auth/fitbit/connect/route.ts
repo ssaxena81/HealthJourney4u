@@ -5,23 +5,25 @@ import { randomBytes } from 'crypto';
 export async function GET(request: NextRequest) {
   const clientId = process.env.NEXT_PUBLIC_FITBIT_CLIENT_ID;
 
-  // [2024-08-01] COMMENT: The dynamic URL construction from headers was unreliable and is being removed.
-  // const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
-  // const host = request.headers.get('host');
+  // [2024-08-01] COMMENT: The environment variable approach for the app URL is commented out to test if dynamic headers resolve a proxy issue.
+  // const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  
+  // [2024-08-01] ADD: Reverting to dynamic URL construction from request headers.
+  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  const host = request.headers.get('host');
 
-  // [2024-08-01] ADD: Use a single, reliable environment variable for the application's base URL.
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-
-  // [2024-08-01] UPDATE: The check now validates NEXT_PUBLIC_APP_URL instead of the dynamic host.
-  if (!clientId || !appUrl) {
-    // [2024-08-01] UPDATE: The error message is updated to reflect the new required environment variable.
-    console.error("Fitbit OAuth configuration is missing (connect route). Required: NEXT_PUBLIC_FITBIT_CLIENT_ID, NEXT_PUBLIC_APP_URL.");
+  // [2024-08-01] UPDATE: The check now validates the dynamic host instead of the environment variable.
+  if (!clientId || !host) {
+    // [2024-08-01] COMMENT: Commenting out the old check for the environment variable.
+    // console.error("Fitbit OAuth configuration is missing (connect route). Required: NEXT_PUBLIC_FITBIT_CLIENT_ID, NEXT_PUBLIC_APP_URL.");
+    // [2024-08-01] ADD: Adding new error message for the dynamic host requirement.
+    console.error("Fitbit OAuth configuration is missing (connect route). Required: NEXT_PUBLIC_FITBIT_CLIENT_ID and a valid host header.");
     return NextResponse.json({ error: 'Server configuration error for Fitbit OAuth.' }, { status: 500 });
   }
   
-  // [2024-08-01] COMMENT: The old dynamic appUrl is commented out.
-  // const appUrl = `${protocol}://${host}`;
-  // [2024-08-01] UPDATE: Construct the redirect URI from the reliable environment variable. This is the fix for the `invalid_redirect_uri` error.
+  // [2024-08-01] ADD: Constructing the app URL dynamically from headers.
+  const appUrl = `${protocol}://${host}`;
+  // [2024-08-01] UPDATE: Construct the redirect URI from the dynamically generated appUrl.
   const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
   const state = randomBytes(16).toString('hex');
   

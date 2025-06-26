@@ -33,30 +33,29 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  // [2024-08-01] COMMENT: The dynamic URL construction from headers was unreliable and is being removed.
-  // // Dynamically determine the app URL from request headers
-  // const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
-  // const host = request.headers.get('host');
-  // if (!host) {
-  //     // This is an unlikely edge case, but good to handle. Redirect to a generic error on the profile page.
-  //     return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_host');
-  // }
-  
-  // [2024-08-01] ADD: Use the reliable environment variable for the base URL to ensure consistency.
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-
-  // [2024-08-01] ADD: Validate that the appUrl is configured on the server.
-  if (!appUrl) {
-    // [2024-08-01] ADD: Log a specific error and redirect if the URL is not set.
-    console.error("Fitbit OAuth configuration is missing (callback route). Required: NEXT_PUBLIC_APP_URL.");
-    // [2024-08-01] ADD: Redirect to a generic error on the profile page.
-    return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_app_url');
+  // [2024-08-01] ADD: Dynamically determine the app URL from request headers to resolve the proxy issue.
+  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  const host = request.headers.get('host');
+  // [2024-08-01] ADD: Validate that the host header is present.
+  if (!host) {
+    // [2024-08-01] ADD: This is an unlikely edge case, but good to handle. Redirect to a generic error on the profile page.
+    console.error("Fitbit callback failed: could not determine host from request headers.");
+    return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_host');
   }
   
-  // [2024-08-01] COMMENT: The old dynamic appUrl is commented out.
-  // const appUrl = `${protocol}://${host}`;
+  // [2024-08-01] COMMENT: The environment variable for the base URL is commented out to test if dynamic headers resolve the proxy issue.
+  // const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  // [2024-08-01] COMMENT: The validation for the appUrl environment variable is commented out.
+  // if (!appUrl) {
+  //   console.error("Fitbit OAuth configuration is missing (callback route). Required: NEXT_PUBLIC_APP_URL.");
+  //   return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_app_url');
+  // }
   
-  // [2024-08-01] UPDATE: Construct the profile and redirect URIs from the reliable appUrl.
+  // [2024-08-01] ADD: Constructing the app URL dynamically from headers.
+  const appUrl = `${protocol}://${host}`;
+  
+  // [2024-08-01] UPDATE: Construct the profile and redirect URIs from the dynamically constructed appUrl.
   const profileUrl = `${appUrl}/profile`;
   const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
 
@@ -96,7 +95,7 @@ export async function GET(request: NextRequest) {
       body: new URLSearchParams({
         clientId: clientId,
         grant_type: 'authorization_code',
-        // [2024-08-01] UPDATE: Use the consistently constructed redirectUri to fix the error.
+        // [2024-08-01] UPDATE: Use the dynamically constructed redirectUri.
         redirect_uri: redirectUri, 
         code: code,
       }),
