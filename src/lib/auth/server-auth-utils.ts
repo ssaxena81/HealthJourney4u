@@ -7,6 +7,8 @@ import { auth as adminAuth } from 'firebase-admin';
 import { cookies } from 'next/headers';
 
 // --- Start of consolidated Firebase Admin logic ---
+// This logic is consolidated here to resolve a module naming conflict
+// with the 'firebase-admin' package. This should be the only file importing 'firebase-admin'.
 let app: App;
 
 async function initFirebaseAdminApp() {
@@ -15,18 +17,20 @@ async function initFirebaseAdminApp() {
         throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set.');
     }
     
+    // If the app is already initialized, return it.
     if (admin.apps.length > 0) {
         return admin.app();
     }
 
     try {
         const serviceAccount = JSON.parse(serviceAccountKey);
+        // Initialize the app.
         return admin.initializeApp({
             credential: admin.credential.cert(serviceAccount)
         });
     } catch (error) {
         console.error('Error parsing Firebase service account key:', error);
-        throw new Error('Could not initialize Firebase Admin SDK.');
+        throw new Error('Could not initialize Firebase Admin SDK. Check service account key.');
     }
 }
 
@@ -38,9 +42,12 @@ async function getFirebaseAdminApp() {
 }
 // --- End of consolidated Firebase Admin logic ---
 
-
-// This utility requires Firebase Admin SDK to be set up.
-// It's used to verify session cookies on the server.
+/**
+ * Verifies the Firebase session cookie from the request and returns the decoded user token.
+ * Requires Firebase Admin SDK to be initialized.
+ * @param cookieStore The cookie store from the incoming request.
+ * @returns A promise that resolves to the decoded user token or null if invalid.
+ */
 export async function getFirebaseUserFromCookie(cookieStore: ReturnType<typeof cookies>) {
   const sessionCookie = cookieStore.get('__session')?.value;
 
@@ -49,11 +56,12 @@ export async function getFirebaseUserFromCookie(cookieStore: ReturnType<typeof c
   }
 
   try {
-    const app = await getFirebaseAdminApp();
-    const decodedToken = await adminAuth(app).verifySessionCookie(sessionCookie, true);
+    const adminApp = await getFirebaseAdminApp();
+    const decodedToken = await adminAuth(adminApp).verifySessionCookie(sessionCookie, true);
     return decodedToken;
   } catch (error) {
-    console.error('Error verifying session cookie:', error);
+    // This is expected if the cookie is invalid or expired.
+    // console.error('Error verifying session cookie:', error); 
     return null;
   }
 }

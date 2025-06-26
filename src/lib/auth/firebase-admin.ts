@@ -1,4 +1,6 @@
 
-// This file is intentionally left empty to resolve a module naming conflict
-// with the 'firebase-admin' package. All admin logic is now in 'server-auth-utils.ts'.
+// This file is intentionally left empty.
+// Its presence causes a module resolution conflict with the 'firebase-admin' package.
+// All Firebase Admin SDK logic has been consolidated into 'src/lib/auth/server-auth-utils.ts'
+// to resolve this build error.
 export {};
