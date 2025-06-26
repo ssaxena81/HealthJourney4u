@@ -1,16 +1,19 @@
 
-import { NextResponse } from 'next/server';
+import { NextResponse, type NextRequest } from 'next/server';
 import { randomBytes } from 'crypto';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   const clientId = process.env.NEXT_PUBLIC_FITBIT_CLIENT_ID;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9004';
 
-  if (!clientId) {
-    console.error("Fitbit OAuth configuration is missing (connect route).");
+  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  const host = request.headers.get('host');
+
+  if (!clientId || !host) {
+    console.error("Fitbit OAuth configuration is missing (connect route). Required: NEXT_PUBLIC_FITBIT_CLIENT_ID and host header.");
     return NextResponse.json({ error: 'Server configuration error for Fitbit OAuth.' }, { status: 500 });
   }
-
+  
+  const appUrl = `${protocol}://${host}`;
   const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
   const state = randomBytes(16).toString('hex');
   

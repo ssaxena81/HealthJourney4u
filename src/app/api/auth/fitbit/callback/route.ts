@@ -33,8 +33,14 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9004';
+  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  const host = request.headers.get('host');
+  if (!host) {
+      return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_host');
+  }
+  const appUrl = `${protocol}://${host}`;
   const profileUrl = `${appUrl}/profile`;
+  const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
 
   const cookieStore = cookies();
   const storedState = cookieStore.get('fitbit_oauth_state')?.value;
@@ -55,7 +61,6 @@ export async function GET(request: NextRequest) {
 
   const clientId = process.env.NEXT_PUBLIC_FITBIT_CLIENT_ID;
   const clientSecret = process.env.FITBIT_CLIENT_SECRET;
-  const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
 
   if (!clientId || !clientSecret) {
     return NextResponse.redirect(`${profileUrl}?fitbit_error=server_config_error`);
