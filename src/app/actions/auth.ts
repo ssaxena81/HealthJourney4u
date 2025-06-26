@@ -14,7 +14,7 @@ import type {
 } from '@/types';
 import { passwordSchema } from '@/types';
 import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
-import { auth as serverAuth, db as serverDb } from '@/lib/firebase/serverApp';
+import { auth, db } from '@/lib/firebase/serverApp';
 
 
 // --- Sign Up Schema ---
@@ -39,7 +39,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
     const validatedValues = SignUpDetailsInputSchema.parse(values);
 
     const userCredential = await createUserWithEmailAndPassword(
-      serverAuth,
+      auth,
       validatedValues.email,
       validatedValues.password
     );
@@ -55,7 +55,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       acceptedLatestTerms: false,
     };
 
-    await setDoc(doc(serverDb, "users", userCredential.user.uid), initialProfile);
+    await setDoc(doc(db, "users", userCredential.user.uid), initialProfile);
     
     return { success: true, userId: userCredential.user.uid };
 
@@ -68,7 +68,6 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       errorCode = "VALIDATION_ERROR";
     } else if ((error as AuthError).code) {
       errorCode = (error as AuthError).code;
-      errorMessage = (error as AuthError).message;
       if (errorCode === 'auth/email-already-in-use') {
         errorMessage = 'This email address is already in use.';
       }
@@ -89,13 +88,13 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     const validatedValues = LoginInputSchema.parse(values);
 
     const userCredential = await signInWithEmailAndPassword(
-      serverAuth,
+      auth,
       validatedValues.email,
       validatedValues.password
     );
     
     const userId = userCredential.user.uid;
-    const userProfileDocRef = doc(serverDb, "users", userId);
+    const userProfileDocRef = doc(db, "users", userId);
     
     await updateDoc(userProfileDocRef, { lastLoggedInDate: new Date().toISOString() });
 
@@ -146,7 +145,7 @@ export async function resetPassword(userId: string, values: Omit<z.infer<typeof 
     // Validate just the passwords
     const { newPassword } = FinalResetPasswordSchema.pick({ newPassword: true, confirmNewPassword: true }).parse(values);
     
-    const userProfileDoc = await getDoc(doc(serverDb, "users", userId));
+    const userProfileDoc = await getDoc(doc(db, "users", userId));
     if (!userProfileDoc.exists()) {
         return { success: false, error: "User not found.", errorCode: "USER_NOT_FOUND"};
     }
@@ -155,7 +154,7 @@ export async function resetPassword(userId: string, values: Omit<z.infer<typeof 
     // This server action will just update the Firestore timestamp.
     // The component logic should handle the Firebase client-side password update.
 
-    await updateDoc(doc(serverDb, "users", userId), { lastPasswordChangeDate: new Date().toISOString() });
+    await updateDoc(doc(db, "users", userId), { lastPasswordChangeDate: new Date().toISOString() });
     
     return { success: true, message: "Password change has been recorded." };
 

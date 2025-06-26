@@ -129,7 +129,7 @@ export default function ForgotPasswordForm() {
               maxLength={8}
             />
             {codeForm.formState.errors.code && (
-              <p className="text-sm text-destructive mt-1">{codeForm.formState.errors.code.message}</p>
+              <p className="text-sm text-destructive mt-1">{form.formState.errors.code.message}</p>
             )}
           </div>
           <Button type="submit" className="w-full" disabled={isPending}>

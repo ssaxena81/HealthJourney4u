@@ -1,3 +1,4 @@
+
 'use server';
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
@@ -26,7 +27,7 @@ if (!admin.apps.length) {
 
 const adminAuth = admin.auth();
 const adminDb = admin.firestore();
-// --- End Admin SDK Initialization ---
+
 
 // --- Client SDK for server-side operations (e.g., in Server Actions) ---
 const firebaseConfigServer = {
