@@ -11,10 +11,10 @@ import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
 import { passwordSchema } from '@/types';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { updatePassword as firebaseUpdatePassword, EmailAuthProvider, reauthenticateWithCredential } from 'firebase/auth';
-import { resetPassword as recordPasswordChange } from '@/app/actions/auth';
+import { recordPasswordChangeInDb } from '@/app/actions/auth';
 
 const changePasswordFormSchema = z.object({
   currentPassword: z.string().min(1, "Current password is required."),
@@ -62,10 +62,7 @@ export default function ChangePasswordForm() {
         await firebaseUpdatePassword(user, values.newPassword);
         
         // Step 3: Record the password change in Firestore via a server action
-        await recordPasswordChange(user.uid, { 
-            newPassword: values.newPassword, 
-            confirmNewPassword: values.confirmNewPassword 
-        });
+        await recordPasswordChangeInDb(user.uid);
         
         // Step 4: Update local state and show success
         if (setUserProfile) {
@@ -76,7 +73,7 @@ export default function ChangePasswordForm() {
         
       } catch (authError: any) {
         let errorMessage = "An unexpected error occurred.";
-        if (authError.code === 'auth/wrong-password') {
+        if (authError.code === 'auth/wrong-password' || authError.code === 'auth/invalid-credential') {
           errorMessage = "The current password you entered is incorrect.";
           form.setError("currentPassword", { type: "manual", message: errorMessage });
         } else if (authError.code) {

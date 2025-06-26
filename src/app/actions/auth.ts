@@ -4,7 +4,9 @@
 import {
   createUserWithEmailAndPassword,
   signInWithEmailAndPassword,
-  updatePassword as firebaseUpdatePassword,
+  sendPasswordResetEmail,
+  confirmPasswordReset,
+  verifyPasswordResetCode,
   type AuthError,
 } from 'firebase/auth';
 import { z } from 'zod';
@@ -120,54 +122,70 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
   }
 }
 
-
-// --- Reset Password ---
-const FinalResetPasswordSchema = z.object({
-  email: z.string().email(),
-  newPassword: passwordSchema,
-  confirmNewPassword: passwordSchema,
-}).refine(data => data.newPassword === data.confirmNewPassword, {
-  message: "Passwords don't match.",
-  path: ['confirmNewPassword'],
-});
-
-interface ResetPasswordResult {
-  success: boolean;
-  error?: string;
-  message?: string;
-  errorCode?: string;
+interface ActionResult {
+    success: boolean;
+    message?: string;
+    error?: string;
+    errorCode?: string;
 }
 
-// This server action is for a LOGGED-IN user changing their password.
-// A forgot password flow would be different and require an oobCode.
-export async function resetPassword(userId: string, values: Omit<z.infer<typeof FinalResetPasswordSchema>, 'email'>): Promise<ResetPasswordResult> {
+// --- Forgot Password Flow (sends email link) ---
+const ForgotPasswordSchema = z.object({
+  email: z.string().email(),
+});
+
+export async function sendPasswordResetEmailAction(values: z.infer<typeof ForgotPasswordSchema>): Promise<ActionResult> {
   try {
-    // Validate just the passwords
-    const { newPassword } = FinalResetPasswordSchema.pick({ newPassword: true, confirmNewPassword: true }).parse(values);
-    
-    const userProfileDoc = await getDoc(doc(db, "users", userId));
-    if (!userProfileDoc.exists()) {
-        return { success: false, error: "User not found.", errorCode: "USER_NOT_FOUND"};
-    }
-    // Note: We can't use serverAuth.currentUser here. This action must be called with a validated user ID.
-    // The actual password update needs to happen on the client with a re-authenticated user.
-    // This server action will just update the Firestore timestamp.
-    // The component logic should handle the Firebase client-side password update.
-
-    await updateDoc(doc(db, "users", userId), { lastPasswordChangeDate: new Date().toISOString() });
-    
-    return { success: true, message: "Password change has been recorded." };
-
+    const validatedValues = ForgotPasswordSchema.parse(values);
+    await sendPasswordResetEmail(auth, validatedValues.email);
+    return { success: true, message: "If an account with that email exists, a password reset link has been sent." };
   } catch (error: any) {
-     let errorMessage = "Password reset failed due to an unexpected error.";
+    console.error(`[AuthAction] Error sending password reset email for ${values.email}:`, error);
+    // For security, don't reveal if an email is registered or not. Always return a generic success message.
+    return { success: true, message: "If an account with that email exists, a password reset link has been sent." };
+  }
+}
+
+// --- Reset Password using oobCode from email link ---
+export async function resetPasswordWithOobCode(oobCode: string, newPassword: string): Promise<ActionResult> {
+  if (!oobCode) {
+    return { success: false, error: 'Invalid or missing reset code.' };
+  }
+  try {
+    // Validate the password first
+    passwordSchema.parse(newPassword);
+
+    // Verify the code to ensure it's valid before attempting to reset
+    await verifyPasswordResetCode(auth, oobCode);
+    
+    // If verification succeeds, reset the password
+    await confirmPasswordReset(auth, oobCode, newPassword);
+
+    return { success: true, message: 'Password has been reset successfully. You can now log in.' };
+  } catch (error: any) {
+     let errorMessage = "Password reset failed. The link may be invalid or expired.";
      let errorCode = 'UNEXPECTED_ERROR';
      if (error instanceof z.ZodError) {
-        return { success: false, error: "Invalid data.", errorCode: "VALIDATION_ERROR" };
-     }
-     if ((error as AuthError).code) {
+        errorMessage = error.errors.map(e => e.message).join(' ');
+     } else if ((error as AuthError).code) {
         errorCode = (error as AuthError).code;
-        errorMessage = (error as AuthError).message;
+        if (errorCode === 'auth/invalid-action-code') {
+          errorMessage = 'The password reset link is invalid or has expired. Please request a new one.';
+        }
      }
     return { success: false, error: errorMessage, errorCode };
+  }
+}
+
+// --- Record Password Change in DB (for logged-in user) ---
+export async function recordPasswordChangeInDb(userId: string): Promise<ActionResult> {
+  try {
+    if (!userId) {
+        return { success: false, error: "User not identified.", errorCode: "USER_NOT_FOUND"};
+    }
+    await updateDoc(doc(db, "users", userId), { lastPasswordChangeDate: new Date().toISOString() });
+    return { success: true, message: "Password change has been recorded." };
+  } catch (error: any) {
+    return { success: false, error: "Failed to record password change." };
   }
 }

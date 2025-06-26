@@ -11,13 +11,11 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/hooks/use-toast';
-import { resetPassword } from '@/app/actions/auth'; // passwordSchema removed from here
-import { passwordSchema } from '@/types'; // Import from types
+import { resetPasswordWithOobCode } from '@/app/actions/auth';
+import { passwordSchema } from '@/types';
 import { Loader2, Eye, EyeOff } from 'lucide-react';
-import { useAuth } from '@/hooks/useAuth'; // For logged-in user context
 
 const resetPasswordFormSchema = z.object({
-  email: z.string().email().optional(), // Optional if using oobCode or for logged-in user
   newPassword: passwordSchema,
   confirmNewPassword: passwordSchema,
 }).refine((data) => data.newPassword === data.confirmNewPassword, {
@@ -27,77 +25,48 @@ const resetPasswordFormSchema = z.object({
 
 type ResetPasswordFormValues = z.infer<typeof resetPasswordFormSchema>;
 
-interface ResetPasswordFormProps {
-  oobCode?: string | null; // Out-of-band code from Firebase email link
-  isForcedReset?: boolean; // True if user is logged in and password expired
-}
-
-export default function ResetPasswordForm({ oobCode, isForcedReset = false }: ResetPasswordFormProps) {
+// This form is for the "forgot password" flow, using the oobCode from the email link
+export default function ResetPasswordForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { toast } = useToast();
-  const { user } = useAuth(); // Get current user if it's a forced reset
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [showNewPassword, setShowNewPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   
-  const emailFromQuery = searchParams.get('email'); // For custom flow after code verification
+  const oobCode = searchParams.get('oobCode');
 
   const form = useForm<ResetPasswordFormValues>({
     resolver: zodResolver(resetPasswordFormSchema),
     defaultValues: {
-      email: isForcedReset && user?.email ? user.email : emailFromQuery || '',
       newPassword: '',
       confirmNewPassword: '',
     },
   });
   
   useEffect(() => {
-    // Pre-fill email if available from context
-    if (isForcedReset && user?.email) {
-        form.setValue('email', user.email);
-    } else if (emailFromQuery) {
-        form.setValue('email', emailFromQuery);
+    if (!oobCode) {
+        setError("Invalid or missing password reset link. Please try the 'Forgot Password' process again.");
     }
-    // TODO: If oobCode is present, could verify it and fetch email if needed
-  }, [isForcedReset, user, emailFromQuery, form, oobCode]);
-
+  }, [oobCode]);
 
   const onSubmit = (values: ResetPasswordFormValues) => {
     setError(null);
-    startTransition(async () => {
-      let emailToUse = values.email;
-      if (isForcedReset && user?.email) {
-        emailToUse = user.email;
-      } else if (oobCode) {
-        // TODO: For oobCode flow, the server action would use `verifyPasswordResetCode` from Firebase Admin SDK first,
-        // then `updatePassword`. The `email` might not be strictly needed if oobCode is the primary identifier.
-        // The current `resetPassword` action assumes email + newPassword for a logged-in user or a custom flow.
-        // It needs to be enhanced to handle oobCode directly from Firebase.
-      } else if (emailFromQuery) {
-        emailToUse = emailFromQuery;
-      }
-
-      if (!emailToUse && !oobCode) {
-        setError("Email is required or session is invalid for password reset.");
-        toast({ title: 'Error', description: "Email not found for password reset.", variant: 'destructive'});
+    if (!oobCode) {
+        setError("Invalid or missing password reset link.");
+        toast({ title: 'Error', description: "The reset link is invalid.", variant: 'destructive'});
         return;
-      }
+    }
 
-      const result = await resetPassword({
-        email: emailToUse!, 
-        newPassword: values.newPassword,
-        confirmNewPassword: values.confirmNewPassword,
-        // oobCode: oobCode, // TODO: Pass oobCode to action and handle it there
-      });
+    startTransition(async () => {
+      const result = await resetPasswordWithOobCode(oobCode, values.newPassword);
 
       if (result.success) {
         toast({
           title: 'Password Reset Successful!',
           description: result.message || 'You can now log in with your new password.',
         });
-        // TODO: Update lastPasswordChangeDate in userProfile context if applicable
         router.push('/login');
       } else {
         setError(result.error || 'An unknown error occurred.');
@@ -118,26 +87,6 @@ export default function ResetPasswordForm({ oobCode, isForcedReset = false }: Re
         </div>
       )}
       
-      {(emailFromQuery || (isForcedReset && user?.email)) && !oobCode && (
-        <div className="space-y-2">
-            <Label htmlFor="email-reset">Email</Label>
-            <Input
-            id="email-reset"
-            type="email"
-            readOnly 
-            disabled
-            className="bg-muted/50 cursor-not-allowed"
-            // {...form.register('email')} // Registering causes issues if trying to set value manually too
-            value={form.getValues('email')}
-            />
-            {form.formState.errors.email && (
-              <p className="text-sm text-destructive mt-1">{form.formState.errors.email.message}</p>
-            )}
-        </div>
-      )}
-
-      {/* TODO: If oobCode is present, you might not need to show email, or show it after verifying code */}
-
       <div className="space-y-2">
         <Label htmlFor="newPassword">New Password</Label>
         <div className="relative">
@@ -146,10 +95,10 @@ export default function ResetPasswordForm({ oobCode, isForcedReset = false }: Re
             type={showNewPassword ? 'text' : 'password'}
             placeholder="••••••••"
             {...form.register('newPassword')}
-            disabled={isPending}
+            disabled={isPending || !oobCode}
             autoComplete="new-password"
             />
-            <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent" onClick={() => setShowNewPassword(!showNewPassword)} disabled={isPending} aria-label={showNewPassword ? "Hide new password" : "Show new password"}>
+            <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent" onClick={() => setShowNewPassword(!showNewPassword)} disabled={isPending || !oobCode}>
             {showNewPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </Button>
         </div>
@@ -166,10 +115,10 @@ export default function ResetPasswordForm({ oobCode, isForcedReset = false }: Re
             type={showConfirmPassword ? 'text' : 'password'}
             placeholder="••••••••"
             {...form.register('confirmNewPassword')}
-            disabled={isPending}
+            disabled={isPending || !oobCode}
             autoComplete="new-password"
             />
-            <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent" onClick={() => setShowConfirmPassword(!showConfirmPassword)} disabled={isPending} aria-label={showConfirmPassword ? "Hide confirm new password" : "Show confirm new password"}>
+            <Button type="button" variant="ghost" size="sm" className="absolute right-0 top-0 h-full px-3 py-2 hover:bg-transparent" onClick={() => setShowConfirmPassword(!showConfirmPassword)} disabled={isPending || !oobCode}>
             {showConfirmPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
             </Button>
         </div>
@@ -181,7 +130,7 @@ export default function ResetPasswordForm({ oobCode, isForcedReset = false }: Re
          Password must be at least 8 characters, include one uppercase letter, one number, and one special character.
        </p>
 
-      <Button type="submit" className="w-full" disabled={isPending}>
+      <Button type="submit" className="w-full" disabled={isPending || !oobCode}>
         {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Reset Password'}
       </Button>
     </form>
