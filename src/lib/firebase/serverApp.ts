@@ -1,10 +1,11 @@
+
 'use server';
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { cookies } from 'next/headers';
-import admin from 'firebase-admin';
+const admin = require('firebase-admin');
 
 // --- Admin SDK Initialization ---
 // Using namespaced import `admin` to avoid module resolution conflicts.
