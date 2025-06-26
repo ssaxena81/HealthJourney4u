@@ -1,9 +1,10 @@
-// [2025-06-26] COMMENT: This file is being created as a server-side redirect.
-// [2025-06-26] COMMENT: The purpose is to resolve a routing conflict with the main public landing page at `src/app/page.tsx`.
-// [2025-06-26] COMMENT: Any authenticated user landing on the root path `/` within this route group will be immediately and correctly redirected to the dashboard.
+// [2024-08-01] COMMENT: This file acts as a server-side redirect to resolve a routing conflict.
+// [2024-08-01] COMMENT: Next.js can be confused by having two root pages: `src/app/page.tsx` and `src/app/(app)/page.tsx`.
+// [2024-08-01] COMMENT: While `src/app/page.tsx` handles the initial redirect for logged-in users, this file acts as a failsafe.
+// [2024-08-01] COMMENT: Any authenticated user somehow routed here will be immediately and correctly redirected to the dashboard, preventing a 404 error.
 import { redirect } from 'next/navigation';
 
 export default function AppRootPage() {
-  // [2025-06-26] COMMENT: The redirect function from Next.js provides a clean, server-side redirect, preventing the 404 error.
+  // This server-side redirect is the most reliable way to handle this routing edge case.
   redirect('/dashboard');
 }
