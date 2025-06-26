@@ -1,20 +1,23 @@
 
-import { NextResponse } from 'next/server';
-// cookies import is no longer needed here for setting
+import { NextResponse, type NextRequest } from 'next/server';
 import { randomBytes } from 'crypto';
 
 const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 
-export async function GET() { // Make async if other async operations are needed, but not for just setting cookies on response
+export async function GET(request: NextRequest) {
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID_WEB; // Use Web Client ID
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9004'; // Corrected fallback
   const oauthStateSecret = process.env.OAUTH_STATE_SECRET; // Re-use for consistency if desired, or generate unique
 
-  if (!clientId || !appUrl || !oauthStateSecret) {
-    console.error("Google OAuth (Web) configuration is missing in environment variables for connect route. Required: NEXT_PUBLIC_GOOGLE_CLIENT_ID_WEB, NEXT_PUBLIC_APP_URL, OAUTH_STATE_SECRET");
+  // Dynamically determine the app URL from request headers for robust proxy support
+  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  const host = request.headers.get('host');
+
+  if (!clientId || !oauthStateSecret || !host) {
+    console.error("Google OAuth (Web) configuration is missing or host could not be determined. Required: NEXT_PUBLIC_GOOGLE_CLIENT_ID_WEB, OAUTH_STATE_SECRET, host header.");
     return NextResponse.json({ error: 'Server configuration error for Google OAuth.' }, { status: 500 });
   }
 
+  const appUrl = `${protocol}://${host}`;
   const redirectUri = `${appUrl}/api/auth/googlefit/callback`;
   const state = randomBytes(16).toString('hex');
 

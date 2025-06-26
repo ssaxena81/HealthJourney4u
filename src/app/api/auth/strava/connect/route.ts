@@ -1,18 +1,21 @@
 
-import { NextResponse } from 'next/server';
-// cookies import is no longer needed here for setting
+import { NextResponse, type NextRequest } from 'next/server';
 import { randomBytes } from 'crypto';
 
-export async function GET() { // Make async if other async operations are needed
+export async function GET(request: NextRequest) {
   const clientId = process.env.NEXT_PUBLIC_STRAVA_CLIENT_ID;
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9004'; // Corrected fallback
   const oauthStateSecret = process.env.OAUTH_STATE_SECRET;
 
-  if (!clientId || !appUrl || !oauthStateSecret) {
-    console.error("Strava OAuth configuration is missing in environment variables (connect route).");
+  // Dynamically determine the app URL from request headers for robust proxy support
+  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  const host = request.headers.get('host');
+
+  if (!clientId || !oauthStateSecret || !host) {
+    console.error("Strava OAuth configuration is missing or host could not be determined. Required: NEXT_PUBLIC_STRAVA_CLIENT_ID, OAUTH_STATE_SECRET, host header.");
     return NextResponse.json({ error: 'Server configuration error for Strava OAuth.' }, { status: 500 });
   }
 
+  const appUrl = `${protocol}://${host}`;
   const redirectUri = `${appUrl}/api/auth/strava/callback`;
   
   const state = randomBytes(16).toString('hex');

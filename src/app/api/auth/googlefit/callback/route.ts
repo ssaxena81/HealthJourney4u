@@ -21,10 +21,20 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9004'; // Corrected fallback
-  const profileUrl = `${appUrl}/profile`;
+  // Dynamically determine the app URL from request headers for robust proxy support
+  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  const host = request.headers.get('host');
 
-  const cookieStore = await cookies();
+  if (!host) {
+      console.error("[Google Fit Callback] Cannot determine host from headers.");
+      return NextResponse.redirect('/profile?googlefit_error=internal_server_error');
+  }
+
+  const appUrl = `${protocol}://${host}`;
+  const profileUrl = `${appUrl}/profile`;
+  const redirectUri = `${appUrl}/api/auth/googlefit/callback`;
+
+  const cookieStore = cookies();
   const storedState = cookieStore.get('google_oauth_state')?.value;
   cookieStore.delete('google_oauth_state'); // Clean up state cookie
 
@@ -45,8 +55,7 @@ export async function GET(request: NextRequest) {
 
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID_WEB;
   const clientSecret = process.env.GOOGLE_CLIENT_SECRET_WEB;
-  const redirectUri = `${appUrl}/api/auth/googlefit/callback`;
-
+  
   if (!clientId || !clientSecret) {
     console.error('[Google Fit Callback] Google Client ID or Secret for Web is not configured.');
     return NextResponse.redirect(`${profileUrl}?googlefit_error=server_config_error`);

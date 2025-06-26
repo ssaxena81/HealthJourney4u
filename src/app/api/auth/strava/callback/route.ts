@@ -12,10 +12,19 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9004'; // Corrected fallback
+  // Dynamically determine the app URL from request headers for robust proxy support
+  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  const host = request.headers.get('host');
+
+  if (!host) {
+      console.error("[Strava Callback] Cannot determine host from headers.");
+      return NextResponse.redirect('/profile?strava_error=internal_server_error');
+  }
+
+  const appUrl = `${protocol}://${host}`;
   const profileUrl = `${appUrl}/profile`;
 
-  const cookieStore = await cookies();
+  const cookieStore = cookies();
   const storedState = cookieStore.get('strava_oauth_state')?.value;
   cookieStore.delete('strava_oauth_state'); // Clean up state cookie
 

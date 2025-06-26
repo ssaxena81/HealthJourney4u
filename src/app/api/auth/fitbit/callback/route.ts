@@ -33,27 +33,17 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  // [2024-08-01] COMMENT: The dynamic header logic has been removed as it was unreliable and causing errors.
-  // const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
-  // const host = request.headers.get('host');
-  // if (!host) {
-  //   console.error("Fitbit callback failed: could not determine host from request headers.");
-  //   return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_host');
-  // }
+  // Dynamically determine the app URL from request headers for robust proxy support
+  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  const host = request.headers.get('host');
   
-  // [2024-08-01] UPDATE: Re-instating the use of the NEXT_PUBLIC_APP_URL environment variable for consistency.
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-
-  // [2024-08-01] UPDATE: The validation now correctly checks for the required environment variable.
-  if (!appUrl) {
-    console.error("Fitbit OAuth configuration is missing (callback route). Required: NEXT_PUBLIC_APP_URL.");
-    return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_app_url');
+  if (!host) {
+    console.error("Fitbit callback failed: could not determine host from request headers.");
+    // Can't redirect to a dynamic URL if host is missing, so use a hardcoded relative path
+    return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_host');
   }
   
-  // [2024-08-01] COMMENT: Dynamic URL construction is removed.
-  // const appUrl = `${protocol}://${host}`;
-  
-  // [2024-08-01] UPDATE: Construct the profile and redirect URIs from the reliable environment variable.
+  const appUrl = `${protocol}://${host}`;
   const profileUrl = `${appUrl}/profile`;
   const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
 
@@ -93,7 +83,6 @@ export async function GET(request: NextRequest) {
       body: new URLSearchParams({
         clientId: clientId,
         grant_type: 'authorization_code',
-        // [2024-08-01] UPDATE: Use the redirectUri built from the environment variable.
         redirect_uri: redirectUri, 
         code: code,
       }),

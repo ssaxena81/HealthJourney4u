@@ -3,26 +3,18 @@ import { NextResponse, type NextRequest } from 'next/server';
 import { randomBytes } from 'crypto';
 
 export async function GET(request: NextRequest) {
-  // [2024-08-01] UPDATE: Restoring the use of the environment variable for reliability.
   const clientId = process.env.NEXT_PUBLIC_FITBIT_CLIENT_ID;
-  // [2024-08-01] UPDATE: Re-instating the use of NEXT_PUBLIC_APP_URL to ensure a consistent and valid redirect URI.
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
-  
-  // [2024-08-01] COMMENT: The dynamic header logic has been removed as it was causing the invalid_redirect_uri error.
-  // const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
-  // const host = request.headers.get('host');
 
-  // [2024-08-01] UPDATE: The check now correctly validates the necessary environment variables.
-  if (!clientId || !appUrl) {
-    // [2024-08-01] UPDATE: Adding new error message for the dynamic host requirement.
-    console.error("Fitbit OAuth configuration is missing (connect route). Required: NEXT_PUBLIC_FITBIT_CLIENT_ID, NEXT_PUBLIC_APP_URL.");
+  // Dynamically determine the app URL from request headers for robust proxy support
+  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  const host = request.headers.get('host');
+
+  if (!clientId || !host) {
+    console.error("Fitbit OAuth configuration is missing or host could not be determined. Required: NEXT_PUBLIC_FITBIT_CLIENT_ID, host header.");
     return NextResponse.json({ error: 'Server configuration error for Fitbit OAuth.' }, { status: 500 });
   }
   
-  // [2024-08-01] COMMENT: The dynamic URL construction is removed.
-  // const appUrl = `${protocol}://${host}`;
-  
-  // [2024-08-01] UPDATE: The redirect URI is now built from the reliable environment variable.
+  const appUrl = `${protocol}://${host}`;
   const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
   const state = randomBytes(16).toString('hex');
   

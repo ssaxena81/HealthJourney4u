@@ -29,10 +29,20 @@ export async function GET(request: NextRequest) {
   // Withings might also return an 'error' parameter or a non-zero status in the body
   const withingsError = searchParams.get('error'); 
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:9004'; // Corrected fallback
-  const profileUrl = `${appUrl}/profile`;
+  // Dynamically determine the app URL from request headers for robust proxy support
+  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  const host = request.headers.get('host');
 
-  const cookieStore = await cookies();
+  if (!host) {
+      console.error("[Withings Callback] Cannot determine host from headers.");
+      return NextResponse.redirect('/profile?withings_error=internal_server_error');
+  }
+
+  const appUrl = `${protocol}://${host}`;
+  const profileUrl = `${appUrl}/profile`;
+  const redirectUri = `${appUrl}/api/auth/withings/callback`;
+
+  const cookieStore = cookies();
   const storedState = cookieStore.get('withings_oauth_state')?.value;
   cookieStore.delete('withings_oauth_state');
 
@@ -53,8 +63,7 @@ export async function GET(request: NextRequest) {
 
   const clientId = process.env.NEXT_PUBLIC_WITHINGS_CLIENT_ID;
   const clientSecret = process.env.WITHINGS_CLIENT_SECRET; // This is the "Consumer Secret" from Withings
-  const redirectUri = `${appUrl}/api/auth/withings/callback`;
-
+  
   if (!clientId || !clientSecret) {
     console.error('[Withings Callback] Withings client ID or secret is not configured.');
     return NextResponse.redirect(`${profileUrl}?withings_error=server_config_error`);
