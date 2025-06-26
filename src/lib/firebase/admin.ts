@@ -1,5 +1,4 @@
-// This file was part of a previous attempt to fix a build error and is no longer needed.
-// Its logic has been consolidated into /src/lib/firebase/serverApp.ts.
-// It is left with an empty export to ensure it's a valid module and
-// to prevent any potential build conflicts.
+// This file is intentionally left blank to resolve a build issue.
+// Its presence with a name matching a node_module package was causing a module resolution conflict.
+// By making it an empty module, we ensure the build system correctly resolves to the node_modules package.
 export {};

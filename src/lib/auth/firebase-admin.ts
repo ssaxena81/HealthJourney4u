@@ -1,5 +1,4 @@
-// This file is intentionally left empty with an export statement
-// to make it a valid module and prevent it from conflicting with
-// the 'firebase-admin' package in node_modules. This resolves a
-// persistent build error in Next.js.
+// This file is intentionally left blank to resolve a build issue.
+// Its presence with a name matching a node_module package was causing a module resolution conflict.
+// By making it an empty module, we ensure the build system correctly resolves to the node_modules package.
 export {};
