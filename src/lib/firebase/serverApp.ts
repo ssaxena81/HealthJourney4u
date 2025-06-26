@@ -1,14 +1,12 @@
-
 'use server';
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { cookies } from 'next/headers';
-const admin = require('firebase-admin');
+import admin from 'firebase-admin';
 
 // --- Admin SDK Initialization ---
-// Using namespaced import `admin` to avoid module resolution conflicts.
 const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
 
 if (!admin.apps.length) {
@@ -28,7 +26,7 @@ if (!admin.apps.length) {
 
 const adminAuth = admin.auth();
 const adminDb = admin.firestore();
-
+// --- End Admin SDK Initialization ---
 
 // --- Client SDK for server-side operations (e.g., in Server Actions) ---
 const firebaseConfigServer = {
