@@ -1,3 +1,4 @@
+
 // [2024-08-01] COMMENT: This file has been converted to a server component to provide a more robust redirect mechanism.
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
