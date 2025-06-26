@@ -33,16 +33,32 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  // Dynamically determine the app URL from request headers
-  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
-  const host = request.headers.get('host');
-  if (!host) {
-      // This is an unlikely edge case, but good to handle. Redirect to a generic error on the profile page.
-      return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_host');
+  // [2024-08-01] COMMENT: The dynamic URL construction from headers was unreliable and is being removed.
+  // // Dynamically determine the app URL from request headers
+  // const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  // const host = request.headers.get('host');
+  // if (!host) {
+  //     // This is an unlikely edge case, but good to handle. Redirect to a generic error on the profile page.
+  //     return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_host');
+  // }
+  
+  // [2024-08-01] ADD: Use the reliable environment variable for the base URL to ensure consistency.
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+
+  // [2024-08-01] ADD: Validate that the appUrl is configured on the server.
+  if (!appUrl) {
+    // [2024-08-01] ADD: Log a specific error and redirect if the URL is not set.
+    console.error("Fitbit OAuth configuration is missing (callback route). Required: NEXT_PUBLIC_APP_URL.");
+    // [2024-08-01] ADD: Redirect to a generic error on the profile page.
+    return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_app_url');
   }
-  const appUrl = `${protocol}://${host}`;
+  
+  // [2024-08-01] COMMENT: The old dynamic appUrl is commented out.
+  // const appUrl = `${protocol}://${host}`;
+  
+  // [2024-08-01] UPDATE: Construct the profile and redirect URIs from the reliable appUrl.
   const profileUrl = `${appUrl}/profile`;
-  const redirectUri = `${appUrl}/api/auth/fitbit/callback`; // This must match exactly what was sent in the connect step.
+  const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
 
   const cookieStore = cookies();
   const storedState = cookieStore.get('fitbit_oauth_state')?.value;
@@ -80,7 +96,8 @@ export async function GET(request: NextRequest) {
       body: new URLSearchParams({
         clientId: clientId,
         grant_type: 'authorization_code',
-        redirect_uri: redirectUri, // Use the dynamically generated redirectUri
+        // [2024-08-01] UPDATE: Use the consistently constructed redirectUri to fix the error.
+        redirect_uri: redirectUri, 
         code: code,
       }),
     });
