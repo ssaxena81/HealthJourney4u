@@ -1,16 +1,21 @@
+
 'use server';
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { cookies } from 'next/headers';
+
+// --- Admin SDK Initialization ---
+// Using modular imports to be explicit and avoid potential conflicts.
 import { initializeApp as initializeAdminApp, getApps as getAdminApps, credential, type App as AdminApp } from 'firebase-admin/app';
 import { getAuth as getAdminAuth } from 'firebase-admin/auth';
 import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 
-// --- Admin SDK Initialization ---
 const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
 let adminApp: AdminApp;
+
+// This check prevents re-initialization in hot-reload environments
 if (!getAdminApps().length) {
   if (!serviceAccountKey) {
     throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set. Admin SDK initialization failed.');
@@ -19,14 +24,16 @@ if (!getAdminApps().length) {
     adminApp = initializeAdminApp({
       credential: credential.cert(JSON.parse(serviceAccountKey)),
     });
-    console.log("[serverApp.ts] Firebase Admin SDK initialized.");
+    console.log("[serverApp.ts] Firebase Admin SDK initialized successfully.");
   } catch (error: any) {
     console.error('Error initializing Firebase Admin SDK in serverApp.ts:', error);
-    throw new Error(`Could not initialize Firebase Admin SDK. Check service account key. Error: ${error.message}`);
+    // Provide a more specific error to help with debugging service account key issues.
+    throw new Error(`Could not initialize Firebase Admin SDK. Please check your FIREBASE_SERVICE_ACCOUNT_KEY. Error: ${error.message}`);
   }
 } else {
     adminApp = getAdminApps()[0];
 }
+
 const adminAuth = getAdminAuth(adminApp);
 const adminDb = getAdminFirestore(adminApp);
 
@@ -42,12 +49,12 @@ const firebaseConfigServer = {
 };
 
 let app: FirebaseApp;
-const appName = 'firebase-server-app';
+const appName = 'firebase-server-client-sdk'; // Use a unique name to avoid conflicts
 
-try {
-  app = getApp(appName);
-} catch (error) {
+if (!getApps().some(a => a.name === appName)) {
   app = initializeApp(firebaseConfigServer, appName);
+} else {
+  app = getApp(appName);
 }
 
 const auth: Auth = getAuth(app);
@@ -55,7 +62,7 @@ const db: Firestore = getFirestore(app);
 
 /**
  * Verifies the Firebase session cookie from the request and returns the decoded user token.
- * Requires Firebase Admin SDK to be initialized.
+ * This function now resides here, as the single source for server auth utilities.
  * @param cookieStore The cookie store from the incoming request.
  * @returns A promise that resolves to the decoded user token or null if invalid.
  */
@@ -67,7 +74,6 @@ export async function getFirebaseUserFromCookie(cookieStore: ReturnType<typeof c
   }
 
   try {
-    // Use the adminAuth instance initialized in this file
     const decodedToken = await adminAuth.verifySessionCookie(sessionCookie, true);
     return decodedToken;
   } catch (error) {

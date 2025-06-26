@@ -1,3 +1,3 @@
 // This file is intentionally left empty.
-// Its logic has been moved to src/lib/firebase/admin-sdk.ts to resolve a build error.
+// Its logic has been consolidated into src/lib/firebase/serverApp.ts to resolve a build error.
 export {};
