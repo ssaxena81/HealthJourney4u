@@ -5,9 +5,38 @@ import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { cookies } from 'next/headers';
+import {
+  initializeApp as initializeAdminApp,
+  getApps as getAdminApps,
+  credential,
+  type App as AdminApp,
+} from 'firebase-admin/app';
+import { getAuth as getAdminAuth } from 'firebase-admin/auth';
+import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
 
-// Import pre-initialized admin instances from the isolated admin.ts file
-import { adminAuth, adminDb } from './admin';
+// --- Firebase Admin SDK Initialization ---
+const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+
+let adminApp: AdminApp;
+if (!getAdminApps().length) {
+  if (!serviceAccountKey) {
+    throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set. Admin SDK initialization failed.');
+  }
+  try {
+    adminApp = initializeAdminApp({
+      credential: credential.cert(JSON.parse(serviceAccountKey)),
+    });
+    console.log("[serverApp.ts] Firebase Admin SDK initialized.");
+  } catch (error: any) {
+    console.error('Error initializing Firebase Admin SDK:', error);
+    throw new Error(`Could not initialize Firebase Admin SDK. Check service account key. Error: ${error.message}`);
+  }
+} else {
+    adminApp = getAdminApps()[0];
+}
+const adminAuth = getAdminAuth(adminApp);
+const adminDb = getAdminFirestore(adminApp);
+
 
 // --- Client SDK for server-side operations (e.g., in Server Actions) ---
 const firebaseConfigServer = {
@@ -45,14 +74,15 @@ export async function getFirebaseUserFromCookie(cookieStore: ReturnType<typeof c
   }
 
   try {
-    // Use the pre-initialized adminAuth instance directly from ./admin
+    // Use the pre-initialized adminAuth instance directly from this file
     const decodedToken = await adminAuth.verifySessionCookie(sessionCookie, true);
     return decodedToken;
   } catch (error) {
     // This is expected if the cookie is invalid or expired.
-    // console.error('Error verifying session cookie:', error); 
+    // console.error('Error verifying session cookie:', error);
     return null;
   }
 }
 
+// Export everything needed by other server-side files
 export { auth, db, adminAuth, adminDb };
