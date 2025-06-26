@@ -1,36 +1,22 @@
-
-'use client';
-
-import { useAuth } from '@/hooks/useAuth';
-import { useRouter } from 'next/navigation';
-import { useEffect } from 'react';
-import { Loader2 } from 'lucide-react';
+// [2024-08-01] COMMENT: This file has been converted to a server component to provide a more robust redirect mechanism.
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
+// [2024-08-01] COMMENT: This utility is used to verify the user's session cookie on the server.
+import { getFirebaseUserFromCookie } from '@/lib/auth/server-auth-utils';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
-export default function RootPage() {
-  const { user, loading } = useAuth();
-  const router = useRouter();
+export default async function RootPage() {
+  // [2024-08-01] COMMENT: Check for the user's session cookie on the server.
+  const user = await getFirebaseUserFromCookie(cookies());
 
-  useEffect(() => {
-    // If auth state is resolved and we have a user, redirect to the authenticated section.
-    // The (app) layout will then handle redirecting to /dashboard.
-    if (!loading && user) {
-      router.replace('/dashboard');
-    }
-  }, [user, loading, router]);
-
-  // While checking auth state or if redirect is pending for a logged-in user, show a loader.
-  if (loading || user) {
-    return (
-      <div className="flex min-h-screen w-full items-center justify-center bg-background p-4">
-        <Loader2 className="h-12 w-12 animate-spin text-primary" />
-        <p className="ml-4 text-lg text-foreground">Loading...</p>
-      </div>
-    );
+  if (user) {
+    // [2024-08-01] COMMENT: If a user session is found, redirect immediately to the dashboard. This server-side redirect is faster and more reliable than the previous client-side approach.
+    redirect('/dashboard');
   }
-  
-  // Render the public landing page only if the user is confirmed to be logged out.
+
+  // [2024-08-01] COMMENT: If no user session is found, render the public landing page for logged-out users.
+  // [2024-08-01] COMMENT: The original client-side logic with useEffect and useRouter has been removed.
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8 text-center">
         <h1 className="text-4xl font-bold text-primary mb-4">Welcome to Health Timeline</h1>

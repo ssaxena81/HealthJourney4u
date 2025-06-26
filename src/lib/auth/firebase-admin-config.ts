@@ -1,7 +1,8 @@
+'use server';
 
 import * as admin from 'firebase-admin';
 
-export function initFirebaseAdminApp() {
+export async function initFirebaseAdminApp() {
     const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
     if (!serviceAccountKey) {
         throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set.');

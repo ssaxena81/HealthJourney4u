@@ -1,11 +1,13 @@
+'use server';
 
 import { initFirebaseAdminApp } from "./firebase-admin-config";
+import type { App } from 'firebase-admin/app';
 
-let app: ReturnType<typeof initFirebaseAdminApp>;
+let app: App;
 
-export function getFirebaseAdminApp() {
+export async function getFirebaseAdminApp() {
     if (!app) {
-        app = initFirebaseAdminApp();
+        app = await initFirebaseAdminApp();
     }
     return app;
 }

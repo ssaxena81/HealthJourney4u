@@ -1,4 +1,3 @@
-
 'use server';
 
 import { auth } from 'firebase-admin';
@@ -15,7 +14,7 @@ export async function getFirebaseUserFromCookie(cookieStore: ReturnType<typeof c
   }
 
   try {
-    const app = getFirebaseAdminApp();
+    const app = await getFirebaseAdminApp();
     const decodedToken = await auth(app).verifySessionCookie(sessionCookie, true);
     return decodedToken;
   } catch (error) {
