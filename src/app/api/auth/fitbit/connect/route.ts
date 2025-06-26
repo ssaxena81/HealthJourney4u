@@ -5,6 +5,7 @@ import { randomBytes } from 'crypto';
 export async function GET(request: NextRequest) {
   const clientId = process.env.NEXT_PUBLIC_FITBIT_CLIENT_ID;
 
+  // Dynamically determine the app URL from request headers
   const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
   const host = request.headers.get('host');
 

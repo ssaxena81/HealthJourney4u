@@ -33,18 +33,20 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
+  // Dynamically determine the app URL from request headers
   const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
   const host = request.headers.get('host');
   if (!host) {
+      // This is an unlikely edge case, but good to handle. Redirect to a generic error on the profile page.
       return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_host');
   }
   const appUrl = `${protocol}://${host}`;
   const profileUrl = `${appUrl}/profile`;
-  const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
+  const redirectUri = `${appUrl}/api/auth/fitbit/callback`; // This must match exactly what was sent in the connect step.
 
   const cookieStore = cookies();
   const storedState = cookieStore.get('fitbit_oauth_state')?.value;
-  cookieStore.delete('fitbit_oauth_state');
+  cookieStore.delete('fitbit_oauth_state'); // Always clean up the state cookie
 
   if (error) {
     console.error('[Fitbit Callback] Error from Fitbit:', error);
@@ -78,7 +80,7 @@ export async function GET(request: NextRequest) {
       body: new URLSearchParams({
         clientId: clientId,
         grant_type: 'authorization_code',
-        redirect_uri: redirectUri,
+        redirect_uri: redirectUri, // Use the dynamically generated redirectUri
         code: code,
       }),
     });
@@ -94,14 +96,20 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(`${profileUrl}?fitbit_error=incomplete_token_data`);
     }
 
+    // Since this is a server route, we need to get the user from their session cookie
     const firebaseUser = await getFirebaseUserFromCookie(cookies());
     if (!firebaseUser) {
+        // This can happen if the user's session expires during the OAuth flow.
         return NextResponse.redirect(`${profileUrl}?fitbit_error=auth_required`);
     }
 
+    // Now we have the user's UID, we can save their tokens securely
     await setFitbitTokens(firebaseUser.uid, data.access_token, data.refresh_token, data.expires_in);
+    
+    // Also, update their profile to show the connection
     await addFitbitConnectionToProfile(firebaseUser.uid);
     
+    // Redirect to the profile page with a success indicator
     return NextResponse.redirect(`${profileUrl}?fitbit_connected=true`);
 
   } catch (err: any) {
