@@ -5,7 +5,7 @@ import { cookies } from 'next/headers';
 import { setFitbitTokens } from '@/lib/fitbit-auth-utils';
 import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { db } from '@/lib/firebase/serverApp';
-import { getFirebaseUserFromCookie } from '@/lib/auth/server-auth-utils';
+import { getFirebaseUserFromCookie } from '@/lib/firebase/serverApp';
 
 async function addFitbitConnectionToProfile(userId: string) {
     const userRef = doc(db, 'users', userId);

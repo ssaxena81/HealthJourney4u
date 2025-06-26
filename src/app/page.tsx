@@ -2,7 +2,7 @@
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
 // [2024-08-01] COMMENT: This utility is used to verify the user's session cookie on the server.
-import { getFirebaseUserFromCookie } from '@/lib/auth/server-auth-utils';
+import { getFirebaseUserFromCookie } from '@/lib/firebase/serverApp';
 import { Button } from '@/components/ui/button';
 import Link from 'next/link';
 
