@@ -23,6 +23,7 @@ export async function GET(request: NextRequest) {
 
   const appUrl = `${protocol}://${host}`;
   const profileUrl = `${appUrl}/profile`;
+  const redirectUri = `${appUrl}/api/auth/strava/callback`; // Define redirectUri for the token exchange
 
   const cookieStore = cookies();
   const storedState = cookieStore.get('strava_oauth_state')?.value;
@@ -63,6 +64,7 @@ export async function GET(request: NextRequest) {
         client_secret: clientSecret,
         code: code,
         grant_type: 'authorization_code',
+        // Note: Strava does not require redirect_uri in the token exchange request
       }),
     });
 
