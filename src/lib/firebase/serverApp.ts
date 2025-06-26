@@ -1,11 +1,13 @@
 
 'use server';
 
+import 'server-only';
+import admin from 'firebase-admin';
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { cookies } from 'next/headers';
-import admin from 'firebase-admin';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 
 // --- Admin SDK Initialization ---
 const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
@@ -57,7 +59,7 @@ const db: Firestore = getFirestore(app);
  * @param cookieStore The cookie store from the incoming request.
  * @returns A promise that resolves to the decoded user token or null if invalid.
  */
-export async function getFirebaseUserFromCookie(cookieStore: ReturnType<typeof cookies>) {
+export async function getFirebaseUserFromCookie(cookieStore: ReturnType<typeof cookies>): Promise<DecodedIdToken | null> {
   const sessionCookie = cookieStore.get('__session')?.value;
 
   if (!sessionCookie) {
