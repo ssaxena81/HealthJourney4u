@@ -1,41 +1,32 @@
-
 'use server';
 
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { cookies } from 'next/headers';
+import admin from 'firebase-admin';
 
 // --- Admin SDK Initialization ---
-// Using modular imports to be explicit and avoid potential conflicts.
-import { initializeApp as initializeAdminApp, getApps as getAdminApps, credential, type App as AdminApp } from 'firebase-admin/app';
-import { getAuth as getAdminAuth } from 'firebase-admin/auth';
-import { getFirestore as getAdminFirestore } from 'firebase-admin/firestore';
-
+// Using namespaced import `admin` to avoid module resolution conflicts.
 const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-let adminApp: AdminApp;
 
-// This check prevents re-initialization in hot-reload environments
-if (!getAdminApps().length) {
+if (!admin.apps.length) {
   if (!serviceAccountKey) {
     throw new Error('FIREBASE_SERVICE_ACCOUNT_KEY environment variable is not set. Admin SDK initialization failed.');
   }
   try {
-    adminApp = initializeAdminApp({
-      credential: credential.cert(JSON.parse(serviceAccountKey)),
+    admin.initializeApp({
+      credential: admin.credential.cert(JSON.parse(serviceAccountKey)),
     });
     console.log("[serverApp.ts] Firebase Admin SDK initialized successfully.");
   } catch (error: any) {
     console.error('Error initializing Firebase Admin SDK in serverApp.ts:', error);
-    // Provide a more specific error to help with debugging service account key issues.
     throw new Error(`Could not initialize Firebase Admin SDK. Please check your FIREBASE_SERVICE_ACCOUNT_KEY. Error: ${error.message}`);
   }
-} else {
-    adminApp = getAdminApps()[0];
 }
 
-const adminAuth = getAdminAuth(adminApp);
-const adminDb = getAdminFirestore(adminApp);
+const adminAuth = admin.auth();
+const adminDb = admin.firestore();
 
 
 // --- Client SDK for server-side operations (e.g., in Server Actions) ---
