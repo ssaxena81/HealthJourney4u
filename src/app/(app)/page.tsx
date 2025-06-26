@@ -1,3 +1,9 @@
+/*
+[2024-08-02] DELETE: This entire file's content is being commented out to resolve a persistent routing conflict.
+[2024-08-02] DELETE: Having a page file here (`/app/(app)/page.tsx`) conflicts with the root `/app/page.tsx`, causing 404 errors.
+[2024-08-02] DELETE: By neutralizing this file, we make `/app/page.tsx` the single source of truth for the root path.
+[2024-08-02] DELETE: The logic within `/app/page.tsx` already handles redirecting authenticated users to the dashboard.
+
 // [2024-08-01] ADD: Importing the redirect function from next/navigation for server-side redirection.
 import { redirect } from 'next/navigation';
 
@@ -12,3 +18,4 @@ export default function AuthenticatedRootPage() {
   // [2024-08-01] ADD: Returning null as the redirect will happen before any rendering.
   return null;
 }
+*/
