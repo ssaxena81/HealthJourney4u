@@ -16,8 +16,39 @@ export default async function RootPage() {
     redirect('/dashboard');
   }
 
-  // [2024-08-01] COMMENT: If no user session is found, render the public landing page for logged-out users.
   // [2024-08-01] COMMENT: The original client-side logic with useEffect and useRouter has been removed.
+  /*
+  'use client';
+
+  import { useEffect } from 'react';
+  import { useRouter } from 'next/navigation';
+  import { useAuth } from '@/hooks/useAuth';
+  import { Button } from '@/components/ui/button';
+  import Link from 'next/link';
+
+  export default function RootPage() {
+    const { user, loading } = useAuth();
+    const router = useRouter();
+
+    useEffect(() => {
+      if (loading) {
+        return; // Wait until loading is false
+      }
+      if (user) {
+        router.replace('/dashboard');
+      }
+    }, [user, loading, router]);
+    // This part is now handled server-side
+    if (loading || user) {
+      return (
+        <div className="flex min-h-screen w-full items-center justify-center">
+          <p>Loading...</p>
+        </div>
+      );
+    }
+  */
+
+  // [2024-08-01] COMMENT: If no user session is found, render the public landing page for logged-out users.
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-background p-8 text-center">
         <h1 className="text-4xl font-bold text-primary mb-4">Welcome to Health Timeline</h1>
