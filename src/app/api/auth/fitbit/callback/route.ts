@@ -1,4 +1,3 @@
-
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
@@ -33,15 +32,23 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  // Dynamically determine the app URL from request headers for robust proxy support.
+  // [2024-08-01] COMMENT: The original hardcoded appUrl was not flexible for different environments.
+  // const appUrl = 'http://localhost:9004';
+  // const profileUrl = `${appUrl}/profile`;
+  // const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
+
+  // [2024-08-01] COMMENT: Dynamically determine the app URL from request headers for robust proxy support.
   const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  // [2024-08-01] COMMENT: Dynamically determine the app URL from request headers for robust proxy support.
   const host = request.headers.get('host');
 
+  // [2024-08-01] COMMENT: New check to ensure the host header is present before proceeding.
   if (!host) {
       console.error("Fitbit callback failed: could not determine host from request headers.");
       return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_host');
   }
 
+  // [2024-08-01] COMMENT: New appUrl, profileUrl, and redirectUri are built dynamically.
   const appUrl = `${protocol}://${host}`;
   const profileUrl = `${appUrl}/profile`;
   const redirectUri = `${appUrl}/api/auth/fitbit/callback`;

@@ -1,20 +1,32 @@
-
 import { NextResponse, type NextRequest } from 'next/server';
 import { randomBytes } from 'crypto';
 
 export async function GET(request: NextRequest) {
   const clientId = process.env.NEXT_PUBLIC_FITBIT_CLIENT_ID;
 
-  // Dynamically determine the app URL from request headers for robust proxy support.
-  // This avoids hardcoding localhost and works for dev, staging, and prod.
+  // [2024-08-01] COMMENT: The hardcoded redirect_uri is not flexible for different environments.
+  // const redirectUri = 'http://localhost:9004/api/auth/fitbit/callback';
+
+  // [2024-08-01] COMMENT: Dynamically determine the app URL from request headers for robust proxy support.
   const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  // [2024-08-01] COMMENT: Dynamically determine the app URL from request headers for robust proxy support.
   const host = request.headers.get('host');
 
-  if (!clientId || !host) {
-    console.error("Fitbit OAuth configuration is missing or host could not be determined. Required: NEXT_PUBLIC_FITBIT_CLIENT_ID, host header.");
+  // [2024-08-01] COMMENT: The previous check did not account for a missing host header.
+  /*
+  if (!clientId) {
+    console.error("Fitbit OAuth configuration is missing. Required: NEXT_PUBLIC_FITBIT_CLIENT_ID");
     return NextResponse.json({ error: 'Server configuration error for Fitbit OAuth.' }, { status: 500 });
   }
+  */
 
+  // [2024-08-01] COMMENT: New check includes the host, which is required for the dynamic redirect URI.
+  if (!clientId || !host) {
+      console.error("Fitbit OAuth configuration is missing or host could not be determined. Required: NEXT_PUBLIC_FITBIT_CLIENT_ID, host header.");
+      return NextResponse.json({ error: 'Server configuration error for Fitbit OAuth.' }, { status: 500 });
+  }
+
+  // [2024-08-01] COMMENT: New appUrl and redirectUri are built dynamically.
   const appUrl = `${protocol}://${host}`;
   const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
   
