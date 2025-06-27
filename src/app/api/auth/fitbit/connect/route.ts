@@ -1,16 +1,20 @@
+
 import { NextResponse, type NextRequest } from 'next/server';
 import { randomBytes } from 'crypto';
 
 export async function GET(request: NextRequest) {
   const clientId = process.env.NEXT_PUBLIC_FITBIT_CLIENT_ID;
 
-  // [2024-08-01] COMMENT: The hardcoded redirect_uri is not flexible for different environments.
+  // [2024-08-01] COMMENT: The original hardcoded redirect_uri was not flexible for different environments.
   // const redirectUri = 'http://localhost:9004/api/auth/fitbit/callback';
-
+  
+  // [2024-08-01] COMMENT: The previous dynamic URL generation using headers was unreliable and is now commented out.
+  /*
   // [2024-08-01] COMMENT: Dynamically determine the app URL from request headers for robust proxy support.
   const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
   // [2024-08-01] COMMENT: Dynamically determine the app URL from request headers for robust proxy support.
   const host = request.headers.get('host');
+  */
 
   // [2024-08-01] COMMENT: The previous check did not account for a missing host header.
   /*
@@ -21,13 +25,15 @@ export async function GET(request: NextRequest) {
   */
 
   // [2024-08-01] COMMENT: New check includes the host, which is required for the dynamic redirect URI.
-  if (!clientId || !host) {
-      console.error("Fitbit OAuth configuration is missing or host could not be determined. Required: NEXT_PUBLIC_FITBIT_CLIENT_ID, host header.");
+  // [2024-08-01] COMMENT: This check is simplified as `request.nextUrl.host` will be used instead.
+  if (!clientId) {
+      console.error("Fitbit OAuth configuration is missing. Required: NEXT_PUBLIC_FITBIT_CLIENT_ID.");
       return NextResponse.json({ error: 'Server configuration error for Fitbit OAuth.' }, { status: 500 });
   }
 
-  // [2024-08-01] COMMENT: New appUrl and redirectUri are built dynamically.
-  const appUrl = `${protocol}://${host}`;
+  // [2024-08-01] COMMENT: The previous dynamic URL generation using headers was unreliable.
+  // [2024-08-01] COMMENT: This new approach uses `request.nextUrl` to construct the base URL, which is a more stable method within Next.js route handlers.
+  const appUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
   const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
   
   const state = randomBytes(16).toString('hex');

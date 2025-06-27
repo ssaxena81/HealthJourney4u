@@ -1,3 +1,4 @@
+
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
@@ -36,7 +37,9 @@ export async function GET(request: NextRequest) {
   // const appUrl = 'http://localhost:9004';
   // const profileUrl = `${appUrl}/profile`;
   // const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
-
+  
+  // [2024-08-01] COMMENT: The previous dynamic URL generation using headers was unreliable and is now commented out.
+  /*
   // [2024-08-01] COMMENT: Dynamically determine the app URL from request headers for robust proxy support.
   const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
   // [2024-08-01] COMMENT: Dynamically determine the app URL from request headers for robust proxy support.
@@ -47,9 +50,11 @@ export async function GET(request: NextRequest) {
       console.error("Fitbit callback failed: could not determine host from request headers.");
       return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_host');
   }
+  */
 
-  // [2024-08-01] COMMENT: New appUrl, profileUrl, and redirectUri are built dynamically.
-  const appUrl = `${protocol}://${host}`;
+  // [2024-08-01] COMMENT: The previous dynamic URL generation using headers was unreliable.
+  // [2024-08-01] COMMENT: This new approach uses `request.nextUrl` to construct the base URL, which is a more stable method within Next.js route handlers.
+  const appUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
   const profileUrl = `${appUrl}/profile`;
   const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
   
