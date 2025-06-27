@@ -1,8 +1,10 @@
-
 // src/lib/firebase/clientApp.ts
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
 import { getAuth, type Auth } from 'firebase/auth';
-import { getFirestore, type Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
+// [2024-08-01] COMMENT: The enableIndexedDbPersistence import is no longer needed here as persistence is handled in `useAuth.tsx`.
+// import { getFirestore, type Firestore, enableIndexedDbPersistence } from 'firebase/firestore';
+import { getFirestore, type Firestore } from 'firebase/firestore';
+
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -27,6 +29,9 @@ if (typeof window !== 'undefined') {
     auth = getAuth(app);
     db = getFirestore(app);
 
+    // [2024-08-01] COMMENT: The persistence logic has been moved to the AuthProvider in `useAuth.tsx`.
+    // [2024-08-01] COMMENT: Initializing persistence at the top level of a module can cause issues with Next.js rendering.
+    /*
     // Enable persistence to allow offline data access and potentially stabilize the client state.
     enableIndexedDbPersistence(db).catch((err) => {
         if (err.code === 'failed-precondition') {
@@ -39,6 +44,7 @@ if (typeof window !== 'undefined') {
         );
         }
     });
+    */
 } else {
     // On the server, we need to avoid initializing the client app.
     // We can assign dummy objects or handle it gracefully.

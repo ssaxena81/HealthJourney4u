@@ -5,7 +5,8 @@ import React, { useState, useEffect, createContext, useContext, useMemo, useCall
 import { onAuthStateChanged, type User as FirebaseUser, signOut } from 'firebase/auth';
 import { auth as firebaseAuthInstance, db } from '@/lib/firebase/clientApp';
 import type { UserProfile } from '@/types';
-import { doc, getDoc } from 'firebase/firestore';
+// [2024-08-01] COMMENT: Added imports for Firestore persistence.
+import { doc, getDoc, enableIndexedDbPersistence } from 'firebase/firestore';
 
 interface AuthContextType {
   user: FirebaseUser | null;
@@ -23,6 +24,25 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [userProfile, setUserProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // [2024-08-01] COMMENT: This new useEffect hook safely initializes Firestore persistence on the client-side.
+  // [2024-08-01] COMMENT: This prevents potential build errors from running this logic at the module's top level.
+  useEffect(() => {
+    if (typeof window !== 'undefined' && db) {
+        enableIndexedDbPersistence(db).catch((err) => {
+            if (err.code === 'failed-precondition') {
+            console.warn(
+                'Firestore persistence failed: This can happen if you have multiple tabs open.'
+            );
+            } else if (err.code === 'unimplemented') {
+            console.warn(
+                'Firestore persistence failed: Browser does not support this feature.'
+            );
+            }
+        });
+    }
+  }, []); // The empty dependency array ensures this runs only once on mount.
+
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(firebaseAuthInstance, async (fbUser) => {

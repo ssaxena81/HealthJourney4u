@@ -1,12 +1,13 @@
 
 'use client';
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useCallback } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 import AppLayoutClient from '@/components/layout/app-layout-client';
 import { SidebarProvider } from '@/components/ui/sidebar';
+import { useToast } from '@/hooks/use-toast';
 
 export default function AuthenticatedAppLayout({
   children,
@@ -16,6 +17,14 @@ export default function AuthenticatedAppLayout({
   const { user, userProfile, loading: authLoading } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
+  const { toast } = useToast();
+
+  const handleSyncAll = useCallback(async () => {
+    toast({
+      title: 'Sync Not Implemented',
+      description: 'The "Sync Apps" functionality is not yet available.',
+    });
+  }, [toast]);
 
   useEffect(() => {
     if (authLoading) {
@@ -58,7 +67,7 @@ export default function AuthenticatedAppLayout({
   // If we have a user and their profile, render the main app layout
   return (
     <SidebarProvider>
-      <AppLayoutClient>
+      <AppLayoutClient onSyncAllClick={handleSyncAll}>
         {children}
       </AppLayoutClient>
     </SidebarProvider>
