@@ -2,8 +2,8 @@
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // [2025-06-28] COMMENT: Reverting to hardcoded URLs. The rewrites function is being disabled as it was part of the dynamic URL strategy that caused issues.
-  /*
+  // [2025-06-28] COMMENT: Re-enabling the rewrites function. This is the most reliable way to handle the Fitbit callback URL.
+  // [2025-06-28] COMMENT: It maps the public-facing URL (.../callback/fitbit) to the internal file path (.../fitbit/callback), resolving mismatch errors.
   async rewrites() {
     return [
       {
@@ -12,7 +12,6 @@ const nextConfig = {
       },
     ]
   },
-  */
   typescript: {
     // ignoreBuildErrors: true, // Temporarily removed to surface potential issues
   },
