@@ -40,13 +40,14 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
   useEffect(() => {
     const fitbitConnected = searchParams.get('fitbit_connected');
     const fitbitError = searchParams.get('fitbit_error');
+    const googlefitConnected = searchParams.get('googlefit_connected');
+    const googlefitError = searchParams.get('googlefit_error');
 
     if (fitbitConnected) {
       toast({
         title: 'Fitbit Connected!',
         description: 'Your Fitbit account has been successfully linked.',
       });
-      // Use router.replace to clean up the URL without adding to history
       router.replace('/profile', { scroll: false });
     }
     if (fitbitError) {
@@ -57,7 +58,21 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
       });
       router.replace('/profile', { scroll: false });
     }
-    // This effect should only run when searchParams change.
+    if (googlefitConnected) {
+      toast({
+        title: 'Google Fit Connected!',
+        description: 'Your Google Fit account has been successfully linked.',
+      });
+      router.replace('/profile', { scroll: false });
+    }
+    if (googlefitError) {
+      toast({
+        title: 'Google Fit Connection Failed',
+        description: `Error: ${googlefitError}`,
+        variant: 'destructive',
+      });
+      router.replace('/profile', { scroll: false });
+    }
   }, [searchParams, toast, router]);
 
   const handleConnect = async () => {
@@ -77,6 +92,7 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
     const serviceToDisconnect = currentConnections.find(c => c.id === appId);
     if (!serviceToDisconnect) return;
 
+    // TODO: Add logic here to clear tokens from Firestore as well for a full cleanup.
     const result = await updateConnectedFitnessApps(user.uid, serviceToDisconnect, 'disconnect');
 
     if (result.success && result.data) {

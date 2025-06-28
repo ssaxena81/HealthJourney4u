@@ -7,7 +7,7 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: '/api/auth/callback/fitbit',
+        source: '/api/auth/fitbit/callback',
         destination: '/api/auth/fitbit/callback',
       },
     ]

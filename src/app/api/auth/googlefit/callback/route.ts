@@ -3,6 +3,8 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { setGoogleFitTokens } from '@/lib/google-fit-auth-utils';
+import { getFirebaseUserFromCookie, adminDb } from '@/lib/firebase/serverApp';
+import admin from 'firebase-admin';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
@@ -12,27 +14,41 @@ interface GoogleTokenResponse {
   refresh_token?: string; // Google might not always return a new refresh token
   scope: string;
   token_type: string; // "Bearer"
-  id_token?: string; // If 'openid' scope was requested
 }
 
+async function addGoogleFitConnectionToProfile(userId: string) {
+    const userRef = adminDb.collection('users').doc(userId);
+    const userSnap = await userRef.get();
+    
+    if (!userSnap.exists) {
+        throw new Error("User profile not found in Firestore.");
+    }
+    const userProfile = userSnap.data();
+    const currentConnections = userProfile?.connectedFitnessApps || [];
+    
+    // Check if googlefit is already connected
+    if (!currentConnections.some((conn: any) => conn.id === 'googlefit')) {
+        await userRef.update({ 
+            connectedFitnessApps: admin.firestore.FieldValue.arrayUnion({
+                id: 'googlefit',
+                name: 'Google Fit',
+                connectedAt: new Date().toISOString()
+            }) 
+        });
+        console.log(`[Google Fit Callback] Added 'googlefit' to user ${userId} profile.`);
+    }
+}
+
+
 export async function GET(request: NextRequest) {
+  const requestUrl = new URL(request.url);
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get('code');
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  // Dynamically determine the app URL from request headers for robust proxy support
-  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
-  const host = request.headers.get('host');
-
-  if (!host) {
-      console.error("[Google Fit Callback] Cannot determine host from headers.");
-      return NextResponse.redirect('/profile?googlefit_error=internal_server_error');
-  }
-
-  const appUrl = `${protocol}://${host}`;
-  const profileUrl = `${appUrl}/profile`;
-  const redirectUri = `${appUrl}/api/auth/googlefit/callback`;
+  const profileUrl = `${requestUrl.origin}/profile`;
+  const redirectUri = `${requestUrl.origin}/api/auth/googlefit/callback`;
 
   const cookieStore = cookies();
   const storedState = cookieStore.get('google_oauth_state')?.value;
@@ -62,7 +78,6 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    console.log('[Google Fit Callback] Exchanging code for tokens with Google...');
     const response = await fetch(GOOGLE_TOKEN_URL, {
       method: 'POST',
       headers: {
@@ -87,16 +102,19 @@ export async function GET(request: NextRequest) {
     }
 
     const tokenData = data as GoogleTokenResponse;
-    console.log('[Google Fit Callback] Tokens received from Google:', { access_token_present: !!tokenData.access_token, refresh_token_present: !!tokenData.refresh_token, expires_in: tokenData.expires_in });
-    
-    if (!tokenData.access_token || !tokenData.expires_in) { // Refresh token can be optional on subsequent grants
+    if (!tokenData.access_token || !tokenData.refresh_token || !tokenData.expires_in) {
         console.error('[Google Fit Callback] Incomplete token data received from Google:', tokenData);
         return NextResponse.redirect(`${profileUrl}?googlefit_error=incomplete_token_data`);
     }
 
-    // Store the tokens
-    await setGoogleFitTokens(tokenData.access_token, tokenData.refresh_token, tokenData.expires_in);
-    console.log('[Google Fit Callback] Google Fit tokens stored successfully.');
+    const firebaseUser = await getFirebaseUserFromCookie(cookies());
+    if (!firebaseUser) {
+        return NextResponse.redirect(`${profileUrl}?googlefit_error=auth_required`);
+    }
+
+    await setGoogleFitTokens(firebaseUser.uid, tokenData.access_token, tokenData.refresh_token, tokenData.expires_in);
+    
+    await addGoogleFitConnectionToProfile(firebaseUser.uid);
     
     return NextResponse.redirect(`${profileUrl}?googlefit_connected=true`);
 

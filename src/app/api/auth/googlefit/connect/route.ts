@@ -6,19 +6,15 @@ const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 
 export async function GET(request: NextRequest) {
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID_WEB; // Use Web Client ID
-  const oauthStateSecret = process.env.OAUTH_STATE_SECRET; // Re-use for consistency if desired, or generate unique
 
-  // Dynamically determine the app URL from request headers for robust proxy support
-  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
-  const host = request.headers.get('host');
+  const requestUrl = new URL(request.url);
+  const redirectUri = `${requestUrl.origin}/api/auth/googlefit/callback`;
 
-  if (!clientId || !oauthStateSecret || !host) {
-    console.error("Google OAuth (Web) configuration is missing or host could not be determined. Required: NEXT_PUBLIC_GOOGLE_CLIENT_ID_WEB, OAUTH_STATE_SECRET, host header.");
+  if (!clientId) {
+    console.error("Google OAuth (Web) configuration is missing. Required: NEXT_PUBLIC_GOOGLE_CLIENT_ID_WEB.");
     return NextResponse.json({ error: 'Server configuration error for Google OAuth.' }, { status: 500 });
   }
 
-  const appUrl = `${protocol}://${host}`;
-  const redirectUri = `${appUrl}/api/auth/googlefit/callback`;
   const state = randomBytes(16).toString('hex');
 
   // Define Google Fit scopes. Choose based on data needed.

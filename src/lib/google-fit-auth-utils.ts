@@ -1,92 +1,61 @@
 
 'use server';
 
-import { cookies } from 'next/headers';
-
-const GOOGLE_FIT_ACCESS_TOKEN_COOKIE = 'google_fit_access_token';
-const GOOGLE_FIT_REFRESH_TOKEN_COOKIE = 'google_fit_refresh_token';
-const GOOGLE_FIT_TOKEN_EXPIRES_AT_COOKIE = 'google_fit_token_expires_at';
+import { adminDb } from '@/lib/firebase/serverApp';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
+
+interface GoogleTokenData {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number; // Timestamp in milliseconds
+}
 
 interface GoogleTokenResponse {
   access_token: string;
   expires_in: number; // seconds
-  refresh_token?: string; // Google might not always return a new refresh token
+  refresh_token?: string; 
   scope: string;
-  token_type: string; // "Bearer"
-  id_token?: string; // If 'openid' scope was requested
+  token_type: string;
 }
 
-interface StoredGoogleFitTokens {
-  accessToken: string | undefined;
-  refreshToken: string | undefined;
-  expiresAt: number | undefined; // Timestamp in milliseconds
-}
 
-export async function getGoogleFitTokens(): Promise<StoredGoogleFitTokens> {
-  const cookieStore = await cookies();
-  const accessToken = cookieStore.get(GOOGLE_FIT_ACCESS_TOKEN_COOKIE)?.value;
-  const refreshToken = cookieStore.get(GOOGLE_FIT_REFRESH_TOKEN_COOKIE)?.value;
-  const expiresAtString = cookieStore.get(GOOGLE_FIT_TOKEN_EXPIRES_AT_COOKIE)?.value;
-  const expiresAt = expiresAtString ? parseInt(expiresAtString, 10) : undefined;
-
-  return { accessToken, refreshToken, expiresAt };
+// Store tokens in Firestore, scoped to the user
+async function getGoogleFitTokens(userId: string): Promise<GoogleTokenData | null> {
+  const tokenDocRef = adminDb.collection('users').doc(userId).collection('private_tokens').doc('google-fit');
+  const docSnap = await tokenDocRef.get();
+  if (docSnap.exists) {
+    return docSnap.data() as GoogleTokenData;
+  }
+  return null;
 }
 
 export async function setGoogleFitTokens(
+  userId: string,
   accessToken: string,
-  refreshToken: string | undefined, // Refresh token might not always be provided on refresh
+  refreshToken: string, // Refresh token might not always be provided on refresh
   expiresIn: number // seconds
 ): Promise<void> {
-  const cookieStore = await cookies();
+  const tokenDocRef = adminDb.collection('users').doc(userId).collection('private_tokens').doc('google-fit');
   const now = Date.now();
   const expiresAt = now + expiresIn * 1000;
+  
+  const tokenData: GoogleTokenData = { accessToken, refreshToken, expiresAt };
+  await tokenDocRef.set(tokenData, { merge: true });
+  console.log('[GoogleFitAuthUtils] Google Fit tokens stored in Firestore.');
+}
 
-  const cookieOptions = {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
-    path: '/',
-    sameSite: 'lax' as const,
-  };
-
-  cookieStore.set(GOOGLE_FIT_ACCESS_TOKEN_COOKIE, accessToken, {
-    ...cookieOptions,
-    maxAge: expiresIn,
-  });
-
-  if (refreshToken) { // Only set refresh token if it's provided
-    cookieStore.set(GOOGLE_FIT_REFRESH_TOKEN_COOKIE, refreshToken, {
-      ...cookieOptions,
-      maxAge: 365 * 24 * 60 * 60, // Refresh token typically has a longer life
-    });
+export async function refreshGoogleFitTokens(userId: string): Promise<string | null> {
+  const tokenData = await getGoogleFitTokens(userId);
+  if (!tokenData?.refreshToken) {
+    console.error('[GoogleFitAuthUtils] No refresh token available to refresh.');
+    return null;
   }
 
-  cookieStore.set(GOOGLE_FIT_TOKEN_EXPIRES_AT_COOKIE, expiresAt.toString(), {
-    ...cookieOptions,
-    maxAge: expiresIn,
-  });
-  console.log('[GoogleFitAuthUtils] Google Fit tokens stored/updated in cookies.');
-}
-
-export async function clearGoogleFitTokens(): Promise<void> {
-  const cookieStore = await cookies();
-  cookieStore.delete(GOOGLE_FIT_ACCESS_TOKEN_COOKIE);
-  cookieStore.delete(GOOGLE_FIT_REFRESH_TOKEN_COOKIE);
-  cookieStore.delete(GOOGLE_FIT_TOKEN_EXPIRES_AT_COOKIE);
-  console.log('[GoogleFitAuthUtils] Google Fit tokens cleared from cookies.');
-}
-
-export async function refreshGoogleFitTokens(
-  currentRefreshToken: string
-): Promise<{ accessToken: string; refreshToken?: string; expiresIn: number } | null> {
-  console.log('[GoogleFitAuthUtils] Attempting to refresh Google Fit tokens...');
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID_WEB; // Ensure this is the Web Client ID
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET_WEB; // Ensure this is the Web Client Secret
-
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID_WEB;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET_WEB;
   if (!clientId || !clientSecret) {
-    console.error('[GoogleFitAuthUtils] Google Client ID or Secret for Web is not configured for token refresh.');
-    throw new Error("Google client credentials not configured on the server.");
+    throw new Error("Google client credentials not configured.");
   }
 
   try {
@@ -99,56 +68,38 @@ export async function refreshGoogleFitTokens(
         client_id: clientId,
         client_secret: clientSecret,
         grant_type: 'refresh_token',
-        refresh_token: currentRefreshToken,
+        refresh_token: tokenData.refreshToken,
       }),
     });
 
     const data: GoogleTokenResponse | { error: string; error_description?: string } = await response.json();
-
     if (!response.ok) {
-      const errorDetails = data as { error: string; error_description?: string };
-      console.error('[GoogleFitAuthUtils] Google Fit token refresh failed:', response.status, errorDetails);
-      if (errorDetails.error === 'invalid_grant') {
-         console.warn('[GoogleFitAuthUtils] Google Fit refresh token might be invalid or revoked. User may need to re-authenticate.');
-      }
+      console.error('[GoogleFitAuthUtils] Google Fit token refresh failed:', data);
       return null;
     }
-
-    const tokenData = data as GoogleTokenResponse;
-    console.log('[GoogleFitAuthUtils] Google Fit tokens refreshed successfully.');
     
-    // Google might not return a new refresh token; use the old one if not provided.
-    await setGoogleFitTokens(tokenData.access_token, tokenData.refresh_token || currentRefreshToken, tokenData.expires_in);
+    const refreshedTokenData = data as GoogleTokenResponse;
 
-    return {
-      accessToken: tokenData.access_token,
-      refreshToken: tokenData.refresh_token || currentRefreshToken,
-      expiresIn: tokenData.expires_in,
-    };
+    // Google might not return a new refresh token; use the old one if not provided.
+    await setGoogleFitTokens(userId, refreshedTokenData.access_token, refreshedTokenData.refresh_token || tokenData.refreshToken, refreshedTokenData.expires_in);
+    
+    return refreshedTokenData.access_token;
+
   } catch (error) {
-    console.error('[GoogleFitAuthUtils] Exception during Google Fit token refresh:', error);
+    console.error('[GoogleFitAuthUtils] Exception during token refresh:', error);
     return null;
   }
 }
 
-export async function getValidGoogleFitAccessToken(): Promise<string | null> {
-  let { accessToken, refreshToken, expiresAt } = await getGoogleFitTokens();
+export async function getValidGoogleFitAccessToken(userId: string): Promise<string | null> {
+  const tokenData = await getGoogleFitTokens(userId);
+  if (!tokenData) return null;
 
-  if (!accessToken || !refreshToken) {
-    console.log('[GoogleFitAuthUtils] No Google Fit tokens found in cookies.');
-    return null;
+  const bufferTime = 5 * 60 * 1000; // 5 minutes
+  if (Date.now() >= tokenData.expiresAt - bufferTime) {
+    console.log('[GoogleFitAuthUtils] Token expired or nearing expiry, refreshing...');
+    return await refreshGoogleFitTokens(userId);
   }
-
-  const bufferTime = 5 * 60 * 1000; // 5 minutes in milliseconds
-  if (!expiresAt || Date.now() >= expiresAt - bufferTime) {
-    console.log('[GoogleFitAuthUtils] Google Fit access token expired or nearing expiry. Attempting refresh.');
-    const newTokens = await refreshGoogleFitTokens(refreshToken);
-    if (newTokens) {
-      accessToken = newTokens.accessToken;
-    } else {
-      console.error('[GoogleFitAuthUtils] Failed to refresh Google Fit access token. User may need to re-authenticate.');
-      return null;
-    }
-  }
-  return accessToken;
+  
+  return tokenData.accessToken;
 }
