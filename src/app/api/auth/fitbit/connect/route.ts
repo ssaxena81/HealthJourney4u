@@ -34,13 +34,13 @@ export async function GET(request: NextRequest) {
   // [2024-08-02] COMMENT: The previous dynamic URL generation using `request.nextUrl` was unreliable in some proxy environments. It is now commented out.
   // const appUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
 
-  // [2024-08-02] COMMENT: Create a more robust dynamic URL by prioritizing proxy headers (`x-forwarded-*`) before falling back to the `request.nextUrl` object. This ensures the correct public-facing URL is used.
+  // [2024-08-05] COMMENT: Create a more robust dynamic URL by prioritizing proxy headers (`x-forwarded-*`) before falling back to the `request.nextUrl` object. This ensures the correct public-facing URL is used.
   const protocol = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol;
   const host = request.headers.get("x-forwarded-host") ?? request.nextUrl.host;
   const appUrl = `${protocol}://${host}`;
   const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
   
-  // [2024-08-02] COMMENT: Add a debugger statement to pause execution here when dev tools are open.
+  // [2024-08-05] COMMENT: Add a debugger statement to pause execution here when dev tools are open.
   debugger;
 
   const state = randomBytes(16).toString('hex');

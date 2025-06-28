@@ -1,5 +1,5 @@
 
-// [2024-08-02] COMMENT: The 'use server' directive is incorrect for this file as it exports objects (auth, db) and not client-callable async functions. The 'server-only' package is the correct way to mark this as a server-side module.
+// [2024-08-05] COMMENT: The 'use server' directive below was causing a build error because this file exports objects, not async functions. It has been commented out to resolve the issue. The 'server-only' package is the correct way to mark this module as exclusively for server-side use.
 // 'use server';
 
 import 'server-only';
