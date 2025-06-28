@@ -2,7 +2,8 @@
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // [2025-06-28] COMMENT: Re-enabling the rewrites function. This is the most robust way to solve the redirect_uri mismatch by explicitly mapping the public-facing callback URL (`/api/auth/callback/fitbit`) that Fitbit expects to the application's internal file path.
+  // [2025-06-28] COMMENT: Reverting to hardcoded URLs. The rewrites function is being disabled as it was part of the dynamic URL strategy that caused issues.
+  /*
   async rewrites() {
     return [
       {
@@ -11,6 +12,7 @@ const nextConfig = {
       },
     ]
   },
+  */
   typescript: {
     // ignoreBuildErrors: true, // Temporarily removed to surface potential issues
   },
