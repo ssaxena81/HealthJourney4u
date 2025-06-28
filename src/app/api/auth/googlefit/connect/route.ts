@@ -5,10 +5,10 @@ import { randomBytes } from 'crypto';
 const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 
 export async function GET(request: NextRequest) {
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_FIT_CLIENT_ID; // Use generic Client ID
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_FIT_CLIENT_ID;
 
-  const requestUrl = new URL(request.url);
-  const redirectUri = `${requestUrl.origin}/api/auth/googlefit/callback`;
+  // Hardcoded redirect URI for stability
+  const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/googlefit/callback`;
 
   if (!clientId) {
     console.error("Google OAuth configuration is missing. Required: NEXT_PUBLIC_GOOGLE_FIT_CLIENT_ID.");

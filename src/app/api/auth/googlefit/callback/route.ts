@@ -41,14 +41,14 @@ async function addGoogleFitConnectionToProfile(userId: string) {
 
 
 export async function GET(request: NextRequest) {
-  const requestUrl = new URL(request.url);
   const searchParams = request.nextUrl.searchParams;
   const code = searchParams.get('code');
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  const profileUrl = `${requestUrl.origin}/profile`;
-  const redirectUri = `${requestUrl.origin}/api/auth/googlefit/callback`;
+  // Hardcoded URLs for stability
+  const profileUrl = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/profile`;
+  const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/googlefit/callback`;
 
   const cookieStore = cookies();
   const storedState = cookieStore.get('google_oauth_state')?.value;
