@@ -1,8 +1,7 @@
 
 'use server';
 
-import { db } from '@/lib/firebase/serverApp';
-import { doc, getDoc, setDoc, collection, writeBatch, query, where, getDocs } from 'firebase/firestore';
+import { adminDb } from '@/lib/firebase/serverApp';
 import { getValidFitbitAccessToken } from '@/lib/fitbit-auth-utils';
 import { getSleepLogs, type FitbitSleepLog } from '@/lib/services/fitbitService';
 import type { UserProfile, FitbitSleepLogFirestore } from '@/types';
@@ -67,21 +66,21 @@ export async function syncFitbitSleepData(userId: string, startDate: string, end
     }
 
     // Use a batch write to save all logs to Firestore atomically
-    const batch = writeBatch(db);
-    const sleepCollectionRef = collection(db, 'users', userId, 'fitbit_sleep');
+    const batch = adminDb.batch();
+    const sleepCollectionRef = adminDb.collection('users').doc(userId).collection('fitbit_sleep');
 
     allSleepLogs.forEach(log => {
       const normalizedLog = normalizeFitbitSleepLog(log, userId);
       // Use a composite key of date and logId to ensure uniqueness
-      const docRef = doc(sleepCollectionRef, `${normalizedLog.dateOfSleep}_${normalizedLog.logId}`);
+      const docRef = sleepCollectionRef.doc(`${normalizedLog.dateOfSleep}_${normalizedLog.logId}`);
       batch.set(docRef, normalizedLog, { merge: true });
     });
 
     await batch.commit();
 
     // Update the last successful sync timestamp on the user's profile
-    const userProfileRef = doc(db, 'users', userId);
-    await setDoc(userProfileRef, { fitbitLastSuccessfulSync: new Date().toISOString() }, { merge: true });
+    const userProfileRef = adminDb.collection('users').doc(userId);
+    await userProfileRef.set({ fitbitLastSuccessfulSync: new Date().toISOString() }, { merge: true });
 
     const message = `Successfully synced ${allSleepLogs.length} sleep log(s).`;
     console.log(`[FitbitActions] ${message}`);
@@ -108,15 +107,13 @@ export async function getFitbitSleepLogsForDateRange(
     }
     
     try {
-        const sleepLogsRef = collection(db, 'users', userId, 'fitbit_sleep');
-        const q = query(
-            sleepLogsRef,
-            where('dateOfSleep', '>=', dateRange.from),
-            where('dateOfSleep', '<=', dateRange.to),
-            orderBy('dateOfSleep', 'desc')
-        );
+        const sleepLogsRef = adminDb.collection('users').doc(userId).collection('fitbit_sleep');
+        const q = sleepLogsRef
+            .where('dateOfSleep', '>=', dateRange.from)
+            .where('dateOfSleep', '<=', dateRange.to)
+            .orderBy('dateOfSleep', 'desc');
 
-        const querySnapshot = await getDocs(q);
+        const querySnapshot = await q.get();
         const sleepLogs: FitbitSleepLogFirestore[] = [];
         querySnapshot.forEach((docSnap) => {
             sleepLogs.push(docSnap.data() as FitbitSleepLogFirestore);

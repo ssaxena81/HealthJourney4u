@@ -1,8 +1,7 @@
 
 'use server';
 
-import { db } from '@/lib/firebase/serverApp';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { adminDb } from '@/lib/firebase/serverApp';
 
 const FITBIT_TOKEN_URL = 'https://api.fitbit.com/oauth2/token';
 
@@ -14,9 +13,9 @@ interface FitbitTokenData {
 
 // Store tokens in Firestore, scoped to the user
 async function getFitbitTokens(userId: string): Promise<FitbitTokenData | null> {
-  const tokenDocRef = doc(db, 'users', userId, 'private_tokens', 'fitbit');
-  const docSnap = await getDoc(tokenDocRef);
-  if (docSnap.exists()) {
+  const tokenDocRef = adminDb.collection('users').doc(userId).collection('private_tokens').doc('fitbit');
+  const docSnap = await tokenDocRef.get();
+  if (docSnap.exists) {
     return docSnap.data() as FitbitTokenData;
   }
   return null;
@@ -28,12 +27,12 @@ export async function setFitbitTokens(
   refreshToken: string,
   expiresIn: number // seconds
 ): Promise<void> {
-  const tokenDocRef = doc(db, 'users', userId, 'private_tokens', 'fitbit');
+  const tokenDocRef = adminDb.collection('users').doc(userId).collection('private_tokens').doc('fitbit');
   const now = Date.now();
   const expiresAt = now + expiresIn * 1000;
 
   const tokenData: FitbitTokenData = { accessToken, refreshToken, expiresAt };
-  await setDoc(tokenDocRef, tokenData, { merge: true });
+  await tokenDocRef.set(tokenData, { merge: true });
   console.log('[FitbitAuthUtils] Fitbit tokens stored in Firestore.');
 }
 

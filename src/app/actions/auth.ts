@@ -15,8 +15,7 @@ import type {
     LoginResult,
 } from '@/types';
 import { passwordSchema } from '@/types';
-import { doc, setDoc, getDoc, updateDoc } from 'firebase/firestore';
-import { auth, db } from '@/lib/firebase/serverApp';
+import { auth, adminDb } from '@/lib/firebase/serverApp';
 
 
 // --- Sign Up Schema ---
@@ -57,7 +56,7 @@ export async function signUpUser(values: z.infer<typeof SignUpDetailsInputSchema
       acceptedLatestTerms: false,
     };
 
-    await setDoc(doc(db, "users", userCredential.user.uid), initialProfile);
+    await adminDb.collection("users").doc(userCredential.user.uid).set(initialProfile);
     
     return { success: true, userId: userCredential.user.uid };
 
@@ -96,9 +95,9 @@ export async function loginUser(values: z.infer<typeof LoginInputSchema>): Promi
     );
     
     const userId = userCredential.user.uid;
-    const userProfileDocRef = doc(db, "users", userId);
+    const userProfileDocRef = adminDb.collection("users").doc(userId);
     
-    await updateDoc(userProfileDocRef, { lastLoggedInDate: new Date().toISOString() });
+    await userProfileDocRef.update({ lastLoggedInDate: new Date().toISOString() });
 
     return { success: true, userId };
 
@@ -183,7 +182,7 @@ export async function recordPasswordChangeInDb(userId: string): Promise<ActionRe
     if (!userId) {
         return { success: false, error: "User not identified.", errorCode: "USER_NOT_FOUND"};
     }
-    await updateDoc(doc(db, "users", userId), { lastPasswordChangeDate: new Date().toISOString() });
+    await adminDb.collection("users").doc(userId).update({ lastPasswordChangeDate: new Date().toISOString() });
     return { success: true, message: "Password change has been recorded." };
   } catch (error: any) {
     return { success: false, error: "Failed to record password change." };

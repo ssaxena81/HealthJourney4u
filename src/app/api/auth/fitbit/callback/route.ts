@@ -3,22 +3,23 @@ import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 import { setFitbitTokens } from '@/lib/fitbit-auth-utils';
-import { doc, getDoc, updateDoc, arrayUnion } from 'firebase/firestore';
-import { db } from '@/lib/firebase/serverApp';
+import { adminDb } from '@/lib/firebase/serverApp';
 import { getFirebaseUserFromCookie } from '@/lib/firebase/serverApp';
+import admin from 'firebase-admin';
 
 async function addFitbitConnectionToProfile(userId: string) {
-    const userRef = doc(db, 'users', userId);
-    const userSnap = await getDoc(userRef);
-    if (!userSnap.exists()) {
+    const userRef = adminDb.collection('users').doc(userId);
+    const userSnap = await userRef.get();
+    
+    if (!userSnap.exists) {
         throw new Error("User profile not found in Firestore.");
     }
     const userProfile = userSnap.data();
-    const currentConnections = userProfile.connectedFitnessApps || [];
+    const currentConnections = userProfile?.connectedFitnessApps || [];
     
     if (!currentConnections.some((conn: any) => conn.id === 'fitbit')) {
-        await updateDoc(userRef, { 
-            connectedFitnessApps: arrayUnion({
+        await userRef.update({ 
+            connectedFitnessApps: admin.firestore.FieldValue.arrayUnion({
                 id: 'fitbit',
                 name: 'Fitbit',
                 connectedAt: new Date().toISOString()
@@ -35,7 +36,7 @@ export async function GET(request: NextRequest) {
   
   // [2025-06-28] COMMENT: Using a hardcoded URL with the correct public-facing path as defined in next.config.js rewrites.
   // [2025-06-28] COMMENT: This ensures consistency between the connect and callback steps, preventing mismatch errors.
-  const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/fitbit/callback`;
+  const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/callback/fitbit`;
   const profileUrl = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/profile`;
 
   const cookieStore = cookies();

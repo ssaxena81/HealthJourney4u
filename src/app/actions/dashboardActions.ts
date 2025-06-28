@@ -1,8 +1,8 @@
 
 'use server';
 
-import { db } from '@/lib/firebase/serverApp';
-import { collection, query, where, getDocs, orderBy, Timestamp, doc, getDoc, documentId } from 'firebase/firestore';
+import { adminDb } from '@/lib/firebase/serverApp';
+import admin from 'firebase-admin';
 import type { 
   UserProfile, 
   DashboardMetricIdValue, 
@@ -23,13 +23,13 @@ interface DateRange {
 async function calculateAvgDailySteps(userId: string, dateRange: DateRange, numberOfDays: number): Promise<number | undefined> {
   if (numberOfDays <= 0) return 0;
   try {
-    const activitiesRef = collection(db, 'users', userId, 'activities');
-    const q = query(activitiesRef, 
-      where('date', '>=', dateRange.from), 
-      where('date', '<=', dateRange.to),
-      where('type', 'in', [NormalizedActivityType.Walking, NormalizedActivityType.Running, NormalizedActivityType.Hiking]) // Consider steps from these activities
-    );
-    const querySnapshot = await getDocs(q);
+    const activitiesRef = adminDb.collection('users').doc(userId).collection('activities');
+    const q = activitiesRef 
+      .where('date', '>=', dateRange.from)
+      .where('date', '<=', dateRange.to)
+      .where('type', 'in', [NormalizedActivityType.Walking, NormalizedActivityType.Running, NormalizedActivityType.Hiking]);
+    
+    const querySnapshot = await q.get();
     let totalSteps = 0;
     querySnapshot.forEach(doc => {
       const activity = doc.data() as NormalizedActivityFirestore;
@@ -45,13 +45,13 @@ async function calculateAvgDailySteps(userId: string, dateRange: DateRange, numb
 async function calculateAvgSleepDuration(userId: string, dateRange: DateRange, numberOfDays: number): Promise<number | undefined> {
   if (numberOfDays <= 0) return 0;
   try {
-    const sleepLogsRef = collection(db, 'users', userId, 'fitbit_sleep');
-    const q = query(sleepLogsRef, 
-      where('dateOfSleep', '>=', dateRange.from), 
-      where('dateOfSleep', '<=', dateRange.to)
-      // where('isMainSleep', '==', true) // Consider only main sleep if available and desired
-    );
-    const querySnapshot = await getDocs(q);
+    const sleepLogsRef = adminDb.collection('users').doc(userId).collection('fitbit_sleep');
+    const q = sleepLogsRef
+      .where('dateOfSleep', '>=', dateRange.from)
+      .where('dateOfSleep', '<=', dateRange.to);
+      // .where('isMainSleep', '==', true) // Consider only main sleep if available and desired
+    
+    const querySnapshot = await q.get();
     let totalSleepMinutes = 0;
     let sleepLogCount = 0;
     querySnapshot.forEach(doc => {
@@ -72,12 +72,12 @@ async function calculateAvgActiveMinutes(userId: string, dateRange: DateRange, n
   if (numberOfDays <= 0) return 0;
   try {
     // Option 1: Use Fitbit Daily Summaries (if consistently synced and preferred)
-    const summariesRef = collection(db, 'users', userId, 'fitbit_activity_summaries');
-    const qSummaries = query(summariesRef, 
-      where(documentId(), '>=', dateRange.from), // documentId() refers to the document name which is the date
-      where(documentId(), '<=', dateRange.to)
-    );
-    const summarySnapshot = await getDocs(qSummaries);
+    const summariesRef = adminDb.collection('users').doc(userId).collection('fitbit_activity_summaries');
+    const qSummaries = summariesRef 
+      .where(admin.firestore.FieldPath.documentId(), '>=', dateRange.from) // documentId() refers to the document name which is the date
+      .where(admin.firestore.FieldPath.documentId(), '<=', dateRange.to);
+
+    const summarySnapshot = await qSummaries.get();
     let totalActiveMinutesFromSummaries = 0;
     let summaryDaysCount = 0;
     summarySnapshot.forEach(doc => {
@@ -90,12 +90,12 @@ async function calculateAvgActiveMinutes(userId: string, dateRange: DateRange, n
     }
 
     // Option 2: Fallback or primary: Calculate from normalized activities
-    const activitiesRef = collection(db, 'users', userId, 'activities');
-    const qActivities = query(activitiesRef, 
-      where('date', '>=', dateRange.from), 
-      where('date', '<=', dateRange.to)
-    );
-    const activitySnapshot = await getDocs(qActivities);
+    const activitiesRef = adminDb.collection('users').doc(userId).collection('activities');
+    const qActivities = activitiesRef 
+      .where('date', '>=', dateRange.from)
+      .where('date', '<=', dateRange.to);
+
+    const activitySnapshot = await qActivities.get();
     let totalMovingDurationSec = 0;
     activitySnapshot.forEach(doc => {
       const activity = doc.data() as NormalizedActivityFirestore;
@@ -111,13 +111,13 @@ async function calculateAvgActiveMinutes(userId: string, dateRange: DateRange, n
 async function calculateAvgRestingHeartRate(userId: string, dateRange: DateRange, numberOfDays: number): Promise<number | undefined> {
   if (numberOfDays <= 0) return 0;
   try {
-    const heartRateRef = collection(db, 'users', userId, 'fitbit_heart_rate');
+    const heartRateRef = adminDb.collection('users').doc(userId).collection('fitbit_heart_rate');
     // Query by document ID which is the date 'YYYY-MM-DD'
-    const q = query(heartRateRef, 
-      where(documentId(), '>=', dateRange.from), 
-      where(documentId(), '<=', dateRange.to)
-    );
-    const querySnapshot = await getDocs(q);
+    const q = heartRateRef 
+      .where(admin.firestore.FieldPath.documentId(), '>=', dateRange.from)
+      .where(admin.firestore.FieldPath.documentId(), '<=', dateRange.to);
+    
+    const querySnapshot = await q.get();
     let totalRestingHeartRate = 0;
     let daysWithData = 0;
     querySnapshot.forEach(doc => {
@@ -138,7 +138,7 @@ async function calculateAvgRestingHeartRate(userId: string, dateRange: DateRange
 async function calculateAvgWorkoutDuration(userId: string, dateRange: DateRange, numberOfDays: number): Promise<number | undefined> {
     if (numberOfDays <= 0) return 0;
     try {
-        const activitiesRef = collection(db, 'users', userId, 'activities');
+        const activitiesRef = adminDb.collection('users').doc(userId).collection('activities');
         const workoutTypes: NormalizedActivityType[] = [
             NormalizedActivityType.Running, 
             NormalizedActivityType.Hiking, 
@@ -146,12 +146,12 @@ async function calculateAvgWorkoutDuration(userId: string, dateRange: DateRange,
             NormalizedActivityType.Cycling, 
             NormalizedActivityType.Workout
         ];
-        const q = query(activitiesRef, 
-            where('date', '>=', dateRange.from), 
-            where('date', '<=', dateRange.to),
-            where('type', 'in', workoutTypes)
-        );
-        const querySnapshot = await getDocs(q);
+        const q = activitiesRef
+            .where('date', '>=', dateRange.from)
+            .where('date', '<=', dateRange.to)
+            .where('type', 'in', workoutTypes);
+
+        const querySnapshot = await q.get();
         let totalWorkoutDurationSec = 0;
         let workoutCount = 0;
         querySnapshot.forEach(doc => {
@@ -169,7 +169,7 @@ async function calculateAvgWorkoutDuration(userId: string, dateRange: DateRange,
 
 async function calculateTotalWorkouts(userId: string, dateRange: DateRange, numberOfDays: number): Promise<number | undefined> {
     try {
-        const activitiesRef = collection(db, 'users', userId, 'activities');
+        const activitiesRef = adminDb.collection('users').doc(userId).collection('activities');
         const workoutTypes: NormalizedActivityType[] = [
             NormalizedActivityType.Running, 
             NormalizedActivityType.Hiking, 
@@ -177,12 +177,12 @@ async function calculateTotalWorkouts(userId: string, dateRange: DateRange, numb
             NormalizedActivityType.Cycling, 
             NormalizedActivityType.Workout
         ];
-        const q = query(activitiesRef, 
-            where('date', '>=', dateRange.from), 
-            where('date', '<=', dateRange.to),
-            where('type', 'in', workoutTypes)
-        );
-        const querySnapshot = await getDocs(q);
+        const q = activitiesRef
+            .where('date', '>=', dateRange.from)
+            .where('date', '<=', dateRange.to)
+            .where('type', 'in', workoutTypes);
+
+        const querySnapshot = await q.get();
         return querySnapshot.size; // Total number of workout sessions
     } catch (error) {
         console.error(`[DashboardActions] Error calculating total workouts for user ${userId}:`, error);
@@ -199,10 +199,10 @@ export async function getDashboardRadarData(
   }
 
   try {
-    const userProfileDocRef = doc(db, 'users', userId);
-    const userProfileSnap = await getDoc(userProfileDocRef);
+    const userProfileDocRef = adminDb.collection('users').doc(userId);
+    const userProfileSnap = await userProfileDocRef.get();
 
-    if (!userProfileSnap.exists()) {
+    if (!userProfileSnap.exists) {
       return { success: false, error: 'User profile not found.' };
     }
     const userProfile = userProfileSnap.data() as UserProfile;

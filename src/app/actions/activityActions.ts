@@ -1,8 +1,7 @@
 
 'use server';
 
-import { db } from '@/lib/firebase/serverApp';
-import { collection, query, where, getDocs, orderBy, Timestamp } from 'firebase/firestore';
+import { adminDb } from '@/lib/firebase/serverApp';
 import type { NormalizedActivityFirestore, NormalizedActivityType } from '@/types';
 import { format, parseISO } from 'date-fns';
 
@@ -24,20 +23,18 @@ export async function getNormalizedActivitiesForDateRangeAndType(
   try {
     console.log(`[ActivityActions] Fetching ${activityType} activities for user ${userId} from ${dateRange.from} to ${dateRange.to}`);
 
-    const activitiesCollectionRef = collection(db, 'users', userId, 'activities');
+    const activitiesCollectionRef = adminDb.collection('users').doc(userId).collection('activities');
     
     // Firestore queries on string fields for ranges require the values to be lexicographically sortable.
     // Our 'date' field is 'YYYY-MM-DD', which is sortable.
-    const firestoreQuery = query(
-      activitiesCollectionRef,
-      where('type', '==', activityType),
-      where('date', '>=', dateRange.from),
-      where('date', '<=', dateRange.to),
-      orderBy('date', 'desc'), // Order by the date field itself
-      orderBy('startTimeUtc', 'desc') // Then by UTC start time for same-day activities
-    );
+    const firestoreQuery = activitiesCollectionRef
+      .where('type', '==', activityType)
+      .where('date', '>=', dateRange.from)
+      .where('date', '<=', dateRange.to)
+      .orderBy('date', 'desc') // Order by the date field itself
+      .orderBy('startTimeUtc', 'desc'); // Then by UTC start time for same-day activities
 
-    const querySnapshot = await getDocs(firestoreQuery);
+    const querySnapshot = await firestoreQuery.get();
     const activities: NormalizedActivityFirestore[] = [];
     querySnapshot.forEach((docSnap) => {
       activities.push(docSnap.data() as NormalizedActivityFirestore);

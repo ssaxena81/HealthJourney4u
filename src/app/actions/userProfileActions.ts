@@ -2,8 +2,8 @@
 'use server';
 
 import { z } from 'zod';
-import { db } from '@/lib/firebase/serverApp';
-import { doc, updateDoc, arrayUnion, arrayRemove, getDoc, setDoc } from 'firebase/firestore';
+import { adminDb } from '@/lib/firebase/serverApp';
+import admin from 'firebase-admin';
 import type { UserProfile, SelectableService, WalkingRadarGoals, RunningRadarGoals, HikingRadarGoals, SwimmingRadarGoals, SleepRadarGoals, DashboardMetricIdValue } from '@/types';
 import { AVAILABLE_DASHBOARD_METRICS, DashboardMetricId } from '@/types';
 
@@ -26,17 +26,17 @@ const selectableServiceSchema = z.object({
 export async function updateConnectedFitnessApps(userId: string, service: SelectableService, operation: 'connect' | 'disconnect'): Promise<UpdateResult<Partial<UserProfile>>> {
   try {
     const validatedService = selectableServiceSchema.parse(service);
-    const userRef = doc(db, 'users', userId);
+    const userRef = adminDb.collection('users').doc(userId);
 
-    const updateData = {
-      connectedFitnessApps: operation === 'connect' 
-        ? arrayUnion({ ...validatedService, connectedAt: new Date().toISOString() }) 
-        : arrayRemove(validatedService),
-    };
+    const updatePayload = operation === 'connect' 
+      ? admin.firestore.FieldValue.arrayUnion({ ...validatedService, connectedAt: new Date().toISOString() }) 
+      : admin.firestore.FieldValue.arrayRemove(validatedService);
 
-    await updateDoc(userRef, updateData);
+    await userRef.update({
+      connectedFitnessApps: updatePayload
+    });
 
-    const userSnap = await getDoc(userRef);
+    const userSnap = await userRef.get();
     const updatedProfile = userSnap.data() as UserProfile;
 
     return { success: true, data: { connectedFitnessApps: updatedProfile.connectedFitnessApps } };
@@ -90,8 +90,8 @@ export async function updateWalkingRadarGoals(userId: string, goals: WalkingRada
   }
   
   try {
-    const userRef = doc(db, 'users', userId);
-    await setDoc(userRef, { walkingRadarGoals: goals }, { merge: true });
+    const userRef = adminDb.collection('users').doc(userId);
+    await userRef.set({ walkingRadarGoals: goals }, { merge: true });
     return { success: true, data: goals };
   } catch (error: any) {
     return { success: false, error: 'Failed to save walking goals to database.' };
@@ -124,8 +124,8 @@ export async function updateRunningRadarGoals(userId: string, goals: RunningRada
   }
   
   try {
-    const userRef = doc(db, 'users', userId);
-    await setDoc(userRef, { runningRadarGoals: goals }, { merge: true });
+    const userRef = adminDb.collection('users').doc(userId);
+    await userRef.set({ runningRadarGoals: goals }, { merge: true });
     return { success: true, data: goals };
   } catch (error: any) {
     return { success: false, error: 'Failed to save running goals to database.' };
@@ -161,8 +161,8 @@ export async function updateHikingRadarGoals(userId: string, goals: HikingRadarG
   }
 
   try {
-    const userRef = doc(db, 'users', userId);
-    await setDoc(userRef, { hikingRadarGoals: goals }, { merge: true });
+    const userRef = adminDb.collection('users').doc(userId);
+    await userRef.set({ hikingRadarGoals: goals }, { merge: true });
     return { success: true, data: goals };
   } catch (error: any) {
     return { success: false, error: 'Failed to save hiking goals to database.' };
@@ -195,8 +195,8 @@ export async function updateSwimmingRadarGoals(userId: string, goals: SwimmingRa
   }
   
   try {
-    const userRef = doc(db, 'users', userId);
-    await setDoc(userRef, { swimmingRadarGoals: goals }, { merge: true });
+    const userRef = adminDb.collection('users').doc(userId);
+    await userRef.set({ swimmingRadarGoals: goals }, { merge: true });
     return { success: true, data: goals };
   } catch (error: any) {
     return { success: false, error: 'Failed to save swimming goals to database.' };
@@ -219,8 +219,8 @@ export async function updateSleepRadarGoals(userId: string, goals: SleepRadarGoa
     return { success: false, error: 'Invalid goal data.', details: { fieldErrors: validation.error.flatten().fieldErrors } };
   }
   try {
-    const userRef = doc(db, 'users', userId);
-    await setDoc(userRef, { sleepRadarGoals: goals }, { merge: true });
+    const userRef = adminDb.collection('users').doc(userId);
+    await userRef.set({ sleepRadarGoals: goals }, { merge: true });
     return { success: true, data: goals };
   } catch (error: any) {
     return { success: false, error: 'Failed to save sleep goals to database.' };
@@ -240,8 +240,8 @@ export async function updateDashboardRadarMetrics(userId: string, selectedMetric
   }
 
   try {
-    const userRef = doc(db, 'users', userId);
-    await setDoc(userRef, { dashboardRadarMetrics: selectedMetricIds }, { merge: true });
+    const userRef = adminDb.collection('users').doc(userId);
+    await userRef.set({ dashboardRadarMetrics: selectedMetricIds }, { merge: true });
     return { success: true, data: selectedMetricIds };
   } catch (error: any) {
     return { success: false, error: 'Failed to save dashboard preferences.' };
