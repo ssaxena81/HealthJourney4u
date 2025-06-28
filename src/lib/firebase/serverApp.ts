@@ -9,9 +9,12 @@ import { getAuth, type Auth } from 'firebase/auth';
 import { getFirestore, type Firestore } from 'firebase/firestore';
 import { cookies } from 'next/headers';
 import type { DecodedIdToken } from 'firebase-admin/auth';
+// [2025-06-28] COMMENT: This line imports the service account key directly from the JSON file.
+import serviceAccount from '../../../firebaseServiceAccountKey.json';
 
 // --- Admin SDK Initialization ---
-const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+// [2025-06-28] COMMENT: This line, which reads from the environment variable, is being commented out in favor of a direct file import.
+// const serviceAccountKey = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
 
 // [2024-08-01] COMMENT: Declare adminAuth and adminDb with `let` to allow for conditional initialization.
 let adminAuth: admin.auth.Auth;
@@ -19,31 +22,38 @@ let adminDb: admin.firestore.Firestore;
 
 // [2024-08-01] COMMENT: Check if the admin app needs initialization.
 if (!admin.apps.length) {
-  // [2024-08-01] COMMENT: Check if the service account key is provided in the environment.
-  if (!serviceAccountKey) {
-    // [2024-08-01] COMMENT: Instead of throwing an error that crashes the server, log a clear warning.
-    // [2024-08-01] COMMENT: The application can now start, but features requiring the Admin SDK will be disabled.
+  // [2025-06-28] COMMENT: Check if the imported service account object from the JSON file is valid.
+  if (!serviceAccount || !serviceAccount.project_id) {
+    // [2025-06-28] COMMENT: The warning message is updated to refer to the JSON file instead of the environment variable.
     console.error(`
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-!!! FIREBASE_SERVICE_ACCOUNT_KEY IS NOT SET IN YOUR ENVIRONMENT               !!!
+!!! FIREBASE SERVICE ACCOUNT KEY (firebaseServiceAccountKey.json) IS INVALID OR MISSING !!!
 !!! Admin features (like server-side authentication) will be disabled.      !!!
-!!! Please add your Firebase Service Account Key to your environment variables. !!!
+!!! Please ensure the file exists and is a valid service account key JSON.    !!!
 !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
     `);
   } else {
-    // [2024-08-01] COMMENT: If the key exists, proceed with initialization.
     try {
+      // [2025-06-28] COMMENT: Initialize the app using the directly imported service account object.
+      admin.initializeApp({
+        // [2025-06-28] COMMENT: The serviceAccount object is cast to the type expected by the credential method.
+        credential: admin.credential.cert(serviceAccount as admin.ServiceAccount),
+      });
+      // [2025-06-28] COMMENT: This is the old initialization method using JSON.parse, which is now commented out.
+      /*
       admin.initializeApp({
         credential: admin.credential.cert(JSON.parse(serviceAccountKey)),
       });
-      console.log("[serverApp.ts] Firebase Admin SDK initialized successfully.");
+      */
+      // [2025-06-28] COMMENT: A success log to confirm initialization from the JSON file.
+      console.log("[serverApp.ts] Firebase Admin SDK initialized successfully from JSON file.");
       // [2024-08-01] COMMENT: Assign the initialized services.
       adminAuth = admin.auth();
       adminDb = admin.firestore();
     } catch (error: any) {
-      console.error('Error initializing Firebase Admin SDK in serverApp.ts:', error);
-      // [2024-08-01] COMMENT: The original error for malformed keys is kept, as it's a configuration error.
-      throw new Error(`Could not initialize Firebase Admin SDK. Please check your FIREBASE_SERVICE_ACCOUNT_KEY. Error: ${error.message}`);
+      // [2025-06-28] COMMENT: The error message is updated to point to the JSON file as the source of the problem.
+      console.error('Error initializing Firebase Admin SDK from firebaseServiceAccountKey.json:', error);
+      throw new Error(`Could not initialize Firebase Admin SDK. Please check your firebaseServiceAccountKey.json file. Error: ${error.message}`);
     }
   }
 } else {
