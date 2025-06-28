@@ -32,39 +32,14 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code');
   const state = searchParams.get('state');
   const error = searchParams.get('error');
-
-  // [2024-08-02] COMMENT: The original hardcoded appUrl was not flexible for different environments.
-  // const appUrl = 'http://localhost:9004';
-  // const profileUrl = `${appUrl}/profile`;
-  // const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
-  
-  // [2024-08-02] COMMENT: The previous dynamic URL generation using headers was unreliable and is now commented out.
-  /*
-  // [2024-08-01] COMMENT: Dynamically determine the app URL from request headers for robust proxy support.
-  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
-  // [2024-08-01] COMMENT: Dynamically determine the app URL from request headers for robust proxy support.
-  const host = request.headers.get('host');
-
-  // [2024-08-01] COMMENT: New check to ensure the host header is present before proceeding.
-  if (!host) {
-      console.error("Fitbit callback failed: could not determine host from request headers.");
-      return NextResponse.redirect('/profile?fitbit_error=internal_server_error_no_host');
-  }
-  */
-
-  // [2024-08-05] COMMENT: The previous dynamic URL generation using `request.nextUrl` was unreliable in some proxy environments. It is now commented out.
-  // const appUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
   
   // [2024-08-05] COMMENT: Create a more robust dynamic URL by prioritizing proxy headers (`x-forwarded-*`) before falling back to the `request.nextUrl` object. This ensures the correct public-facing URL is used and is consistent with the `/connect` route.
   const protocol = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol;
   const host = request.headers.get("x-forwarded-host") ?? request.nextUrl.host;
   const appUrl = `${protocol}://${host}`;
   const profileUrl = `${appUrl}/profile`;
-  // [2024-08-05] COMMENT: Updated the path to match the Fitbit developer console configuration.
+  // [2024-08-05] COMMENT: Updated the path to match the Fitbit developer console configuration and the `next.config.js` rewrite rule.
   const redirectUri = `${appUrl}/api/auth/callback/fitbit`;
-  
-  // [2024-08-05] COMMENT: The debugger statement is now removed as the root cause has been identified.
-  // debugger;
   
   const cookieStore = cookies();
   const storedState = cookieStore.get('fitbit_oauth_state')?.value;

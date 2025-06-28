@@ -5,46 +5,18 @@ import { randomBytes } from 'crypto';
 export async function GET(request: NextRequest) {
   const clientId = process.env.NEXT_PUBLIC_FITBIT_CLIENT_ID;
 
-  // [2024-08-02] COMMENT: The original hardcoded redirect_uri was not flexible for different environments.
-  // const redirectUri = 'http://localhost:9004/api/auth/fitbit/callback';
-  
-  // [2024-08-02] COMMENT: The previous dynamic URL generation using headers was unreliable and is now commented out.
-  /*
-  // [2024-08-01] COMMENT: Dynamically determine the app URL from request headers for robust proxy support.
-  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
-  // [2024-08-01] COMMENT: Dynamically determine the app URL from request headers for robust proxy support.
-  const host = request.headers.get('host');
-  */
-
-  // [2024-08-02] COMMENT: The previous check did not account for a missing host header.
-  /*
-  if (!clientId) {
-    console.error("Fitbit OAuth configuration is missing. Required: NEXT_PUBLIC_FITBIT_CLIENT_ID");
-    return NextResponse.json({ error: 'Server configuration error for Fitbit OAuth.' }, { status: 500 });
-  }
-  */
-
-  // [2024-08-02] COMMENT: New check includes the host, which is required for the dynamic redirect URI.
-  // [2024-08-02] COMMENT: This check is simplified as `request.nextUrl.host` will be used instead.
   if (!clientId) {
       console.error("Fitbit OAuth configuration is missing. Required: NEXT_PUBLIC_FITBIT_CLIENT_ID.");
       return NextResponse.json({ error: 'Server configuration error for Fitbit OAuth.' }, { status: 500 });
   }
 
-  // [2024-08-05] COMMENT: The previous dynamic URL generation using `request.nextUrl` was unreliable in some proxy environments. It is now commented out.
-  // const appUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
-  // const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
-
   // [2024-08-05] COMMENT: Create a more robust dynamic URL by prioritizing proxy headers (`x-forwarded-*`) before falling back to the `request.nextUrl` object. This ensures the correct public-facing URL is used.
   const protocol = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol;
   const host = request.headers.get("x-forwarded-host") ?? request.nextUrl.host;
   const appUrl = `${protocol}://${host}`;
-  // [2024-08-05] COMMENT: Updated the path to match the Fitbit developer console configuration.
+  // [2024-08-05] COMMENT: Updated the path to match the Fitbit developer console configuration and the `next.config.js` rewrite rule.
   const redirectUri = `${appUrl}/api/auth/callback/fitbit`;
   
-  // [2024-08-05] COMMENT: The debugger statement is now removed as the root cause has been identified.
-  // debugger;
-
   const state = randomBytes(16).toString('hex');
   
   const scopes = [
