@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
   }
   */
 
-  // [2024-08-02] COMMENT: The previous dynamic URL generation using `request.nextUrl` was unreliable in some proxy environments. It is now commented out.
+  // [2024-08-05] COMMENT: The previous dynamic URL generation using `request.nextUrl` was unreliable in some proxy environments. It is now commented out.
   // const appUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
   
   // [2024-08-05] COMMENT: Create a more robust dynamic URL by prioritizing proxy headers (`x-forwarded-*`) before falling back to the `request.nextUrl` object. This ensures the correct public-facing URL is used and is consistent with the `/connect` route.
