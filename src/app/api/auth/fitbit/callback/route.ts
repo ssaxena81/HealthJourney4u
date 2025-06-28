@@ -1,3 +1,4 @@
+
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
@@ -34,6 +35,15 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
   
+  // [2025-06-28] COMMENT: Dynamically construct the application's base URL from the request URL's origin. This is more robust than inspecting headers.
+  const appUrl = new URL(request.url).origin;
+  // [2025-06-28] COMMENT: Dynamically construct the redirect URI needed for the Fitbit token exchange. This must exactly match what was sent in the connect step.
+  const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
+  // [2025-06-28] COMMENT: Dynamically construct the URL to redirect the user back to their profile page after the flow completes.
+  const profileUrl = `${appUrl}/profile`;
+  
+  // [2025-06-28] COMMENT: The header-based dynamic URL generation logic is commented out in favor of the more robust `new URL().origin` method.
+  /*
   // [2025-06-28] COMMENT: The 'x-forwarded-proto' header is checked to correctly determine the protocol (http vs https) when the app is behind a proxy.
   const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
   // [2025-06-28] COMMENT: The 'host' header provides the domain name of the application.
@@ -52,6 +62,7 @@ export async function GET(request: NextRequest) {
   const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
   // [2025-06-28] COMMENT: Dynamically construct the URL to redirect the user back to their profile page after the flow completes.
   const profileUrl = `${appUrl}/profile`;
+  */
   
   // [2025-06-28] COMMENT: The previous hardcoded URLs are now commented out in favor of dynamic generation.
   // const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/fitbit/callback`;
