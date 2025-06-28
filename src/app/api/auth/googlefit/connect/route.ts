@@ -5,13 +5,13 @@ import { randomBytes } from 'crypto';
 const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 
 export async function GET(request: NextRequest) {
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID; // Use generic Client ID
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_FIT_CLIENT_ID; // Use generic Client ID
 
   const requestUrl = new URL(request.url);
   const redirectUri = `${requestUrl.origin}/api/auth/googlefit/callback`;
 
   if (!clientId) {
-    console.error("Google OAuth configuration is missing. Required: NEXT_PUBLIC_GOOGLE_CLIENT_ID.");
+    console.error("Google OAuth configuration is missing. Required: NEXT_PUBLIC_GOOGLE_FIT_CLIENT_ID.");
     return NextResponse.json({ error: 'Server configuration error for Google OAuth.' }, { status: 500 });
   }
 

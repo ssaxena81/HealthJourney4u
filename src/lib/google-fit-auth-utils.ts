@@ -52,8 +52,8 @@ export async function refreshGoogleFitTokens(userId: string): Promise<string | n
     return null;
   }
 
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_FIT_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_FIT_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
     throw new Error("Google client credentials not configured.");
   }
