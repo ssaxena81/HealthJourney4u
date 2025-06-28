@@ -60,10 +60,11 @@ export async function GET(request: NextRequest) {
   const host = request.headers.get("x-forwarded-host") ?? request.nextUrl.host;
   const appUrl = `${protocol}://${host}`;
   const profileUrl = `${appUrl}/profile`;
-  const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
+  // [2024-08-05] COMMENT: Updated the path to match the Fitbit developer console configuration.
+  const redirectUri = `${appUrl}/api/auth/callback/fitbit`;
   
-  // [2024-08-05] COMMENT: Add a debugger statement to pause execution here when dev tools are open.
-  debugger;
+  // [2024-08-05] COMMENT: The debugger statement is now removed as the root cause has been identified.
+  // debugger;
   
   const cookieStore = cookies();
   const storedState = cookieStore.get('fitbit_oauth_state')?.value;

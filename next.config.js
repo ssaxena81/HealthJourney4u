@@ -1,6 +1,16 @@
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  // [2024-08-05] COMMENT: Added async rewrites to handle the Fitbit callback URL mismatch.
+  // [2024-08-05] COMMENT: This internally maps the URL Fitbit expects to the actual file path in the application.
+  async rewrites() {
+    return [
+      {
+        source: '/api/auth/callback/fitbit',
+        destination: '/api/auth/fitbit/callback',
+      },
+    ]
+  },
   typescript: {
     // ignoreBuildErrors: true, // Temporarily removed to surface potential issues
   },
