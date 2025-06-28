@@ -39,7 +39,9 @@ export async function GET(request: NextRequest) {
   const appUrl = `${protocol}://${host}`;
   const profileUrl = `${appUrl}/profile`;
   // [2024-08-05] COMMENT: Updated the path to match the Fitbit developer console configuration and the `next.config.js` rewrite rule.
-  const redirectUri = `${appUrl}/api/auth/callback/fitbit`;
+  // const redirectUri = `${appUrl}/api/auth/callback/fitbit`;
+  // [2024-08-06] COMMENT: Corrected the redirect URI to match the actual file path and the verified Fitbit developer console setting. This is crucial for the token exchange step.
+  const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
   
   const cookieStore = cookies();
   const storedState = cookieStore.get('fitbit_oauth_state')?.value;

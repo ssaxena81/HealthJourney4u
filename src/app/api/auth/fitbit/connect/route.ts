@@ -15,7 +15,9 @@ export async function GET(request: NextRequest) {
   const host = request.headers.get("x-forwarded-host") ?? request.nextUrl.host;
   const appUrl = `${protocol}://${host}`;
   // [2024-08-05] COMMENT: Updated the path to match the Fitbit developer console configuration and the `next.config.js` rewrite rule.
-  const redirectUri = `${appUrl}/api/auth/callback/fitbit`;
+  // const redirectUri = `${appUrl}/api/auth/callback/fitbit`;
+  // [2024-08-06] COMMENT: Corrected the redirect URI to match the actual file path and the verified Fitbit developer console setting.
+  const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
   
   const state = randomBytes(16).toString('hex');
   
