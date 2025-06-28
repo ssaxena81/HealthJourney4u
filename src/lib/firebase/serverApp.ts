@@ -1,4 +1,7 @@
 
+// [2024-08-02] COMMENT: The 'use server' directive is incorrect for this file as it exports objects (auth, db) and not client-callable async functions. The 'server-only' package is the correct way to mark this as a server-side module.
+// 'use server';
+
 import 'server-only';
 import admin from 'firebase-admin';
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';
