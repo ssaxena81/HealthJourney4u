@@ -1,4 +1,3 @@
-
 import { NextResponse, type NextRequest } from 'next/server';
 import { randomBytes } from 'crypto';
 
@@ -10,14 +9,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Server configuration error for Fitbit OAuth.' }, { status: 500 });
   }
 
-  // [2024-08-05] COMMENT: Create a more robust dynamic URL by prioritizing proxy headers (`x-forwarded-*`) before falling back to the `request.nextUrl` object. This ensures the correct public-facing URL is used.
-  const protocol = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol;
-  const host = request.headers.get("x-forwarded-host") ?? request.nextUrl.host;
-  const appUrl = `${protocol}://${host}`;
-  // [2024-08-05] COMMENT: Updated the path to match the Fitbit developer console configuration and the `next.config.js` rewrite rule.
-  // const redirectUri = `${appUrl}/api/auth/callback/fitbit`;
-  // [2024-08-06] COMMENT: Corrected the redirect URI to match the actual file path and the verified Fitbit developer console setting.
-  const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
+  // [2024-08-07] COMMENT: Hardcoding the redirect URI to a specific known-good value to ensure it matches the Fitbit developer console exactly.
+  const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/fitbit/callback`;
   
   const state = randomBytes(16).toString('hex');
   
