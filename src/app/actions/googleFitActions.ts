@@ -5,4 +5,5 @@
 // The complex Google Fit data fetching logic will be re-introduced
 // carefully after a stable baseline is established.
 
-export {};
+// [2024-08-02] COMMENT: Removed empty export to fix "use server" build error.
+// export {};

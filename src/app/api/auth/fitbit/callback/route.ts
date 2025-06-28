@@ -52,9 +52,13 @@ export async function GET(request: NextRequest) {
   }
   */
 
-  // [2024-08-01] COMMENT: The previous dynamic URL generation using headers was unreliable.
-  // [2024-08-01] COMMENT: This new approach uses `request.nextUrl` to construct the base URL, which is a more stable method within Next.js route handlers.
-  const appUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+  // [2024-08-01] COMMENT: The previous dynamic URL generation using `request.nextUrl` was unreliable in some proxy environments. It is now commented out.
+  // const appUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
+  
+  // [2024-08-02] COMMENT: Create a more robust dynamic URL by prioritizing proxy headers (`x-forwarded-*`) before falling back to the `request.nextUrl` object. This ensures the correct public-facing URL is used and is consistent with the `/connect` route.
+  const protocol = request.headers.get("x-forwarded-proto") ?? request.nextUrl.protocol;
+  const host = request.headers.get("x-forwarded-host") ?? request.nextUrl.host;
+  const appUrl = `${protocol}://${host}`;
   const profileUrl = `${appUrl}/profile`;
   const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
   
