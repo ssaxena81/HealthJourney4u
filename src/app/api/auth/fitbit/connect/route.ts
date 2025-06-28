@@ -12,9 +12,6 @@ export async function GET(request: NextRequest) {
 
   // [2025-06-28] COMMENT: Dynamically construct the application's base URL from the request URL's origin. This is more robust than inspecting headers.
   const appUrl = new URL(request.url).origin;
-  // [2025-06-28] COMMENT: This is the old hardcoded redirect URI. It is being commented out.
-  // const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/fitbit/callback`;
-  
   // [2025-06-28] COMMENT: This is the old dynamic redirect URI. It is being commented out.
   // const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
   // [2025-06-28] COMMENT: This new redirect URI is constructed to match the `source` path in the `next.config.js` rewrites. This is the public-facing URL we send to Fitbit.
