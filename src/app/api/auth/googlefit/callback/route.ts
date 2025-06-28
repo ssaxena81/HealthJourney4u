@@ -69,11 +69,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${profileUrl}?googlefit_error=missing_code`);
   }
 
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID_WEB;
-  const clientSecret = process.env.GOOGLE_CLIENT_SECRET_WEB;
+  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+  const clientSecret = process.env.GOOGLE_CLIENT_SECRET;
   
   if (!clientId || !clientSecret) {
-    console.error('[Google Fit Callback] Google Client ID or Secret for Web is not configured.');
+    console.error('[Google Fit Callback] Google Client ID or Secret is not configured.');
     return NextResponse.redirect(`${profileUrl}?googlefit_error=server_config_error`);
   }
 
