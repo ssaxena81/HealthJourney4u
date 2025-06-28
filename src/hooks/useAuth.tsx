@@ -48,6 +48,26 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     const unsubscribe = onAuthStateChanged(firebaseAuthInstance, async (fbUser) => {
       setLoading(true);
       if (fbUser) {
+        // [NEW] Create server-side session cookie to enable server-side authentication
+        try {
+            const idToken = await fbUser.getIdToken();
+            await fetch('/api/auth/session', {
+                method: 'POST',
+                headers: {
+                    'Authorization': `Bearer ${idToken}`,
+                }
+            });
+        } catch (error) {
+            console.error("Fatal: Failed to create server session. Logging out.", error);
+            // If session creation fails, we must log the user out to prevent an inconsistent state.
+            await signOut(firebaseAuthInstance);
+            setUser(null);
+            setUserProfile(null);
+            setLoading(false);
+            return;
+        }
+
+        // [EXISTING] Set client-side user and fetch profile
         setUser(fbUser);
         try {
           const profileSnap = await getDoc(doc(db, "users", fbUser.uid));
@@ -62,6 +82,10 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
             setUserProfile(null);
         }
       } else {
+        // [NEW] Clear server-side session cookie on logout
+        await fetch('/api/auth/session', { method: 'DELETE' });
+
+        // [EXISTING] Clear client-side state
         setUser(null);
         setUserProfile(null);
       }
@@ -73,6 +97,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   }, []);
 
   const logout = useCallback(async () => {
+    // [MODIFIED] Clear both server and client sessions on logout
+    await fetch('/api/auth/session', { method: 'DELETE' });
     await signOut(firebaseAuthInstance);
   }, []);
 

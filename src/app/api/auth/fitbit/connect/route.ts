@@ -12,7 +12,7 @@ export async function GET(request: NextRequest) {
 
   // [2025-06-28] COMMENT: Using a hardcoded URL with the correct public-facing path as defined in next.config.js rewrites.
   // [2025-06-28] COMMENT: This is the most reliable way to prevent redirect_uri mismatch errors in this environment.
-  const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/callback/fitbit`;
+  const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/fitbit/callback`;
 
   const state = randomBytes(16).toString('hex');
   
