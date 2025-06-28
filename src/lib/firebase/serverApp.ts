@@ -1,6 +1,4 @@
 
-'use server';
-
 import 'server-only';
 import admin from 'firebase-admin';
 import { initializeApp, getApps, getApp, type FirebaseApp } from 'firebase/app';

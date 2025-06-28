@@ -33,12 +33,12 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  // [2024-08-01] COMMENT: The original hardcoded appUrl was not flexible for different environments.
+  // [2024-08-02] COMMENT: The original hardcoded appUrl was not flexible for different environments.
   // const appUrl = 'http://localhost:9004';
   // const profileUrl = `${appUrl}/profile`;
   // const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
   
-  // [2024-08-01] COMMENT: The previous dynamic URL generation using headers was unreliable and is now commented out.
+  // [2024-08-02] COMMENT: The previous dynamic URL generation using headers was unreliable and is now commented out.
   /*
   // [2024-08-01] COMMENT: Dynamically determine the app URL from request headers for robust proxy support.
   const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
   }
   */
 
-  // [2024-08-01] COMMENT: The previous dynamic URL generation using `request.nextUrl` was unreliable in some proxy environments. It is now commented out.
+  // [2024-08-02] COMMENT: The previous dynamic URL generation using `request.nextUrl` was unreliable in some proxy environments. It is now commented out.
   // const appUrl = `${request.nextUrl.protocol}//${request.nextUrl.host}`;
   
   // [2024-08-02] COMMENT: Create a more robust dynamic URL by prioritizing proxy headers (`x-forwarded-*`) before falling back to the `request.nextUrl` object. This ensures the correct public-facing URL is used and is consistent with the `/connect` route.
@@ -61,6 +61,9 @@ export async function GET(request: NextRequest) {
   const appUrl = `${protocol}://${host}`;
   const profileUrl = `${appUrl}/profile`;
   const redirectUri = `${appUrl}/api/auth/fitbit/callback`;
+  
+  // [2024-08-02] COMMENT: Add a debugger statement to pause execution here when dev tools are open.
+  debugger;
   
   const cookieStore = cookies();
   const storedState = cookieStore.get('fitbit_oauth_state')?.value;
