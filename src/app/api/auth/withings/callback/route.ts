@@ -32,17 +32,22 @@ export async function GET(request: NextRequest) {
   const withingsError = searchParams.get('error'); 
 
   // [2025-06-29] COMMENT: Dynamically determine the application's URL to construct the redirect URI for the token exchange.
-  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
-  const host = request.headers.get('host');
+  // const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
+  // const host = request.headers.get('host');
 
-  if (!host) {
-      console.error("[Withings Callback] Cannot determine host from headers.");
-      return NextResponse.redirect('/profile?withings_error=internal_server_error');
-  }
+  // [2025-06-29] COMMENT: The dynamic host detection is removed to prevent local development URLs (like 127.0.0.1) from being used.
+  // if (!host) {
+  //     console.error("[Withings Callback] Cannot determine host from headers.");
+  //     return NextResponse.redirect('/profile?withings_error=internal_server_error');
+  // }
 
-  const appUrl = `${protocol}://${host}`;
-  const profileUrl = `${appUrl}/profile`;
-  const redirectUri = `${appUrl}/api/auth/withings/callback`;
+  // const appUrl = `${protocol}://${host}`;
+  // const profileUrl = `${appUrl}/profile`;
+  // const redirectUri = `${appUrl}/api/auth/withings/callback`;
+
+  // [2025-06-29] COMMENT: Hardcoding the URLs to the public-facing ones to ensure consistency.
+  const profileUrl = 'https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/profile';
+  const redirectUri = 'https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/withings/callback';
 
   // [2025-06-29] COMMENT: Retrieve and validate the state cookie for CSRF protection.
   const cookieStore = cookies();
