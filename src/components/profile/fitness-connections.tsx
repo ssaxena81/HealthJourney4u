@@ -14,7 +14,6 @@ import { XCircle, CheckCircle2, Link2, Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { updateConnectedFitnessApps } from '@/app/actions/userProfileActions';
 import { syncFitbitSleepData } from '@/app/actions/fitbitActions';
-// [2025-06-29] COMMENT: Added import for the new Strava sync action.
 import { syncStravaActivities } from '@/app/actions/stravaActions';
 import { format, subDays } from 'date-fns';
 
@@ -30,10 +29,9 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
   
   const [selectedAppId, setSelectedAppId] = useState<string>('');
   const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
-  // [2025-06-29] COMMENT: Renamed `isSyncing` to `isFitbitSyncing` for clarity and added `isStravaSyncing`.
-  // const [isSyncing, startSyncTransition] = useTransition();
   const [isFitbitSyncing, startFitbitSyncTransition] = useTransition();
   const [isStravaSyncing, startStravaSyncTransition] = useTransition();
+  const [isWithingsSyncing, startWithingsSyncTransition] = useTransition();
 
   const currentConnections = userProfile.connectedFitnessApps || [];
 
@@ -47,9 +45,10 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
     const fitbitError = searchParams.get('fitbit_error');
     const googlefitConnected = searchParams.get('googlefit_connected');
     const googlefitError = searchParams.get('googlefit_error');
-    // [2025-06-29] COMMENT: Added checks for Strava connection feedback from the callback URL.
     const stravaConnected = searchParams.get('strava_connected');
     const stravaError = searchParams.get('strava_error');
+    const withingsConnected = searchParams.get('withings_connected');
+    const withingsError = searchParams.get('withings_error');
 
     if (fitbitConnected) {
       toast({
@@ -81,7 +80,6 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
       });
       router.replace('/profile', { scroll: false });
     }
-    // [2025-06-29] COMMENT: New logic to display toasts for Strava connection success or failure.
     if (stravaConnected) {
       toast({
         title: 'Strava Connected!',
@@ -93,6 +91,21 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
       toast({
         title: 'Strava Connection Failed',
         description: `Error: ${stravaError}`,
+        variant: 'destructive',
+      });
+      router.replace('/profile', { scroll: false });
+    }
+    if (withingsConnected) {
+      toast({
+        title: 'Withings Connected!',
+        description: 'Your Withings account has been successfully linked.',
+      });
+      router.replace('/profile', { scroll: false });
+    }
+    if (withingsError) {
+      toast({
+        title: 'Withings Connection Failed',
+        description: `Error: ${withingsError}`,
         variant: 'destructive',
       });
       router.replace('/profile', { scroll: false });
@@ -114,7 +127,10 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
     setIsLoading(prev => ({ ...prev, [appId]: true }));
     
     const serviceToDisconnect = currentConnections.find(c => c.id === appId);
-    if (!serviceToDisconnect) return;
+    if (!serviceToDisconnect) {
+      setIsLoading(prev => ({ ...prev, [appId]: false }));
+      return;
+    }
 
     // TODO: Add logic here to clear tokens from Firestore as well for a full cleanup.
     const result = await updateConnectedFitnessApps(user.uid, serviceToDisconnect, 'disconnect');
@@ -149,7 +165,6 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
     });
   }
   
-  // [2025-06-29] COMMENT: New function to handle triggering the Strava activity sync.
   const handleSyncStrava = () => {
     startStravaSyncTransition(async () => {
       if (!user) {
@@ -168,6 +183,17 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
       }
     });
   }
+  
+  const handleSyncWithings = () => {
+    startWithingsSyncTransition(async () => {
+      toast({
+        title: 'Sync Not Implemented',
+        description: 'Syncing Withings data is not yet available.',
+        variant: 'default',
+        duration: 5000,
+      });
+    });
+  };
 
   return (
     <Card>
@@ -200,7 +226,6 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
                            <span className="hidden sm:inline ml-2">Sync Now</span>
                         </Button>
                     )}
-                    {/* [2025-06-29] COMMENT: New sync button specifically for Strava. */}
                     {conn.id === 'strava' && (
                         <Button
                             variant="outline"
@@ -209,6 +234,17 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
                             disabled={isStravaSyncing}
                         >
                            {isStravaSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                           <span className="hidden sm:inline ml-2">Sync Now</span>
+                        </Button>
+                    )}
+                     {conn.id === 'withings' && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleSyncWithings}
+                            disabled={isWithingsSyncing}
+                        >
+                           {isWithingsSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                            <span className="hidden sm:inline ml-2">Sync Now</span>
                         </Button>
                     )}

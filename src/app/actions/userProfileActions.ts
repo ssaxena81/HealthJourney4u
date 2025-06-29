@@ -28,20 +28,34 @@ export async function updateConnectedFitnessApps(userId: string, service: Select
     const validatedService = selectableServiceSchema.parse(service);
     const userRef = adminDb.collection('users').doc(userId);
 
-    const updatePayload = operation === 'connect' 
-      ? admin.firestore.FieldValue.arrayUnion({ ...validatedService, connectedAt: new Date().toISOString() }) 
-      : admin.firestore.FieldValue.arrayRemove(validatedService);
+    // This operation is now primarily handled in the individual auth callback routes to prevent duplicates.
+    // The logic is kept here for potential future use, but the primary fix is in the disconnect logic.
+    if (operation === 'connect') {
+      const updatePayload = admin.firestore.FieldValue.arrayUnion({ ...validatedService, connectedAt: new Date().toISOString() });
+      await userRef.update({
+        connectedFitnessApps: updatePayload
+      });
+    } else { // Disconnect logic
+      const userSnap = await userRef.get();
+      if (!userSnap.exists) {
+          return { success: false, error: 'User profile not found.' };
+      }
+      const userProfile = userSnap.data() as UserProfile;
+      // Filter out the service to be disconnected
+      const updatedConnections = (userProfile.connectedFitnessApps || []).filter(conn => conn.id !== validatedService.id);
+      
+      await userRef.update({
+        connectedFitnessApps: updatedConnections
+      });
+    }
 
-    await userRef.update({
-      connectedFitnessApps: updatePayload
-    });
-
-    const userSnap = await userRef.get();
-    const updatedProfile = userSnap.data() as UserProfile;
+    const updatedUserSnap = await userRef.get();
+    const updatedProfile = updatedUserSnap.data() as UserProfile;
 
     return { success: true, data: { connectedFitnessApps: updatedProfile.connectedFitnessApps } };
   } catch (error: any) {
-    return { success: false, error: 'Failed to update fitness connections.' };
+    console.error(`[userProfileActions] Error during ${operation} for service ${service.id}:`, error);
+    return { success: false, error: `Failed to ${operation} ${service.name}.` };
   }
 }
 
