@@ -28,22 +28,22 @@ export async function updateConnectedFitnessApps(userId: string, service: Select
     const validatedService = selectableServiceSchema.parse(service);
     const userRef = adminDb.collection('users').doc(userId);
 
-    // This operation is now primarily handled in the individual auth callback routes to prevent duplicates.
-    // The logic is kept here for potential future use, but the primary fix is in the disconnect logic.
     if (operation === 'connect') {
+      // This is now primarily handled by the individual auth callbacks to prevent duplicates.
       const updatePayload = admin.firestore.FieldValue.arrayUnion({ ...validatedService, connectedAt: new Date().toISOString() });
       await userRef.update({
         connectedFitnessApps: updatePayload
       });
-    } else { // Disconnect logic
+    } else { // Disconnect logic (robust read-modify-write)
       const userSnap = await userRef.get();
       if (!userSnap.exists) {
           return { success: false, error: 'User profile not found.' };
       }
       const userProfile = userSnap.data() as UserProfile;
-      // Filter out the service to be disconnected
+      // Filter out the service to be disconnected by its ID
       const updatedConnections = (userProfile.connectedFitnessApps || []).filter(conn => conn.id !== validatedService.id);
       
+      // Save the newly filtered array back to Firestore
       await userRef.update({
         connectedFitnessApps: updatedConnections
       });
