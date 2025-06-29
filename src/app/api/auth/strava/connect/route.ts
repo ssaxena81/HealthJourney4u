@@ -6,17 +6,24 @@ export async function GET(request: NextRequest) {
   const clientId = process.env.NEXT_PUBLIC_STRAVA_CLIENT_ID;
   const oauthStateSecret = process.env.OAUTH_STATE_SECRET;
 
+  // [2025-06-29] COMMENT: The dynamic URL generation is commented out to be replaced with a hardcoded URL.
+  // [2025-06-29] COMMENT: This is the most reliable way to prevent redirect_uri mismatch errors in this environment.
+  /*
   // Dynamically determine the app URL from request headers for robust proxy support
   const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
   const host = request.headers.get('host');
+  */
 
-  if (!clientId || !oauthStateSecret || !host) {
-    console.error("Strava OAuth configuration is missing or host could not be determined. Required: NEXT_PUBLIC_STRAVA_CLIENT_ID, OAUTH_STATE_SECRET, host header.");
+  if (!clientId || !oauthStateSecret) {
+    // [2025-06-29] COMMENT: Removed host check as it is no longer used for dynamic URL generation.
+    console.error("Strava OAuth configuration is missing. Required: NEXT_PUBLIC_STRAVA_CLIENT_ID, OAUTH_STATE_SECRET.");
     return NextResponse.json({ error: 'Server configuration error for Strava OAuth.' }, { status: 500 });
   }
 
-  const appUrl = `${protocol}://${host}`;
-  const redirectUri = `${appUrl}/api/auth/strava/callback`;
+  // [2025-06-29] COMMENT: The dynamic appUrl generation is commented out.
+  // const appUrl = `${protocol}://${host}`;
+  // [2025-06-29] COMMENT: The redirectUri is now hardcoded to ensure it is always correct and matches the Strava app settings.
+  const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/strava/callback`;
   
   const state = randomBytes(16).toString('hex');
   
