@@ -4,6 +4,9 @@ import { NextResponse } from 'next/server';
 import { cookies } from 'next/headers';
 // [2025-06-29] COMMENT: Import the utility function to store tokens in cookies.
 import { setWithingsTokens } from '@/lib/withings-auth-utils';
+import { getFirebaseUserFromCookie, adminDb } from '@/lib/firebase/serverApp';
+import admin from 'firebase-admin';
+import type { UserProfile } from '@/types';
 
 // [2025-06-29] COMMENT: Define the URL for Withings token exchange.
 const WITHINGS_TOKEN_URL = 'https://wbsapi.withings.net/v2/oauth2';
@@ -22,6 +25,34 @@ interface WithingsTokenResponse {
   status: number; // [2025-06-29] COMMENT: Withings uses a status field where 0 means success.
   body?: WithingsTokenResponseBody;
   error?: string;
+}
+
+async function addWithingsConnectionToProfile(userId: string) {
+    const userRef = adminDb.collection('users').doc(userId);
+    const userSnap = await userRef.get();
+    
+    if (!userSnap.exists) {
+        throw new Error("User profile not found in Firestore.");
+    }
+    const userProfile = userSnap.data() as UserProfile;
+    const currentConnections = userProfile.connectedFitnessApps || [];
+    
+    const isAlreadyConnected = currentConnections.some(conn => conn.id === 'withings');
+
+    if (!isAlreadyConnected) {
+        const newConnection = {
+            id: 'withings',
+            name: 'Withings',
+            connectedAt: new Date().toISOString()
+        };
+        const updatedConnections = [...currentConnections, newConnection];
+        await userRef.update({ 
+            connectedFitnessApps: updatedConnections
+        });
+        console.log(`[Withings Callback] Added 'withings' to user ${userId} profile.`);
+    } else {
+        console.log(`[Withings Callback] 'withings' is already connected for user ${userId}. No update needed.`);
+    }
 }
 
 export async function GET(request: NextRequest) {
@@ -102,10 +133,17 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(`${profileUrl}?withings_error=incomplete_token_data`);
     }
 
+    const firebaseUser = await getFirebaseUserFromCookie(cookies());
+    if (!firebaseUser) {
+        return NextResponse.redirect(`${profileUrl}?withings_error=auth_required`);
+    }
+
     // [2025-06-29] COMMENT: Store the received tokens securely in cookies.
     await setWithingsTokens(tokenData.access_token, tokenData.refresh_token, tokenData.expires_in, tokenData.userid);
     console.log('[Withings Callback] Withings tokens stored successfully.');
     
+    await addWithingsConnectionToProfile(firebaseUser.uid);
+
     // [2025-06-29] COMMENT: Redirect the user back to the profile page with a success indicator.
     return NextResponse.redirect(`${profileUrl}?withings_connected=true`);
 

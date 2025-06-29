@@ -150,8 +150,6 @@ export interface BaseHealthEntry {
   type: HealthMetricType;
   title: string;
   notes?: string;
-  // [2025-06-29] COMMENT: The original source type is commented out to be replaced with a new one that includes 'withings'.
-  // source?: 'manual' | 'quest' | 'uhc' | 'fitbit' | 'strava' | 'google-fit';
   // [2025-06-29] COMMENT: Added 'withings' to the list of possible data sources for a health entry.
   source?: 'manual' | 'quest' | 'uhc' | 'fitbit' | 'strava' | 'google-fit' | 'withings';
 }

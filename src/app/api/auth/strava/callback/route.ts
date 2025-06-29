@@ -7,6 +7,7 @@ import { setStravaTokens } from '@/lib/strava-auth-utils';
 // [2025-06-29] COMMENT: Added imports for user authentication and Firestore access.
 import { getFirebaseUserFromCookie, adminDb } from '@/lib/firebase/serverApp';
 import admin from 'firebase-admin';
+import type { UserProfile } from '@/types';
 
 const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
 
@@ -18,18 +19,24 @@ async function addStravaConnectionToProfile(userId: string) {
     if (!userSnap.exists) {
         throw new Error("User profile not found in Firestore.");
     }
-    const userProfile = userSnap.data();
-    const currentConnections = userProfile?.connectedFitnessApps || [];
+    const userProfile = userSnap.data() as UserProfile;
+    const currentConnections = userProfile.connectedFitnessApps || [];
     
-    if (!currentConnections.some((conn: any) => conn.id === 'strava')) {
+    const isAlreadyConnected = currentConnections.some(conn => conn.id === 'strava');
+
+    if (!isAlreadyConnected) {
+        const newConnection = {
+            id: 'strava',
+            name: 'Strava',
+            connectedAt: new Date().toISOString()
+        };
+        const updatedConnections = [...currentConnections, newConnection];
         await userRef.update({ 
-            connectedFitnessApps: admin.firestore.FieldValue.arrayUnion({
-                id: 'strava',
-                name: 'Strava',
-                connectedAt: new Date().toISOString()
-            }) 
+            connectedFitnessApps: updatedConnections
         });
         console.log(`[Strava Callback] Added 'strava' to user ${userId} profile.`);
+    } else {
+        console.log(`[Strava Callback] 'strava' is already connected for user ${userId}. No update needed.`);
     }
 }
 

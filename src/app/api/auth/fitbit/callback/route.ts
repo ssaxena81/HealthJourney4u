@@ -6,6 +6,7 @@ import { setFitbitTokens } from '@/lib/fitbit-auth-utils';
 import { adminDb } from '@/lib/firebase/serverApp';
 import { getFirebaseUserFromCookie } from '@/lib/firebase/serverApp';
 import admin from 'firebase-admin';
+import type { UserProfile } from '@/types';
 
 async function addFitbitConnectionToProfile(userId: string) {
     const userRef = adminDb.collection('users').doc(userId);
@@ -14,17 +15,24 @@ async function addFitbitConnectionToProfile(userId: string) {
     if (!userSnap.exists) {
         throw new Error("User profile not found in Firestore.");
     }
-    const userProfile = userSnap.data();
-    const currentConnections = userProfile?.connectedFitnessApps || [];
-    
-    if (!currentConnections.some((conn: any) => conn.id === 'fitbit')) {
+    const userProfile = userSnap.data() as UserProfile;
+    const currentConnections = userProfile.connectedFitnessApps || [];
+
+    const isAlreadyConnected = currentConnections.some(conn => conn.id === 'fitbit');
+
+    if (!isAlreadyConnected) {
+        const newConnection = {
+            id: 'fitbit',
+            name: 'Fitbit',
+            connectedAt: new Date().toISOString()
+        };
+        const updatedConnections = [...currentConnections, newConnection];
         await userRef.update({ 
-            connectedFitnessApps: admin.firestore.FieldValue.arrayUnion({
-                id: 'fitbit',
-                name: 'Fitbit',
-                connectedAt: new Date().toISOString()
-            }) 
+            connectedFitnessApps: updatedConnections
         });
+        console.log(`[Fitbit Callback] Added 'fitbit' to user ${userId} profile.`);
+    } else {
+        console.log(`[Fitbit Callback] 'fitbit' is already connected for user ${userId}. No update needed.`);
     }
 }
 
