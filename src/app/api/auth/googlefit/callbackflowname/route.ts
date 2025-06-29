@@ -6,6 +6,7 @@ import { cookies } from 'next/headers';
 import { setGoogleFitTokens } from '@/lib/google-fit-auth-utils';
 import { getFirebaseUserFromCookie, adminDb } from '@/lib/firebase/serverApp';
 import admin from 'firebase-admin';
+import type { UserProfile } from '@/types';
 
 const GOOGLE_TOKEN_URL = 'https://oauth2.googleapis.com/token';
 
@@ -24,20 +25,24 @@ async function addGoogleFitConnectionToProfile(userId: string) {
     if (!userSnap.exists) {
         throw new Error("User profile not found in Firestore.");
     }
-    const userProfile = userSnap.data();
-    const currentConnections = userProfile?.connectedFitnessApps || [];
+    const userProfile = userSnap.data() as UserProfile;
     
-    // Check if googlefit is already connected
-    if (!currentConnections.some((conn: any) => conn.id === 'googlefit')) {
-        await userRef.update({ 
-            connectedFitnessApps: admin.firestore.FieldValue.arrayUnion({
-                id: 'googlefit',
-                name: 'Google Fit',
-                connectedAt: new Date().toISOString()
-            }) 
-        });
-        console.log(`[Google Fit Callback] Added 'googlefit' to user ${userId} profile.`);
-    }
+    // Defensively filter out any existing connections for this service to prevent duplicates
+    const otherConnections = (userProfile.connectedFitnessApps || []).filter(conn => conn.id !== 'googlefit');
+
+    const newConnection = {
+        id: 'googlefit',
+        name: 'Google Fit',
+        connectedAt: new Date().toISOString()
+    };
+    
+    // Create the final, clean array of connections
+    const updatedConnections = [...otherConnections, newConnection];
+    
+    await userRef.update({ 
+        connectedFitnessApps: updatedConnections
+    });
+    console.log(`[Google Fit Callback] Ensured 'googlefit' is connected for user ${userId}.`);
 }
 
 

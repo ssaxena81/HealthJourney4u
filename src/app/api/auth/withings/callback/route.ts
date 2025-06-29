@@ -1,3 +1,4 @@
+
 // [2025-06-29] COMMENT: This API route handles the callback from the Withings OAuth 2.0 flow.
 import type { NextRequest } from 'next/server';
 import { NextResponse } from 'next/server';
@@ -35,24 +36,23 @@ async function addWithingsConnectionToProfile(userId: string) {
         throw new Error("User profile not found in Firestore.");
     }
     const userProfile = userSnap.data() as UserProfile;
-    const currentConnections = userProfile.connectedFitnessApps || [];
     
-    const isAlreadyConnected = currentConnections.some(conn => conn.id === 'withings');
+    // Defensively filter out any existing connections for this service to prevent duplicates
+    const otherConnections = (userProfile.connectedFitnessApps || []).filter(conn => conn.id !== 'withings');
 
-    if (!isAlreadyConnected) {
-        const newConnection = {
-            id: 'withings',
-            name: 'Withings',
-            connectedAt: new Date().toISOString()
-        };
-        const updatedConnections = [...currentConnections, newConnection];
-        await userRef.update({ 
-            connectedFitnessApps: updatedConnections
-        });
-        console.log(`[Withings Callback] Added 'withings' to user ${userId} profile.`);
-    } else {
-        console.log(`[Withings Callback] 'withings' is already connected for user ${userId}. No update needed.`);
-    }
+    const newConnection = {
+        id: 'withings',
+        name: 'Withings',
+        connectedAt: new Date().toISOString()
+    };
+    
+    // Create the final, clean array of connections
+    const updatedConnections = [...otherConnections, newConnection];
+    
+    await userRef.update({ 
+        connectedFitnessApps: updatedConnections
+    });
+    console.log(`[Withings Callback] Ensured 'withings' is connected for user ${userId}.`);
 }
 
 export async function GET(request: NextRequest) {

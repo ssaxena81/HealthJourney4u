@@ -16,24 +16,23 @@ async function addFitbitConnectionToProfile(userId: string) {
         throw new Error("User profile not found in Firestore.");
     }
     const userProfile = userSnap.data() as UserProfile;
-    const currentConnections = userProfile.connectedFitnessApps || [];
+    
+    // Defensively filter out any existing connections for this service to prevent duplicates
+    const otherConnections = (userProfile.connectedFitnessApps || []).filter(conn => conn.id !== 'fitbit');
 
-    const isAlreadyConnected = currentConnections.some(conn => conn.id === 'fitbit');
-
-    if (!isAlreadyConnected) {
-        const newConnection = {
-            id: 'fitbit',
-            name: 'Fitbit',
-            connectedAt: new Date().toISOString()
-        };
-        const updatedConnections = [...currentConnections, newConnection];
-        await userRef.update({ 
-            connectedFitnessApps: updatedConnections
-        });
-        console.log(`[Fitbit Callback] Added 'fitbit' to user ${userId} profile.`);
-    } else {
-        console.log(`[Fitbit Callback] 'fitbit' is already connected for user ${userId}. No update needed.`);
-    }
+    const newConnection = {
+        id: 'fitbit',
+        name: 'Fitbit',
+        connectedAt: new Date().toISOString()
+    };
+    
+    // Create the final, clean array of connections
+    const updatedConnections = [...otherConnections, newConnection];
+    
+    await userRef.update({ 
+        connectedFitnessApps: updatedConnections
+    });
+    console.log(`[Fitbit Callback] Ensured 'fitbit' is connected for user ${userId}.`);
 }
 
 export async function GET(request: NextRequest) {

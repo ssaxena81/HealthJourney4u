@@ -20,24 +20,23 @@ async function addStravaConnectionToProfile(userId: string) {
         throw new Error("User profile not found in Firestore.");
     }
     const userProfile = userSnap.data() as UserProfile;
-    const currentConnections = userProfile.connectedFitnessApps || [];
-    
-    const isAlreadyConnected = currentConnections.some(conn => conn.id === 'strava');
 
-    if (!isAlreadyConnected) {
-        const newConnection = {
-            id: 'strava',
-            name: 'Strava',
-            connectedAt: new Date().toISOString()
-        };
-        const updatedConnections = [...currentConnections, newConnection];
-        await userRef.update({ 
-            connectedFitnessApps: updatedConnections
-        });
-        console.log(`[Strava Callback] Added 'strava' to user ${userId} profile.`);
-    } else {
-        console.log(`[Strava Callback] 'strava' is already connected for user ${userId}. No update needed.`);
-    }
+    // Defensively filter out any existing connections for this service to prevent duplicates
+    const otherConnections = (userProfile.connectedFitnessApps || []).filter(conn => conn.id !== 'strava');
+    
+    const newConnection = {
+        id: 'strava',
+        name: 'Strava',
+        connectedAt: new Date().toISOString()
+    };
+    
+    // Create the final, clean array of connections
+    const updatedConnections = [...otherConnections, newConnection];
+    
+    await userRef.update({ 
+        connectedFitnessApps: updatedConnections
+    });
+    console.log(`[Strava Callback] Ensured 'strava' is connected for user ${userId}.`);
 }
 
 
@@ -46,22 +45,6 @@ export async function GET(request: NextRequest) {
   const code = searchParams.get('code');
   const state = searchParams.get('state');
   const error = searchParams.get('error');
-
-  // [2025-06-29] COMMENT: Commenting out dynamic URL generation for consistency.
-  /*
-  // Dynamically determine the app URL from request headers for robust proxy support
-  const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
-  const host = request.headers.get('host');
-
-  if (!host) {
-      console.error("[Strava Callback] Cannot determine host from headers.");
-      return NextResponse.redirect('/profile?strava_error=internal_server_error');
-  }
-
-  const appUrl = `${protocol}://${host}`;
-  const profileUrl = `${appUrl}/profile`;
-  const redirectUri = `${appUrl}/api/auth/strava/callback`; // Define redirectUri for the token exchange
-  */
 
   // [2025-06-29] COMMENT: New hardcoded URLs to prevent mismatch errors.
   const profileUrl = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/profile`;
