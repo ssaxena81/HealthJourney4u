@@ -52,7 +52,7 @@ export async function GET(request: NextRequest) {
   // [2025-06-29] COMMENT: The original redirect URI is commented out to be replaced with the new one.
   // const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/googlefit/callback`;
   // [2025-06-29] COMMENT: The redirect URI has been updated to match this new file's path.
-  const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/googlefit/callbackflowname`;
+  const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/googlefit/callbackflowName`;
   // [2025-06-29] COMMENT: The profile URL remains the same for redirecting the user back to the UI.
   const profileUrl = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/profile`;
 

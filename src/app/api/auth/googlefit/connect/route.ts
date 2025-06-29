@@ -5,14 +5,18 @@ import { randomBytes } from 'crypto';
 const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 
 export async function GET(request: NextRequest) {
+  // [2025-06-29] This debugger statement will pause the server-side execution when this route is hit.
+  // [2025-06-29] You can then inspect variables and the execution flow in your terminal.
+  debugger;
+
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_FIT_CLIENT_ID;
 
-  // [2025-06-29] COMMENT: This is the single source of truth for the redirect URI.
-  // [2025-06-29] COMMENT: It must EXACTLY match what is in your Google Cloud Console.
-  // [2025-06-29] COMMENT: The original redirect URI is commented out to be replaced with the new one.
+  // [2025-06-29] This is the single source of truth for the redirect URI.
+  // [2025-06-29] It must EXACTLY match what is in your Google Cloud Console.
+  // [2025-06-29] The original redirect URI is commented out to be replaced with the new one.
   // const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/googlefit/callback`;
-  // [2025-06-29] COMMENT: This new redirect URI points to the 'callbackflowname' endpoint as requested by the user to match their Google Console setup.
-  const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/googlefit/callbackflowname`;
+  // [2025-06-29] This new redirect URI points to the 'callbackflowname' endpoint as requested by the user to match their Google Console setup.
+  const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/googlefit/callbackflowName`;
 
 
   if (!clientId) {
@@ -46,7 +50,7 @@ export async function GET(request: NextRequest) {
   // --- DIAGNOSTIC LOG ---
   // This will print the exact full URL to your terminal.
   // The 'redirect_uri' in this URL is what needs to be in the Google Cloud Console.
-  // [2025-06-29] COMMENT: This log will help diagnose any further redirect_uri mismatches by showing the exact URL being sent.
+  // [2025-06-29] This log will help diagnose any further redirect_uri mismatches by showing the exact URL being sent.
   console.log('[Google Fit Connect] FULL REDIRECT URL:', authorizationUrl);
   
   const response = NextResponse.redirect(authorizationUrl);
