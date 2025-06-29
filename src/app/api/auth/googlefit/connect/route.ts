@@ -7,7 +7,8 @@ const GOOGLE_AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 export async function GET(request: NextRequest) {
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_FIT_CLIENT_ID;
 
-  // Hardcoded redirect URI for stability
+  // This is the single source of truth for the redirect URI.
+  // It must EXACTLY match what is in your Google Cloud Console.
   const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/googlefit/callback`;
 
   if (!clientId) {
@@ -17,30 +18,36 @@ export async function GET(request: NextRequest) {
 
   const state = randomBytes(16).toString('hex');
 
-  // Define Google Fit scopes. Choose based on data needed.
+  // Define the permissions your app requires.
   const scopes = [
-    'https://www.googleapis.com/auth/fitness.activity.read',    // Read activity data
-    'https://www.googleapis.com/auth/fitness.location.read',    // Read location data for activities
-    'https://www.googleapis.com/auth/fitness.body.read',        // Read body measurements (weight, height)
-    'https://www.googleapis.com/auth/fitness.heart_rate.read',  // Read heart rate data
+    'https://www.googleapis.com/auth/fitness.activity.read',
+    'https://www.googleapis.com/auth/fitness.location.read',
+    'https://www.googleapis.com/auth/fitness.body.read',
+    'https://www.googleapis.com/auth/fitness.heart_rate.read',
   ].join(' ');
   
-  const googleAuthUrl = new URL(GOOGLE_AUTHORIZE_URL);
-  googleAuthUrl.searchParams.append('client_id', clientId);
-  googleAuthUrl.searchParams.append('redirect_uri', redirectUri);
-  googleAuthUrl.searchParams.append('response_type', 'code');
-  googleAuthUrl.searchParams.append('scope', scopes);
-  googleAuthUrl.searchParams.append('state', state);
-  googleAuthUrl.searchParams.append('access_type', 'offline'); // Request refresh token
-  googleAuthUrl.searchParams.append('prompt', 'consent'); // Force consent screen for refresh token
+  // Construct the URL parameters.
+  const params = new URLSearchParams({
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    response_type: 'code',
+    scope: scopes,
+    state: state,
+    access_type: 'offline', // Request a refresh token.
+    prompt: 'consent',      // Force the consent screen to ensure a refresh token is issued.
+  });
 
-  // --- DIAGNOSTIC LOG ---
-  // This will print the exact URL to your terminal.
-  console.log('[Google Fit Connect] Using Redirect URI:', redirectUri);
-  console.log('[Google Fit Connect] Redirecting to Google for authorization...');
+  const authorizationUrl = `${GOOGLE_AUTHORIZE_URL}?${params.toString()}`;
   
-  const response = NextResponse.redirect(googleAuthUrl.toString());
-  response.cookies.set('google_oauth_state', state, { // Use a distinct cookie name for Google
+  // --- DIAGNOSTIC LOG ---
+  // This will print the exact full URL to your terminal.
+  // The 'redirect_uri' in this URL is what needs to be in the Google Cloud Console.
+  console.log('[Google Fit Connect] FULL REDIRECT URL:', authorizationUrl);
+  
+  const response = NextResponse.redirect(authorizationUrl);
+  
+  // Set a state cookie to prevent CSRF attacks.
+  response.cookies.set('google_oauth_state', state, {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
     path: '/',

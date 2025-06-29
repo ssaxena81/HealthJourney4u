@@ -46,9 +46,10 @@ export async function GET(request: NextRequest) {
   const state = searchParams.get('state');
   const error = searchParams.get('error');
 
-  // Hardcoded URLs for stability
-  const profileUrl = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/profile`;
+  // This is the single source of truth for the redirect URI.
+  // It must EXACTLY match what is in your Google Cloud Console.
   const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/googlefit/callback`;
+  const profileUrl = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/profile`;
 
   const cookieStore = cookies();
   const storedState = cookieStore.get('google_oauth_state')?.value;
