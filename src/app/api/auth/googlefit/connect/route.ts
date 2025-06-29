@@ -34,7 +34,10 @@ export async function GET(request: NextRequest) {
   googleAuthUrl.searchParams.append('access_type', 'offline'); // Request refresh token
   googleAuthUrl.searchParams.append('prompt', 'consent'); // Force consent screen for refresh token
 
-  console.log('[Google Fit Connect] Redirecting to Google for authorization:', googleAuthUrl.toString());
+  // --- DIAGNOSTIC LOG ---
+  // This will print the exact URL to your terminal.
+  console.log('[Google Fit Connect] Using Redirect URI:', redirectUri);
+  console.log('[Google Fit Connect] Redirecting to Google for authorization...');
   
   const response = NextResponse.redirect(googleAuthUrl.toString());
   response.cookies.set('google_oauth_state', state, { // Use a distinct cookie name for Google
