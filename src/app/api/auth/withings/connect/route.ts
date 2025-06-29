@@ -10,20 +10,13 @@ export async function GET(request: NextRequest) {
   const clientId = process.env.NEXT_PUBLIC_WITHINGS_CLIENT_ID;
   const oauthStateSecret = process.env.OAUTH_STATE_SECRET;
 
-  // [2025-06-29] COMMENT: Dynamically determine the application's URL from request headers to support various deployment environments.
-  // const protocol = request.headers.get('x-forwarded-proto') || (process.env.NODE_ENV === 'production' ? 'https' : 'http');
-  // const host = request.headers.get('host');
-
   // [2025-06-29] COMMENT: The dynamic host detection is removed to prevent local development URLs (like 127.0.0.1) from being used as the redirect URI.
-  // if (!clientId || !oauthStateSecret || !host) {
   if (!clientId || !oauthStateSecret) {
-    console.error("Withings OAuth configuration is missing or host could not be determined. Env vars: NEXT_PUBLIC_WITHINGS_CLIENT_ID, OAUTH_STATE_SECRET, host header.");
+    console.error("Withings OAuth configuration is missing. Required: NEXT_PUBLIC_WITHINGS_CLIENT_ID, OAUTH_STATE_SECRET.");
     return NextResponse.json({ error: 'Server configuration error for Withings OAuth.' }, { status: 500 });
   }
 
-  // [2025-06-29] COMMENT: Construct the full redirect URI that Withings will call back to after authorization. This must match the URI in the Withings developer portal.
-  // const appUrl = `${protocol}://${host}`;
-  // [2025-06-29] COMMENT: Hardcoding the redirect URI to the public-facing URL to prevent mismatches during local development.
+  // [2025-06-29] COMMENT: Hardcoding the redirect URI to the public-facing URL to prevent mismatches.
   const redirectUri = `https://9003-firebase-studio-1747406301563.cluster-f4iwdviaqvc2ct6pgytzw4xqy4.cloudworkstations.dev/api/auth/withings/callback`;
   
   // [2025-06-29] COMMENT: Generate a random 'state' parameter for CSRF protection.
