@@ -41,14 +41,14 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
 
   // Handle toast notifications on redirect from OAuth flow
   useEffect(() => {
-    const fitbitConnected = searchParams.get('fitbit_connected');
-    const fitbitError = searchParams.get('fitbit_error');
-    const googlefitConnected = searchParams.get('googlefit_connected');
-    const googlefitError = searchParams.get('googlefit_error');
-    const stravaConnected = searchParams.get('strava_connected');
-    const stravaError = searchParams.get('strava_error');
-    const withingsConnected = searchParams.get('withings_connected');
-    const withingsError = searchParams.get('withings_error');
+    const fitbitConnected = searchParams?.get('fitbit_connected');
+    const fitbitError = searchParams?.get('fitbit_error');
+    const googlefitConnected = searchParams?.get('googlefit_connected');
+    const googlefitError = searchParams?.get('googlefit_error');
+    const stravaConnected = searchParams?.get('strava_connected');
+    const stravaError = searchParams?.get('strava_error');
+    const withingsConnected = searchParams?.get('withings_connected');
+    const withingsError = searchParams?.get('withings_error');
 
     if (fitbitConnected) {
       toast({
