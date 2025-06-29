@@ -14,6 +14,8 @@ import { XCircle, CheckCircle2, Link2, Loader2, RefreshCw } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { updateConnectedFitnessApps } from '@/app/actions/userProfileActions';
 import { syncFitbitSleepData } from '@/app/actions/fitbitActions';
+// [2025-06-29] COMMENT: Added import for the new Strava sync action.
+import { syncStravaActivities } from '@/app/actions/stravaActions';
 import { format, subDays } from 'date-fns';
 
 interface FitnessConnectionsProps {
@@ -28,7 +30,10 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
   
   const [selectedAppId, setSelectedAppId] = useState<string>('');
   const [isLoading, setIsLoading] = useState<Record<string, boolean>>({});
-  const [isSyncing, startSyncTransition] = useTransition();
+  // [2025-06-29] COMMENT: Renamed `isSyncing` to `isFitbitSyncing` for clarity and added `isStravaSyncing`.
+  // const [isSyncing, startSyncTransition] = useTransition();
+  const [isFitbitSyncing, startFitbitSyncTransition] = useTransition();
+  const [isStravaSyncing, startStravaSyncTransition] = useTransition();
 
   const currentConnections = userProfile.connectedFitnessApps || [];
 
@@ -42,6 +47,9 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
     const fitbitError = searchParams.get('fitbit_error');
     const googlefitConnected = searchParams.get('googlefit_connected');
     const googlefitError = searchParams.get('googlefit_error');
+    // [2025-06-29] COMMENT: Added checks for Strava connection feedback from the callback URL.
+    const stravaConnected = searchParams.get('strava_connected');
+    const stravaError = searchParams.get('strava_error');
 
     if (fitbitConnected) {
       toast({
@@ -69,6 +77,22 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
       toast({
         title: 'Google Fit Connection Failed',
         description: `Error: ${googlefitError}`,
+        variant: 'destructive',
+      });
+      router.replace('/profile', { scroll: false });
+    }
+    // [2025-06-29] COMMENT: New logic to display toasts for Strava connection success or failure.
+    if (stravaConnected) {
+      toast({
+        title: 'Strava Connected!',
+        description: 'Your Strava account has been successfully linked.',
+      });
+      router.replace('/profile', { scroll: false });
+    }
+    if (stravaError) {
+      toast({
+        title: 'Strava Connection Failed',
+        description: `Error: ${stravaError}`,
         variant: 'destructive',
       });
       router.replace('/profile', { scroll: false });
@@ -105,7 +129,7 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
   };
 
   const handleSyncFitbit = () => {
-    startSyncTransition(async () => {
+    startFitbitSyncTransition(async () => {
       if (!user) {
         toast({ title: 'Error', description: 'Not authenticated.', variant: 'destructive'});
         return;
@@ -125,6 +149,26 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
     });
   }
   
+  // [2025-06-29] COMMENT: New function to handle triggering the Strava activity sync.
+  const handleSyncStrava = () => {
+    startStravaSyncTransition(async () => {
+      if (!user) {
+        toast({ title: 'Error', description: 'Not authenticated.', variant: 'destructive'});
+        return;
+      }
+      toast({ title: 'Syncing Strava Data...', description: 'Fetching activities for the last 7 days.' });
+      const result = await syncStravaActivities(user.uid);
+      if (result.success) {
+        toast({ title: 'Strava Sync Complete!', description: result.message });
+        if (result.syncedCount && result.syncedCount > 0 && setUserProfile) {
+            setUserProfile(prev => prev ? ({...prev, stravaLastSyncTimestamp: Date.now()}) : null);
+        }
+      } else {
+        toast({ title: 'Strava Sync Failed', description: result.message, variant: 'destructive'});
+      }
+    });
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -150,9 +194,21 @@ export default function FitnessConnections({ userProfile }: FitnessConnectionsPr
                             variant="outline"
                             size="sm"
                             onClick={handleSyncFitbit}
-                            disabled={isSyncing}
+                            disabled={isFitbitSyncing}
                         >
-                           {isSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                           {isFitbitSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+                           <span className="hidden sm:inline ml-2">Sync Now</span>
+                        </Button>
+                    )}
+                    {/* [2025-06-29] COMMENT: New sync button specifically for Strava. */}
+                    {conn.id === 'strava' && (
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={handleSyncStrava}
+                            disabled={isStravaSyncing}
+                        >
+                           {isStravaSyncing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                            <span className="hidden sm:inline ml-2">Sync Now</span>
                         </Button>
                     )}

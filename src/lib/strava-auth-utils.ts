@@ -1,6 +1,111 @@
-
+// [2025-06-29] COMMENT: This entire file is being refactored to use Firestore for token storage, aligning it with other service authentications and making it more robust for server-side use. The previous cookie-based implementation is commented out below.
 'use server';
 
+import { adminDb } from '@/lib/firebase/serverApp';
+
+const STRAVA_TOKEN_URL = 'https://www.strava.com/oauth/token';
+
+interface StravaTokenData {
+  accessToken: string;
+  refreshToken: string;
+  expiresAt: number; // Timestamp in milliseconds
+}
+
+interface StravaTokenResponse {
+  token_type: string; // "Bearer"
+  expires_at: number; // Timestamp (seconds since epoch)
+  expires_in: number; // Seconds from now
+  refresh_token: string;
+  access_token: string;
+  athlete?: any; 
+}
+
+
+// [2025-06-29] COMMENT: New function to get Strava tokens from a user-specific document in Firestore.
+async function getStravaTokens(userId: string): Promise<StravaTokenData | null> {
+  const tokenDocRef = adminDb.collection('users').doc(userId).collection('private_tokens').doc('strava');
+  const docSnap = await tokenDocRef.get();
+  if (docSnap.exists) {
+    return docSnap.data() as StravaTokenData;
+  }
+  return null;
+}
+
+// [2025-06-29] COMMENT: New function to securely set Strava tokens in Firestore.
+export async function setStravaTokens(
+  userId: string,
+  accessToken: string,
+  refreshToken: string,
+  expiresAtTimestampSeconds: number
+): Promise<void> {
+  const tokenDocRef = adminDb.collection('users').doc(userId).collection('private_tokens').doc('strava');
+  const expiresAtMilliseconds = expiresAtTimestampSeconds * 1000;
+
+  const tokenData: StravaTokenData = { accessToken, refreshToken, expiresAt: expiresAtMilliseconds };
+  await tokenDocRef.set(tokenData, { merge: true });
+  console.log('[StravaAuthUtils] Strava tokens stored in Firestore for user:', userId);
+}
+
+// [2025-06-29] COMMENT: New function to refresh an expired access token using the stored refresh token.
+export async function refreshStravaTokens(userId: string): Promise<string | null> {
+  const tokenData = await getStravaTokens(userId);
+  if (!tokenData?.refreshToken) {
+    console.error('[StravaAuthUtils] No Strava refresh token available in Firestore for user:', userId);
+    return null;
+  }
+
+  const clientId = process.env.NEXT_PUBLIC_STRAVA_CLIENT_ID;
+  const clientSecret = process.env.STRAVA_CLIENT_SECRET;
+
+  if (!clientId || !clientSecret) {
+    throw new Error("Strava client credentials not configured on the server.");
+  }
+  
+  try {
+    const response = await fetch(STRAVA_TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: clientId,
+        client_secret: clientSecret,
+        grant_type: 'refresh_token',
+        refresh_token: tokenData.refreshToken,
+      }),
+    });
+
+    const refreshedData: StravaTokenResponse = await response.json();
+    if (!response.ok) {
+      console.error('[StravaAuthUtils] Strava token refresh failed in API call:', refreshedData);
+      return null;
+    }
+
+    // [2025-06-29] COMMENT: Update Firestore with the newly obtained tokens.
+    await setStravaTokens(userId, refreshedData.access_token, refreshedData.refresh_token, refreshedData.expires_at);
+    return refreshedData.access_token;
+
+  } catch (error) {
+    console.error('[StravaAuthUtils] Exception during Strava token refresh:', error);
+    return null;
+  }
+}
+
+// [2025-06-29] COMMENT: New function to get a valid access token, refreshing it if necessary.
+export async function getValidStravaAccessToken(userId: string): Promise<string | null> {
+  const tokenData = await getStravaTokens(userId);
+  if (!tokenData) return null;
+
+  const bufferTime = 5 * 60 * 1000; // 5 minutes buffer
+  if (Date.now() >= tokenData.expiresAt - bufferTime) {
+    console.log('[StravaAuthUtils] Strava token expired or nearing expiry, refreshing...');
+    return await refreshStravaTokens(userId);
+  }
+  
+  return tokenData.accessToken;
+}
+
+
+/*
+// [2025-06-29] COMMENT: The original cookie-based implementation is commented out below.
 import { cookies } from 'next/headers';
 import type { NextRequest } from 'next/server';
 
@@ -158,4 +263,4 @@ export async function getValidStravaAccessToken(): Promise<string | null> {
 
   return accessToken;
 }
-
+*/
