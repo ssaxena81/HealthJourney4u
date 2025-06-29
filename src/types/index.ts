@@ -15,40 +15,41 @@ export interface UserProfile {
   email: string; 
   firstName?: string; 
   lastName?: string; 
-  dateOfBirth?: string; // ISO 8601 string for consistency
-  createdAt: string; // ISO 8601 string
-  lastLoggedInDate?: string; // ISO 8601 string
-  lastPasswordChangeDate?: string; // ISO 8601 string
+  dateOfBirth?: string; // [2025-06-29] COMMENT: ISO 8601 string for consistency
+  createdAt: string; // [2025-06-29] COMMENT: ISO 8601 string
+  lastLoggedInDate?: string; // [2025-06-29] COMMENT: ISO 8601 string
+  lastPasswordChangeDate?: string; // [2025-06-29] COMMENT: ISO 8601 string
   
-  // Simplified service connections
+  // [2025-06-29] COMMENT: Simplified service connections
   connectedFitnessApps?: SelectableService[];
   connectedDiagnosticsServices?: SelectableService[];
   connectedInsuranceProviders?: (SelectableService & { memberId: string; groupId?: string })[];
 
-  // Simplified subscription tier
+  // [2025-06-29] COMMENT: Simplified subscription tier
   subscriptionTier: SubscriptionTier;
 
-  // Simplified API call stats
+  // [2025-06-29] COMMENT: Simplified API call stats
   fitbitApiCallStats?: FitbitApiCallStats;
   stravaApiCallStats?: StravaApiCallStats;
   googleFitApiCallStats?: GoogleFitApiCallStats;
+  // [2025-06-29] COMMENT: Added Withings API call stats to the user profile type.
   withingsApiCallStats?: WithingsApiCallStats;
   
-  // Simplified goals
+  // [2025-06-29] COMMENT: Simplified goals
   walkingRadarGoals?: WalkingRadarGoals;
   runningRadarGoals?: RunningRadarGoals;
   hikingRadarGoals?: HikingRadarGoals;
   swimmingRadarGoals?: SwimmingRadarGoals;
   sleepRadarGoals?: SleepRadarGoals;
   
-  // Dashboard metrics
+  // [2025-06-29] COMMENT: Dashboard metrics
   dashboardRadarMetrics?: DashboardMetricIdValue[];
   
   profileSetupComplete?: boolean;
   acceptedLatestTerms?: boolean;
   termsVersionAccepted?: string;
 
-  // Last sync timestamps
+  // [2025-06-29] COMMENT: Last sync timestamps
   fitbitLastSuccessfulSync?: string;
   stravaLastSyncTimestamp?: number;
   googleFitLastSuccessfulSync?: string;
@@ -86,7 +87,7 @@ export enum NormalizedActivityType {
   Hiking = 'hiking',
   Swimming = 'swimming',
   Cycling = 'cycling',
-  Workout = 'workout', // General workout category
+  Workout = 'workout', // [2025-06-29] COMMENT: General workout category
   Other = 'other',
 }
 
@@ -193,7 +194,8 @@ export type FitbitApiCallStats = {
 };
 export type StravaApiCallStats = { activities?: ApiCallStat };
 export type GoogleFitApiCallStats = { sessions?: ApiCallStat, aggregateData?: ApiCallStat };
-export type WithingsApiCallStats = { [key: string]: ApiCallStat }; // More generic for Withings
+// [2025-06-29] COMMENT: Added a generic type for Withings API call stats.
+export type WithingsApiCallStats = { [key: string]: ApiCallStat };
 
 
 // --- Goal Configuration Types ---
@@ -253,11 +255,12 @@ export interface RadarDataPoint {
   fullMark: number; 
 }
 
-// Mock Connectable Services
+// [2025-06-29] COMMENT: Mock Connectable Services
 export const mockFitnessApps: SelectableService[] = [
   { id: 'fitbit', name: 'Fitbit' },
   { id: 'strava', name: 'Strava' },
   { id: 'googlefit', name: 'Google Fit' },
+  // [2025-06-29] COMMENT: Added Withings to the list of available fitness apps.
   { id: 'withings', name: 'Withings' },
 ];
 
@@ -277,10 +280,10 @@ export const mockInsuranceProviders: SelectableService[] = [
 export interface FitbitActivitySummaryFirestore {
     date: string; 
     steps?: number; 
-    distance?: number; // km
+    distance?: number; // [2025-06-29] COMMENT: km
     caloriesOut?: number; 
     activeMinutes?: number; 
-    lastFetched: string; // ISO string
+    lastFetched: string; // [2025-06-29] COMMENT: ISO string
     dataSource: 'fitbit';
 }
 
@@ -298,7 +301,7 @@ export interface FitbitSleepLogFirestore {
   logId: number; 
   startTime: string; 
   endTime: string; 
-  duration: number; // ms
+  duration: number; // [2025-06-29] COMMENT: ms
   isMainSleep: boolean;
   minutesToFallAsleep: number;
   minutesAsleep: number;
