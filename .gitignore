@@ -1,5 +1,8 @@
 # See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
 
+#ignore firebase json file that contains secret key
+firebaseServiceAccountKey.json
+
 # dependencies
 /node_modules
 /.pnp
